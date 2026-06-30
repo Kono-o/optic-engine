@@ -11,7 +11,7 @@ windowed and headless. One shared GL context, multiple windows, compute shaders.
 | `optic-file` | Sanitary file I/O (read/write bytes/strings, `cached_path`) |
 | `optic-render` | EGL context, GL state, shaders, meshes, textures, cameras, assets |
 | `optic-window` | Winit window wrapper, key/mouse event state machine |
-| `optic-loop` | Game loop (winit `ApplicationHandler`), auto-window-cleanup |
+| `optic-loop` | Game loop, `Runtime` trait, `Game`/`GameBuilder`, `Time` |
 | `optic` | Meta-crate with feature gates (`core`, `file`, `render`, `window`, `minimal`, `full`) |
 
 ## Prerequisites
@@ -41,11 +41,20 @@ optic-render = { git = "https://github.com/Kono-o/optic-engine" }
 ```rust
 use optic::prelude::*;
 
+struct App;
+
+impl Runtime for App {
+    fn start(&mut self, _game: &mut Game) {}
+    fn update(&mut self, _game: &mut Game) {}
+}
+
 fn main() {
-    optic::run("hello", Size2D::from(800, 600), |frame| {
-        frame.gpu.clear();
-        // ... render here
-    });
+    GameBuilder::new()
+        .with_title("hello")
+        .with_size(Size2D::from(800, 600))
+        .build(App)
+        .unwrap()
+        .run();
 }
 ```
 
@@ -54,14 +63,42 @@ fn main() {
 ```rust
 use optic::prelude::*;
 
-fn main() {
-    optic::run("cube", Size2D::from(1024, 768), |frame| {
-        frame.gpu.clear();
+struct App {
+    mesh: Option<Mesh3D>,
+    done: bool,
+}
 
-        for mesh in &meshes {
-            mesh.render(&frame.camera.transform.view_matrix, &frame.camera.transform.persp_matrix);
-        }
-    });
+impl Runtime for App {
+    fn start(&mut self, game: &mut Game) {
+        let file = Mesh3DFile::from_obj_cached("assets/mesh/cube.obj").unwrap();
+        let mut mesh = game.renderer.add_mesh3d(&file);
+
+        let asset = ShaderAsset::from_path_cached(
+            "assets/shader/3d.glsl", ShaderType::Pipeline,
+        ).unwrap();
+        let shader = game.renderer.add_shader(&asset).unwrap();
+        mesh.set_shader(shader);
+
+        self.mesh = Some(mesh);
+        self.done = true;
+    }
+
+    fn update(&mut self, game: &mut Game) {
+        if !self.done { return; }
+        let mesh = self.mesh.as_mut().unwrap();
+        mesh.transform.rotate_y(30.0 * game.time.delta());
+        mesh.update();
+        game.renderer.render3d(mesh, &game.scene.camera);
+    }
+}
+
+fn main() {
+    GameBuilder::new()
+        .with_title("3D Viewer")
+        .with_size(Size2D::from(1024, 768))
+        .build(App { mesh: None, done: false })
+        .unwrap()
+        .run();
 }
 ```
 
@@ -84,6 +121,8 @@ optic = { git = "https://github.com/Kono-o/optic-engine", default-features = fal
 ```
 
 ```rust
+use optic::prelude::*;
+
 let gpu = GPU::new_headless().unwrap();
 // dispatch compute shaders, read back SSBOs
 ```
@@ -103,8 +142,8 @@ optic/
     asset/                # OBJ parser, GLSL parser, Image loader
     camera/               # Camera with fly controls, ortho/persp
   optic-window/src/       # Window (winit), Events (key/mouse state machine)
-  optic-loop/src/         # GameLoop, Time, run() convenience
-  optic/src/              # feature-gated re-exports
+  optic-loop/src/         # GameLoop, Runtime trait, Game/GameBuilder, Scene, Time
+  optic/src/              # feature-gated re-exports, prelude
 ```
 
 ## License

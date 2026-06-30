@@ -1,7 +1,10 @@
-use optic_core::{Cull, PolyMode, RGBA, Size2D};
+use optic_core::{Cull, DrawMode, PolyMode, RGBA, Size2D};
 
 use crate::context::RenderContext;
 use crate::glraw::GL;
+use crate::handles::{Mesh2D, Mesh3D, Shader, Texture2D};
+use crate::util::{Transform2D, Transform3D};
+use crate::{asset, Camera};
 
 pub struct GPU {
     pub ctx: RenderContext,
@@ -115,5 +118,41 @@ impl GPU {
 
     pub fn set_point_size(&self, size: f32) {
         GL::set_point_size(size);
+    }
+
+    pub fn add_mesh3d(&self, file: &asset::Mesh3DFile) -> Mesh3D {
+        Mesh3D {
+            visibility: true,
+            handle: file.ship(),
+            shader: None,
+            transform: Transform3D::default(),
+            draw_mode: DrawMode::Triangles,
+        }
+    }
+
+    pub fn add_mesh2d(&self, file: &asset::Mesh2DFile) -> Mesh2D {
+        Mesh2D {
+            visibility: true,
+            handle: file.ship(),
+            shader: None,
+            transform: Transform2D::default(),
+            draw_mode: DrawMode::Triangles,
+        }
+    }
+
+    pub fn add_shader(&self, asset: &asset::ShaderAsset) -> Option<Shader> {
+        asset.compile().ok()
+    }
+
+    pub fn add_texture(&self, image: &asset::Image) -> Texture2D {
+        image.ship()
+    }
+
+    pub fn render3d(&self, mesh: &Mesh3D, camera: &Camera) {
+        mesh.render(&camera.transform.view_matrix(), &camera.transform.proj_matrix());
+    }
+
+    pub fn render2d(&self, mesh: &Mesh2D) {
+        mesh.render();
     }
 }

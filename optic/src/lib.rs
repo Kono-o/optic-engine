@@ -1,3 +1,5 @@
+pub mod prelude;
+
 #[cfg(feature = "core")]
 pub use optic_core::*;
 #[cfg(feature = "file")]

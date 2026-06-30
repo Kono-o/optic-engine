@@ -1,4 +1,11 @@
+mod game;
+mod runtime;
+mod scene;
 mod time;
+
+pub use game::*;
+pub use runtime::*;
+pub use scene::*;
 pub use time::*;
 
 use optic_core::{CamProj, Size2D};

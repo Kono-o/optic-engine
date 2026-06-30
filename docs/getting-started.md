@@ -8,23 +8,37 @@
 
 ## Quick Start: Single-Window App
 
-The `optic::run()` convenience function creates a window, initializes EGL/OpenGL, and runs your frame callback:
+The new high-level API uses a `GameBuilder` + `Runtime` trait — no manual GL
+management, no closures, no window handle plumbing:
 
 ```rust
 use optic::prelude::*;
 
+struct App;
+
+impl Runtime for App {
+    fn start(&mut self, _game: &mut Game) {}
+    fn update(&mut self, _game: &mut Game) {}
+}
+
 fn main() {
-    optic::run("hello optic", Size2D::from(800, 600), |frame| {
-        frame.gpu.clear();
-    });
+    GameBuilder::new()
+        .with_title("hello optic")
+        .with_size(Size2D::from(800, 600))
+        .build(App)
+        .unwrap()
+        .run();
 }
 ```
 
-`optic::run` gives you a `FrameState` with:
-- `frame.gpu` — the GPU/GL context wrapper
-- `frame.camera` — a perspective camera
-- `frame.windows` — all open windows
-- `frame.time` — delta, FPS, elapsed
+`Game` (available inside `Runtime` methods) exposes:
+- `game.renderer` — the `GPU` wrapper for rendering
+- `game.scene` — holds the active `Camera`
+- `game.events` — key/mouse state machine
+- `game.time` — delta, FPS, elapsed
+
+Everything else — window creation, EGL surface attachment, `make_current`,
+`clear`, `swap_buffers` — happens automatically inside the game loop.
 
 ## Step by Step: 3D Mesh Viewer
 
@@ -102,36 +116,43 @@ f 4 8 5
 ```rust
 use optic::prelude::*;
 
-fn main() {
-    // Load the cube mesh from OBJ
-    let mesh_file = Mesh3DFile::from_obj("assets/mesh/cube.obj").unwrap();
-    let mesh_handle = mesh_file.ship();
+struct App {
+    mesh: Option<Mesh3D>,
+    shader: Option<Shader>,
+}
 
-    // Load and compile the shader
-    let shader_asset = ShaderAsset::from_path("assets/shader/3d.glsl", ShaderType::Pipeline).unwrap();
-    let shader = shader_asset.compile().unwrap();
+impl Runtime for App {
+    fn start(&mut self, game: &mut Game) {
+        let file = Mesh3DFile::from_obj("assets/mesh/cube.obj").unwrap();
+        let mut mesh = game.renderer.add_mesh3d(&file);
 
-    // Create a renderable mesh with a transform
-    let mut mesh = Mesh3D {
-        visibility: true,
-        handle: mesh_handle,
-        shader: Some(shader),
-        transform: Transform3D::default(),
-        draw_mode: DrawMode::Triangles,
-    };
+        let asset = ShaderAsset::from_path(
+            "assets/shader/3d.glsl", ShaderType::Pipeline,
+        ).unwrap();
+        let shader = game.renderer.add_shader(&asset).unwrap();
+        mesh.set_shader(shader.clone());
 
-    optic::run("3D Viewer", Size2D::from(1024, 768), move |frame| {
-        // Rotate the mesh
-        mesh.transform.rotate_y(30.0 * frame.time.delta());
+        self.mesh = Some(mesh);
+        self.shader = Some(shader);
+    }
+
+    fn update(&mut self, game: &mut Game) {
+        let mesh = match &mut self.mesh { Some(m) => m, None => return };
+
+        mesh.transform.rotate_y(30.0 * game.time.delta());
         mesh.update();
 
-        // Clear and render
-        frame.gpu.clear();
-        mesh.render(
-            &frame.camera.transform.view_matrix,
-            &frame.camera.transform.persp_matrix,
-        );
-    });
+        game.renderer.render3d(mesh, &game.scene.camera);
+    }
+}
+
+fn main() {
+    GameBuilder::new()
+        .with_title("3D Viewer")
+        .with_size(Size2D::from(1024, 768))
+        .build(App { mesh: None, shader: None })
+        .unwrap()
+        .run();
 }
 ```
 
@@ -159,14 +180,27 @@ void main() {
 }
 ```
 
-And in Rust:
+And in Rust, upload the texture and bind it to the shader before setting it on the mesh:
 
 ```rust
-// Load texture and attach to shader
-let img = Image::from_path("assets/tex/crate.png").unwrap();
-let tex = img.ship();
-let shader = shader_asset.compile().unwrap();
-shader.set_tex_at_slot(&tex, Slot::S0);
+fn start(&mut self, game: &mut Game) {
+    let file = Mesh3DFile::from_obj("assets/mesh/cube.obj").unwrap();
+    let mut mesh = game.renderer.add_mesh3d(&file);
+
+    let asset = ShaderAsset::from_path(
+        "assets/shader/3d.glsl", ShaderType::Pipeline,
+    ).unwrap();
+    let mut shader = game.renderer.add_shader(&asset).unwrap();
+
+    let img = Image::from_path("assets/tex/crate.png").unwrap();
+    let tex = game.renderer.add_texture(&img);
+    shader.set_tex_at_slot(&tex, Slot::S0);
+
+    mesh.set_shader(shader.clone());
+
+    self.mesh = Some(mesh);
+    self.shader = Some(shader);
+}
 ```
 
 Now the cube will be textured.
@@ -176,59 +210,62 @@ Now the cube will be textured.
 ```rust
 use optic::prelude::*;
 
-fn main() {
-    // Manual setup for full control
-    let el = winit::event_loop::EventLoop::new().unwrap();
-    let mut ws = WindowState::new(&el, "controls", Size2D::from(800, 600));
+struct App {
+    mesh: Option<Mesh3D>,
+    shader: Option<Shader>,
+    loaded: bool,
+}
 
-    let handle = ws.window.raw_handle().unwrap();
-    let mut gpu = GPU::new_windowed(handle, ws.window.size).unwrap();
-    let mut camera = Camera::new(ws.window.size, CamProj::Persp);
+impl Runtime for App {
+    fn start(&mut self, game: &mut Game) {
+        // load mesh, shader, texture ...
+        self.loaded = true;
+    }
 
-    // Set up meshes, shaders, etc. ...
+    fn update(&mut self, game: &mut Game) {
+        if !self.loaded { return; }
 
-    let game = GameLoop::new(el, gpu, camera, vec![ws], move |frame| {
-        // Access window + events from the first window
-        let ws = &mut frame.windows[0];
-        let speed = 3.0 * frame.time.delta();
+        let speed = 3.0 * game.time.delta();
 
-        // Camera movement
-        if ws.events.key(Key::W, Is::Held) {
-            frame.camera.transform.fly_forw(speed);
+        // Camera movement (WASD + Space/Shift)
+        if game.events.key(KeyCode::KeyW, Is::Held) {
+            game.scene.camera.fly_forw(speed);
         }
-        if ws.events.key(Key::S, Is::Held) {
-            frame.camera.transform.fly_back(speed);
+        if game.events.key(KeyCode::KeyS, Is::Held) {
+            game.scene.camera.fly_back(speed);
         }
-        if ws.events.key(Key::A, Is::Held) {
-            frame.camera.transform.fly_left(speed);
+        if game.events.key(KeyCode::KeyA, Is::Held) {
+            game.scene.camera.fly_left(speed);
         }
-        if ws.events.key(Key::D, Is::Held) {
-            frame.camera.transform.fly_right(speed);
+        if game.events.key(KeyCode::KeyD, Is::Held) {
+            game.scene.camera.fly_right(speed);
         }
-        if ws.events.key(Key::Space, Is::Held) {
-            frame.camera.transform.fly_up(speed);
+        if game.events.key(KeyCode::Space, Is::Held) {
+            game.scene.camera.fly_up(speed);
         }
-        if ws.events.key(Key::ShiftLeft, Is::Held) {
-            frame.camera.transform.fly_down(speed);
+        if game.events.key(KeyCode::ShiftLeft, Is::Held) {
+            game.scene.camera.fly_down(speed);
         }
 
-        // Camera look (mouse)
-        if ws.events.mouse(Mouse::Right, Is::Held) {
-            let (dx, dy) = ws.window.cursor_delta;
-            frame.camera.transform.spin_y(dx as f32 * 0.1);
-            frame.camera.transform.spin_x(dy as f32 * 0.1);
+        // Camera look (right mouse button + drag)
+        if game.events.mouse(Mouse::Right, Is::Held) {
+            let (dx, dy) = game.window().cursor_delta;
+            game.scene.camera.spin_y(dx as f32 * 0.1);
+            game.scene.camera.spin_x(dy as f32 * 0.1);
         }
+
+        game.scene.camera.pre_update();
 
         // Exit on Escape
-        if ws.events.key(Key::Escape, Is::Pressed) {
-            ws.close();
+        if game.events.key(KeyCode::Escape, Is::Pressed) {
+            game.exit();
         }
 
-        frame.camera.pre_update();
-        frame.gpu.clear();
-    });
-
-    game.run();
+        // Render
+        if let Some(mesh) = &self.mesh {
+            game.renderer.render3d(mesh, &game.scene.camera);
+        }
+    }
 }
 ```
 
@@ -274,6 +311,9 @@ fn main() {
 
 ## Multi-Window
 
+The high-level `Game` API currently supports a single window. For multiple
+windows, use the low-level `GameLoop` directly:
+
 ```rust
 use optic::prelude::*;
 
@@ -287,18 +327,15 @@ fn main() {
     let handle2 = win2.window.raw_handle().unwrap();
 
     let mut gpu = GPU::new_windowed(handle1, win1.window.size).unwrap();
-    // Attach second window to the same GL context
     gpu.ctx.attach_window(handle2, win2.window.size).unwrap();
 
     let camera = Camera::new(win1.window.size, CamProj::Persp);
 
     let game = GameLoop::new(el, gpu, camera, vec![win1, win2], move |frame| {
-        // Render to each window
         for ws in &mut frame.windows {
             if ws.is_closed() { continue; }
             frame.gpu.ctx.make_current(ws.surface_index).unwrap();
             frame.gpu.clear();
-            // ... draw calls here
             frame.gpu.ctx.swap_buffers(ws.surface_index).unwrap();
         }
     });
@@ -314,32 +351,36 @@ Use `from_path_cached` to auto-cache decoded assets in `optc/` subdirectories:
 ```rust
 // First run: loads PNG, saves .otxtr; subsequent runs: loads .otxtr directly
 let img = Image::from_path_cached("assets/tex/crate.png").unwrap();
-let tex = img.ship();
 
 let mesh_file = Mesh3DFile::from_obj_cached("assets/mesh/cube.obj").unwrap();
 let shader = ShaderAsset::from_path_cached("assets/shader/3d.glsl", ShaderType::Pipeline).unwrap();
 ```
 
+Then use `game.renderer.add_*` to upload them to the GPU (inside `start()`
+or `update()`).
+
 ## Full API at a Glance
 
-| What | Type / Function | Module |
-|------|----------------|--------|
-| Window | `Window` | `optic_window` |
-| Events (key/mouse) | `Events` | `optic_window` |
-| EGL context | `RenderContext` | `optic_render` |
-| GPU wrapper | `GPU` | `optic_render` |
-| Camera | `Camera` | `optic_render` |
-| Shader (runtime) | `Shader` | `optic_render::handles` |
-| Mesh (runtime) | `Mesh3D`, `Mesh2D` | `optic_render::handles` |
-| Texture (runtime) | `Texture2D` | `optic_render::handles` |
-| SSBO | `StorageBuffer` | `optic_render::handles` |
-| OBJ loader | `Mesh3DFile` | `optic_render::asset` |
-| GLSL loader | `ShaderAsset` | `optic_render::asset` |
-| Image loader | `Image` | `optic_render::asset` |
-| Transform 3D | `Transform3D` | `optic_render::util::transform` |
-| Transform 2D | `Transform2D` | `optic_render::util::transform` |
-| Camera Transform | `CamTransform` | `optic_render::util::transform` |
-| Game Loop | `GameLoop` | `optic_loop` |
-| Time | `Time` | `optic_loop` |
+| What | Type | Access |
+|------|------|--------|
+| Runtime trait | `Runtime` | Implement on your app struct |
+| Game builder | `GameBuilder` | `GameBuilder::new().with_title(...)` |
+| Game (loop + state) | `Game` | `game.renderer`, `game.scene`, `game.events`, `game.time` |
+| Window info | `Window` | `game.window()` |
+| Scene | `Scene` | `game.scene.camera` |
+| Camera | `Camera` | Fly controls, ortho/persp |
+| GPU / Renderer | `GPU` | `game.renderer.add_mesh3d()`, `.add_shader()`, `.render3d()`, etc. |
+| EGL context | `RenderContext` | Low-level, via `game.renderer.ctx` |
+| Shader (runtime) | `Shader` | Uniform setters, texture/SSBO binding |
+| Mesh (runtime) | `Mesh3D`, `Mesh2D` | Transform, visibility, draw mode |
+| Texture (runtime) | `Texture2D` | Wrap, filter, size |
+| SSBO | `StorageBuffer` | Fill, fetch, resize |
+| OBJ loader | `Mesh3DFile` | `from_obj()`, `from_obj_cached()` |
+| GLSL loader | `ShaderAsset` | `from_path()`, `compile()` |
+| Image loader | `Image` | `from_path()`, `ship()` |
+| Transform 3D | `Transform3D` | Position, rotation, scale |
+| Transform 2D | `Transform2D` | Position, rotation, layer, scale |
+| Events | `Events` | `key()`, `mouse()`, `key_combo()` |
+| Time | `Time` | `delta()`, `fps()`, `elapsed()` |
 | File I/O | `read_bytes`, `write_string`, etc. | `optic_file` |
 | Shared types | `Size2D`, `RGBA`, `ImgFormat`, etc. | `optic_core` |

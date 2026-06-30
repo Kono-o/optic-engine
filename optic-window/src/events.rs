@@ -2,7 +2,8 @@ use optic_core::Size2D;
 
 use crate::window::Window;
 use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::PhysicalKey;
+pub use winit::keyboard::KeyCode;
 
 #[derive(Copy, Clone)]
 pub struct ButtonState {
