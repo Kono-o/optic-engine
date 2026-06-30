@@ -1,0 +1,7 @@
+[package]
+name = "optic-file"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+optic-core = { path = "../optic-core" }

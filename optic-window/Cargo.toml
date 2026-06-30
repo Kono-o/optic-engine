@@ -1,0 +1,9 @@
+[package]
+name = "optic-window"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+optic-core = { path = "../optic-core" }
+winit = "0.30.12"
+raw-window-handle = "0.6"

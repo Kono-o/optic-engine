@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "optic-core",
+    "optic-file",
+    "optic-window",
+    "optic-render",
+    "optic-loop",
+    "optic",
+]

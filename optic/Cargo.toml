@@ -1,0 +1,20 @@
+[package]
+name = "optic"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["full"]
+full = ["core", "file", "render", "window", "minimal"]
+core = ["optic-core"]
+file = ["core", "optic-file"]
+render = ["core", "file", "optic-render"]
+window = ["core", "optic-window"]
+minimal = ["render", "window", "optic-loop"]
+
+[dependencies]
+optic-core = { path = "../optic-core", optional = true }
+optic-file = { path = "../optic-file", optional = true }
+optic-render = { path = "../optic-render", optional = true }
+optic-window = { path = "../optic-window", optional = true }
+optic-loop = { path = "../optic-loop", optional = true }
