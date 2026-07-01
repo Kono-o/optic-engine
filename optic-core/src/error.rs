@@ -7,6 +7,7 @@ pub enum OpticErrorKind {
     Shader,
     Asset,
     File,
+    Framebuffer,
     Custom,
 }
 

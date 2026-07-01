@@ -245,6 +245,20 @@ impl Mesh2DFile {
         mesh
     }
 
+    pub fn fullscreen_quad() -> Self {
+        let mut mesh = Self::empty();
+        mesh.aspect = 1.0;
+        mesh.set_pos_attr(Pos2DATTR::from_array(&[
+            [-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0],
+        ]));
+        mesh.set_col_attr(ColATTR::from_array(&[[1.0, 1.0, 1.0, 1.0]; 4]));
+        mesh.set_uvm_attr(UVMATTR::from_array(&[
+            [0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0],
+        ]));
+        mesh.set_ind_attr(IndATTR::from_array(&[0, 1, 2, 0, 2, 3]));
+        mesh
+    }
+
     pub fn attach_custom_attr(&mut self, attr: CustomATTR) {
         self.cus_attrs.push(attr);
     }

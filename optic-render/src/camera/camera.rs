@@ -8,6 +8,10 @@ pub struct Camera {
 }
 
 impl Camera {
+    pub fn match_canvas_size(canvas: &crate::handles::Canvas, proj: CamProj) -> Self {
+        Self::new(canvas.size(), proj)
+    }
+
     pub fn new(size: Size2D, proj: CamProj) -> Self {
         let fov = 75.0;
         let clip = ClipDist::default();

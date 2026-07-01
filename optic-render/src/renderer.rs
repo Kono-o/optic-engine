@@ -2,7 +2,7 @@ use optic_core::{log_info, Cull, DrawMode, PolyMode, RGBA, Size2D};
 
 use crate::context::RenderContext;
 use crate::glraw::GL;
-use crate::handles::{Mesh2D, Mesh3D, Shader, Texture2D};
+use crate::handles::{Canvas, Mesh2D, Mesh3D, RenderTarget, Shader, Texture2D};
 use crate::util::{Transform2D, Transform3D};
 use crate::{asset, Camera};
 
@@ -18,6 +18,10 @@ pub struct GPU {
     pub fallback_shader3d: Shader,
     pub fallback_texture: Texture2D,
     pub canvas_size: Size2D,
+    pub(crate) current_target_size: Size2D,
+    pub(crate) max_color_attachments: i32,
+    pub(crate) max_draw_buffers: i32,
+    pub(crate) max_samples: i32,
 }
 
 impl GPU {
@@ -38,6 +42,23 @@ impl GPU {
         let bg_color = RGBA::grey(0.5);
         GL::enable_depth(true);
 
+        let max_color_attachments = unsafe {
+            let mut v = 0i32;
+            gl::GetIntegerv(gl::MAX_COLOR_ATTACHMENTS, &mut v);
+            v
+        };
+        let max_draw_buffers = unsafe {
+            let mut v = 0i32;
+            gl::GetIntegerv(gl::MAX_DRAW_BUFFERS, &mut v);
+            v
+        };
+        let max_samples = unsafe {
+            let mut v = 0i32;
+            gl::GetIntegerv(gl::MAX_SAMPLES, &mut v);
+            v
+        };
+
+        let canvas_size = Size2D::from(1, 1);
         let mut gpu = Self {
             ctx,
             bg_color,
@@ -49,7 +70,11 @@ impl GPU {
             fallback_shader2d: Shader::new(0, false),
             fallback_shader3d: Shader::new(0, false),
             fallback_texture: Texture2D::new(0, Size2D::empty(), optic_core::ImgFormat::RGBA(8), optic_core::ImgFilter::Closest, optic_core::ImgWrap::Repeat),
-            canvas_size: Size2D::from(1, 1),
+            canvas_size,
+            current_target_size: canvas_size,
+            max_color_attachments,
+            max_draw_buffers,
+            max_samples,
         };
 
         // Load fallback assets
@@ -226,6 +251,73 @@ impl GPU {
 
     pub fn ship_texture(&self, image: &asset::TextureFile) -> Texture2D {
         image.ship()
+    }
+
+    pub fn ship_canvas(&mut self, desc: &crate::handles::CanvasDesc) -> optic_core::OpticResult<Canvas> {
+        if desc.color_formats.len() as i32 > self.max_color_attachments {
+            return Err(optic_core::OpticError::new(
+                optic_core::OpticErrorKind::Custom,
+                &format!(
+                    "ship_canvas: {} color attachments exceeds GL_MAX_COLOR_ATTACHMENTS ({})",
+                    desc.color_formats.len(), self.max_color_attachments,
+                ),
+            ));
+        }
+        if desc.color_formats.len() as i32 > self.max_draw_buffers {
+            return Err(optic_core::OpticError::new(
+                optic_core::OpticErrorKind::Custom,
+                &format!(
+                    "ship_canvas: {} color attachments exceeds GL_MAX_DRAW_BUFFERS ({})",
+                    desc.color_formats.len(), self.max_draw_buffers,
+                ),
+            ));
+        }
+        if desc.samples as i32 > self.max_samples {
+            return Err(optic_core::OpticError::new(
+                optic_core::OpticErrorKind::Custom,
+                &format!(
+                    "ship_canvas: {} samples exceeds GL_MAX_SAMPLES ({})",
+                    desc.samples, self.max_samples,
+                ),
+            ));
+        }
+        Canvas::new(desc)
+    }
+
+    pub fn set_render_target(&mut self, target: &RenderTarget) -> optic_core::OpticResult<()> {
+        match target {
+            RenderTarget::Screen => {
+                unsafe { gl::BindFramebuffer(gl::FRAMEBUFFER, 0); }
+                GL::resize(self.canvas_size);
+                self.current_target_size = self.canvas_size;
+            }
+            RenderTarget::Canvas(canvas) => {
+                let fb = canvas.fbo_id;
+                unsafe { gl::BindFramebuffer(gl::FRAMEBUFFER, fb); }
+                GL::resize(canvas.size);
+                self.current_target_size = canvas.size;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn clear_target(&mut self, color: Option<RGBA>, depth: bool) {
+        let mut mask = 0u32;
+        if let Some(c) = color {
+            self.ctx.set_clear_color(c);
+            self.bg_color = c;
+            mask |= gl::COLOR_BUFFER_BIT;
+        }
+        if depth {
+            mask |= gl::DEPTH_BUFFER_BIT;
+        }
+        if mask != 0 {
+            unsafe { gl::Clear(mask); }
+        }
+    }
+
+    pub fn current_render_target_size(&self) -> Size2D {
+        self.current_target_size
     }
 
     pub fn render3d(&self, mesh: &Mesh3D, camera: &Camera) {
