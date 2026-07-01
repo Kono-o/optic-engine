@@ -1,4 +1,5 @@
 use optic_core::{CamProj, OpticResult, RGBA, Size2D};
+use optic_core::end_success;
 use optic_render::GPU;
 use optic_window::{Events, Window};
 use winit::application::ApplicationHandler;
@@ -152,6 +153,10 @@ impl ApplicationHandler for Game {
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
         if !self.running || self.window.is_closed() {
+            if let Some(mut runtime) = self.runtime.take() {
+                runtime.end(self);
+            }
+            end_success();
             el.exit();
             return;
         }

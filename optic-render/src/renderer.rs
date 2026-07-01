@@ -53,12 +53,12 @@ impl GPU {
         };
 
         // Load fallback assets
-        if let Ok(fallback_tex) = asset::Image::fallback() {
+        if let Ok(fallback_tex) = asset::TextureFile::fallback() {
             let mut tex = fallback_tex;
             tex.set_wrap(optic_core::ImgWrap::Repeat);
             gpu.fallback_texture = gpu.ship_texture(&tex);
         }
-        if let Ok(shader_asset) = asset::ShaderAsset::default_3d() {
+        if let Ok(shader_asset) = asset::ShaderFile::default_3d() {
             if let Some(shader) = gpu.ship_shader(&shader_asset) {
                 gpu.fallback_shader3d = shader;
                 let mut s = gpu.fallback_shader3d.clone();
@@ -66,7 +66,7 @@ impl GPU {
                 gpu.fallback_shader3d = s;
             }
         }
-        if let Ok(shader_asset) = asset::ShaderAsset::default_2d() {
+        if let Ok(shader_asset) = asset::ShaderFile::default_2d() {
             if let Some(shader) = gpu.ship_shader(&shader_asset) {
                 gpu.fallback_shader2d = shader;
                 let mut s = gpu.fallback_shader2d.clone();
@@ -220,11 +220,11 @@ impl GPU {
         }
     }
 
-    pub fn ship_shader(&self, asset: &asset::ShaderAsset) -> Option<Shader> {
+    pub fn ship_shader(&self, asset: &asset::ShaderFile) -> Option<Shader> {
         asset.compile().ok()
     }
 
-    pub fn ship_texture(&self, image: &asset::Image) -> Texture2D {
+    pub fn ship_texture(&self, image: &asset::TextureFile) -> Texture2D {
         image.ship()
     }
 

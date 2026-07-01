@@ -3,7 +3,7 @@ use optic_core::{ImgFilter, ImgFormat, ImgWrap, OpticError, OpticErrorKind, Opti
 
 use crate::handles::texture::{create_texture, Texture2D};
 
-pub struct Image {
+pub struct TextureFile {
     pub bytes: Vec<u8>,
     pub size: Size2D,
     pub fmt: ImgFormat,
@@ -11,7 +11,7 @@ pub struct Image {
     pub wrap: ImgWrap,
 }
 
-impl Image {
+impl TextureFile {
     pub fn from_path(path: &str) -> OpticResult<Self> {
         let img = image::open(path)
             .map_err(|e| OpticError::new(OpticErrorKind::File, &format!("failed to load image {path}: {e}")))?;
@@ -122,7 +122,7 @@ impl Image {
     }
 }
 
-impl Image {
+impl TextureFile {
     pub fn fallback() -> OpticResult<Self> {
         Self::from_path("optic/assets/txtr/fallback.png")
     }
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn pixel_count() {
-        let img = Image {
+        let img = TextureFile {
             bytes: vec![0u8; 1920 * 1080 * 4],
             size: Size2D::from(1920, 1080),
             fmt: ImgFormat::RGBA(8),
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn pixel_count_zero() {
-        let img = Image {
+        let img = TextureFile {
             bytes: vec![],
             size: Size2D::empty(),
             fmt: ImgFormat::RGBA(8),
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn image_cached_roundtrip() {
-        let img = Image {
+        let img = TextureFile {
             bytes: vec![128u8; 16 * 16 * 4],
             size: Size2D::from(16, 16),
             fmt: ImgFormat::RGBA(8),
@@ -167,7 +167,7 @@ mod tests {
         };
         let path = "/tmp/optic_test_img_cache.otxtr";
         img.save_cached(path).unwrap();
-        let loaded = Image::from_cached(path).unwrap();
+        let loaded = TextureFile::from_cached(path).unwrap();
         assert_eq!(loaded.bytes, img.bytes);
         assert_eq!(loaded.size, img.size);
         assert_eq!(loaded.fmt, img.fmt);
@@ -180,14 +180,14 @@ mod tests {
     fn image_from_cached_too_short() {
         let path = "/tmp/optic_test_img_short.bin";
         optic_file::write_bytes(path, b"tooshrt").unwrap();
-        let result = Image::from_cached(path);
+        let result = TextureFile::from_cached(path);
         assert!(result.is_err());
         let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn set_wrap_filter() {
-        let mut img = Image {
+        let mut img = TextureFile {
             bytes: vec![],
             size: Size2D::from(1, 1),
             fmt: ImgFormat::RGBA(8),

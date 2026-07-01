@@ -73,7 +73,7 @@ impl Runtime for App {
         let file = Mesh3DFile::from_obj_cached("assets/mesh/cube.obj").unwrap();
         let mut mesh = game.renderer.add_mesh3d(&file);
 
-        let asset = ShaderAsset::from_path_cached(
+        let asset = ShaderFile::from_path_cached(
             "assets/shader/3d.glsl", ShaderType::Pipeline,
         ).unwrap();
         let shader = game.renderer.add_shader(&asset).unwrap();
@@ -112,7 +112,7 @@ Optic caches decoded assets in `optc/` subdirectories for faster subsequent load
 | `.glsl` → `.oshdr` | `<dir>/optc/<name>.oshdr` |
 | `.obj` → `.omesh` | `<dir>/optc/<name>.omesh` |
 
-Use `from_path_cached` on `Image`, `ShaderAsset`, and `Mesh3DFile` to opt in.
+Use `from_path_cached` on `TextureFile`, `ShaderFile`, and `Mesh3DFile` to opt in.
 
 ## Headless / Compute Only
 
@@ -139,7 +139,7 @@ optic/
     renderer.rs           # GPU high-level wrapper
     glraw.rs              # static GL state helpers
     handles/              # Shader, MeshHandle, Mesh3D/Mesh2D, Texture2D, StorageBuffer
-    asset/                # OBJ parser, GLSL parser, Image loader
+    asset/                # OBJ parser, GLSL parser, TextureFile loader
     camera/               # Camera with fly controls, ortho/persp
   optic-window/src/       # Window (winit), Events (key/mouse state machine)
   optic-loop/src/         # GameLoop, Runtime trait, Game/GameBuilder, Scene, Time

@@ -126,7 +126,7 @@ impl Runtime for App {
         let file = Mesh3DFile::from_obj("assets/mesh/cube.obj").unwrap();
         let mut mesh = game.renderer.add_mesh3d(&file);
 
-        let asset = ShaderAsset::from_path(
+        let asset = ShaderFile::from_path(
             "assets/shader/3d.glsl", ShaderType::Pipeline,
         ).unwrap();
         let shader = game.renderer.add_shader(&asset).unwrap();
@@ -187,12 +187,12 @@ fn start(&mut self, game: &mut Game) {
     let file = Mesh3DFile::from_obj("assets/mesh/cube.obj").unwrap();
     let mut mesh = game.renderer.add_mesh3d(&file);
 
-    let asset = ShaderAsset::from_path(
+    let asset = ShaderFile::from_path(
         "assets/shader/3d.glsl", ShaderType::Pipeline,
     ).unwrap();
     let mut shader = game.renderer.add_shader(&asset).unwrap();
 
-    let img = Image::from_path("assets/tex/crate.png").unwrap();
+    let img = TextureFile::from_path("assets/tex/crate.png").unwrap();
     let tex = game.renderer.add_texture(&img);
     shader.set_tex_at_slot(&tex, Slot::S0);
 
@@ -292,7 +292,7 @@ fn main() {
         }
     "#;
 
-    let shader_asset = ShaderAsset::from_src(src, ShaderType::Compute).unwrap();
+    let shader_asset = ShaderFile::from_src(src, ShaderType::Compute).unwrap();
     let mut shader = shader_asset.compile().unwrap();
 
     let mut sbo = StorageBuffer::new(64 * 4); // 64 floats
@@ -350,10 +350,10 @@ Use `from_path_cached` to auto-cache decoded assets in `optc/` subdirectories:
 
 ```rust
 // First run: loads PNG, saves .otxtr; subsequent runs: loads .otxtr directly
-let img = Image::from_path_cached("assets/tex/crate.png").unwrap();
+let img = TextureFile::from_path_cached("assets/tex/crate.png").unwrap();
 
 let mesh_file = Mesh3DFile::from_obj_cached("assets/mesh/cube.obj").unwrap();
-let shader = ShaderAsset::from_path_cached("assets/shader/3d.glsl", ShaderType::Pipeline).unwrap();
+let shader = ShaderFile::from_path_cached("assets/shader/3d.glsl", ShaderType::Pipeline).unwrap();
 ```
 
 Then use `game.renderer.add_*` to upload them to the GPU (inside `start()`
@@ -376,8 +376,8 @@ or `update()`).
 | Texture (runtime) | `Texture2D` | Wrap, filter, size |
 | SSBO | `StorageBuffer` | Fill, fetch, resize |
 | OBJ loader | `Mesh3DFile` | `from_obj()`, `from_obj_cached()` |
-| GLSL loader | `ShaderAsset` | `from_path()`, `compile()` |
-| Image loader | `Image` | `from_path()`, `ship()` |
+| GLSL loader | `ShaderFile` | `from_path()`, `compile()` |
+| Image loader | `TextureFile` | `from_path()`, `ship()` |
 | Transform 3D | `Transform3D` | Position, rotation, scale |
 | Transform 2D | `Transform2D` | Position, rotation, layer, scale |
 | Events | `Events` | `key()`, `mouse()`, `key_combo()` |

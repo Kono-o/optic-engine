@@ -62,13 +62,13 @@ impl ShaderType {
     }
 }
 
-pub struct ShaderAsset {
+pub struct ShaderFile {
     pub v_src: String,
     pub f_src: String,
     pub is_compute: bool,
 }
 
-impl ShaderAsset {
+impl ShaderFile {
     pub fn from_src(src: &str, typ: ShaderType) -> OpticResult<Self> {
         match GLSL::parse(src, &typ) {
             GLSL::ParsedCompute(src) => Ok(Self {
@@ -142,7 +142,7 @@ impl ShaderAsset {
     }
 }
 
-impl ShaderAsset {
+impl ShaderFile {
     pub fn default_3d() -> OpticResult<Self> {
         Self::from_path("optic/assets/shdr/fallback3d.glsl", ShaderType::Pipeline)
     }
@@ -159,7 +159,7 @@ mod tests {
     #[test]
     fn parse_compute_shader() {
         let src = "#version 430\nvoid main() {}";
-        let asset = ShaderAsset::from_src(src, ShaderType::Compute).unwrap();
+        let asset = ShaderFile::from_src(src, ShaderType::Compute).unwrap();
         assert!(asset.is_compute);
         assert_eq!(asset.v_src, src);
         assert!(asset.f_src.is_empty());
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn parse_pipeline_shader() {
         let src = "// v\nvoid vertex_main() {}\n// f\nvoid fragment_main() {}";
-        let asset = ShaderAsset::from_src(src, ShaderType::Pipeline).unwrap();
+        let asset = ShaderFile::from_src(src, ShaderType::Pipeline).unwrap();
         assert!(!asset.is_compute);
         assert!(asset.v_src.contains("vertex_main"));
         assert!(asset.f_src.contains("fragment_main"));
@@ -177,20 +177,20 @@ mod tests {
     #[test]
     fn parse_pipeline_missing_vertex() {
         let src = "// f\nvoid fragment_main() {}";
-        let result = ShaderAsset::from_src(src, ShaderType::Pipeline);
+        let result = ShaderFile::from_src(src, ShaderType::Pipeline);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_pipeline_missing_fragment() {
         let src = "// v\nvoid vertex_main() {}";
-        let result = ShaderAsset::from_src(src, ShaderType::Pipeline);
+        let result = ShaderFile::from_src(src, ShaderType::Pipeline);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_pipeline_empty_source() {
-        let result = ShaderAsset::from_src("", ShaderType::Pipeline);
+        let result = ShaderFile::from_src("", ShaderType::Pipeline);
         assert!(result.is_err());
     }
 
@@ -202,7 +202,7 @@ mod tests {
             ("// V\nv\n// F\nf", "v", "f"),
         ];
         for (src, v_exp, f_exp) in cases {
-            let asset = ShaderAsset::from_src(src, ShaderType::Pipeline).unwrap();
+            let asset = ShaderFile::from_src(src, ShaderType::Pipeline).unwrap();
             assert!(asset.v_src.trim().contains(v_exp));
             assert!(asset.f_src.trim().contains(f_exp));
         }
@@ -211,10 +211,10 @@ mod tests {
     #[test]
     fn shader_cached_roundtrip_pipeline() {
         let src = "// VERTEX\nvoid main() {}\n// FRAGMENT\nvoid main() {}";
-        let asset = ShaderAsset::from_src(src, ShaderType::Pipeline).unwrap();
+        let asset = ShaderFile::from_src(src, ShaderType::Pipeline).unwrap();
         let path = "/tmp/optic_test_shdr_pipe.oshdr";
         asset.save_cached(path).unwrap();
-        let loaded = ShaderAsset::from_cached(path, ShaderType::Pipeline).unwrap();
+        let loaded = ShaderFile::from_cached(path, ShaderType::Pipeline).unwrap();
         assert!(!loaded.is_compute);
         assert_eq!(loaded.v_src, asset.v_src);
         assert_eq!(loaded.f_src, asset.f_src);
@@ -224,10 +224,10 @@ mod tests {
     #[test]
     fn shader_cached_roundtrip_compute() {
         let src = "#version 430\nvoid main() {}";
-        let asset = ShaderAsset::from_src(src, ShaderType::Compute).unwrap();
+        let asset = ShaderFile::from_src(src, ShaderType::Compute).unwrap();
         let path = "/tmp/optic_test_shdr_comp.oshdr";
         asset.save_cached(path).unwrap();
-        let loaded = ShaderAsset::from_cached(path, ShaderType::Compute).unwrap();
+        let loaded = ShaderFile::from_cached(path, ShaderType::Compute).unwrap();
         assert!(loaded.is_compute);
         assert_eq!(loaded.v_src, src);
         let _ = std::fs::remove_file(path);
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn from_vert_frag() {
-        let asset = ShaderAsset::from_vert_frag("v_src", "f_src");
+        let asset = ShaderFile::from_vert_frag("v_src", "f_src");
         assert!(!asset.is_compute);
         assert_eq!(asset.v_src, "v_src");
         assert_eq!(asset.f_src, "f_src");

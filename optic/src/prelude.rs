@@ -6,10 +6,10 @@ pub use optic_core::{
     RED, GREEN, BLUE, WHITE, BLACK, YELLOW, CYAN, MAGENTA, ORANGE, PURPLE, GRAY,
 };
 pub use optic_core::{log_color, log_event, log_fatal, log_info, log_warn};
-pub use optic_core::{end_error, end_success};
+pub use optic_core::{end, end_error, end_success, ERROR, SUCCESS};
 pub use optic_file;
 pub use optic_loop::{Game, GameBuilder, Runtime, Scene, Time};
 pub use optic_render::asset::attr::{ATTRInfo, ATTRName, ColATTR, CustomATTR, IndATTR, NrmATTR, Pos2DATTR, Pos3DATTR, UVMATTR};
-pub use optic_render::asset::{Image, Mesh2DFile, Mesh3DFile, ShaderAsset, ShaderType};
+pub use optic_render::asset::{Mesh2DFile, Mesh3DFile, ShaderFile, ShaderType, TextureFile};
 pub use optic_render::{Camera, GPU, Mesh2D, Mesh3D, MeshHandle, Shader, Slot, StorageBuffer, Texture2D, Transform2D, Transform3D};
 pub use optic_window::{Events, Is, KeyBitMap, KeyCode, Mouse, MouseBitMap, Window};
