@@ -194,6 +194,10 @@ impl Events {
         self.key(primary, action) && self.key(modifier, Is::Held)
     }
 
+    pub fn key_combo_n(&self, keys: &[(KeyCode, Is)]) -> bool {
+        keys.iter().all(|(kc, action)| self.key(*kc, *action))
+    }
+
     pub fn key(&self, kc: KeyCode, action: Is) -> bool {
         let idx = key_index(&kc);
         if idx >= 256 { return false; }

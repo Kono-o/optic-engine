@@ -13,6 +13,7 @@ window = ["core", "optic-window"]
 minimal = ["render", "window", "optic-loop"]
 
 [dependencies]
+cgmath = "0.18.0"
 optic-core = { path = "../optic-core", optional = true }
 optic-file = { path = "../optic-file", optional = true }
 optic-render = { path = "../optic-render", optional = true }

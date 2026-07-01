@@ -142,6 +142,16 @@ impl ShaderAsset {
     }
 }
 
+impl ShaderAsset {
+    pub fn default_3d() -> OpticResult<Self> {
+        Self::from_path("optic/assets/shdr/fallback3d.glsl", ShaderType::Pipeline)
+    }
+
+    pub fn default_2d() -> OpticResult<Self> {
+        Self::from_path("optic/assets/shdr/fallback2d.glsl", ShaderType::Pipeline)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

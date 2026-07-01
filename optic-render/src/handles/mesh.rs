@@ -1,3 +1,4 @@
+use cgmath;
 use optic_core::{ATTRType, DrawMode};
 
 use crate::GL;
@@ -153,11 +154,12 @@ impl Mesh2D {
         );
     }
 
-    pub fn render(&self) {
+    pub fn render(&self, proj: &cgmath::Matrix4<f32>) {
         if !self.is_visible() { return; }
         let shader = match &self.shader { None => return, Some(sh) => sh };
         shader.bind();
 
+        shader.set_m4_f32("uProj", *proj);
         let tfm = self.transform.matrix();
         let layer = self.transform.layer() as u32;
         shader.set_m4_f32("uTfm", tfm);

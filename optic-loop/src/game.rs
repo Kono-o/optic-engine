@@ -4,6 +4,7 @@ use optic_window::{Events, Window};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::dpi::PhysicalSize;
 use winit::window::WindowId;
 
 use crate::{Runtime, Scene, Time};
@@ -33,21 +34,25 @@ impl GameBuilder {
         self
     }
 
-    pub fn build<R: Runtime + 'static>(self, runtime: R) -> OpticResult<Game> {
-        let el = EventLoop::new()
+    pub fn logic<R: Runtime + 'static>(self, runtime: R) -> OpticResult<Game> {
+        let el = EventLoop::builder()
+            .build()
             .map_err(|e| optic_core::OpticError::custom(&format!("event loop creation failed: {e}")))?;
-        let window = Window::new(&el, &self.title, self.size);
+        let mut window = Window::new(&el, &self.title, self.size);
+        let actual_size = window.actual_size();
+        window.size = actual_size;
         let handle = window.raw_handle().unwrap();
 
         let mut gpu = GPU::new_headless()?;
-        let surface_index = gpu.ctx.attach_window(handle, self.size)?;
+        let surface_index = gpu.ctx.attach_window(handle, actual_size)?;
         gpu.ctx.make_current(surface_index)?;
         gpu.ctx.set_vsync(true);
+        gpu.canvas_size = actual_size;
         gpu.set_bg_color(self.bg_color);
 
         Ok(Game {
             renderer: gpu,
-            scene: Scene::new(self.size, CamProj::Persp),
+            scene: Scene::new(actual_size, CamProj::Persp),
             events: Events::new(),
             time: Time::new(),
             event_loop: Some(el),
@@ -56,6 +61,8 @@ impl GameBuilder {
             runtime: Some(Box::new(runtime)),
             running: true,
             started: false,
+            requested_size: self.size,
+            resized_once: false,
         })
     }
 }
@@ -72,6 +79,8 @@ pub struct Game {
     runtime: Option<Box<dyn Runtime>>,
     running: bool,
     started: bool,
+    requested_size: Size2D,
+    resized_once: bool,
 }
 
 impl Game {
@@ -86,6 +95,10 @@ impl Game {
 
     pub fn window(&self) -> &Window {
         &self.window
+    }
+
+    pub fn window_mut(&mut self) -> &mut Window {
+        &mut self.window
     }
 }
 
@@ -111,15 +124,17 @@ impl ApplicationHandler for Game {
                 self.window.size = Size2D::from(size.width, size.height);
                 self.renderer.ctx.resize_window(self.surface_index, self.window.size);
                 let _ = self.renderer.ctx.make_current(self.surface_index);
+                self.renderer.canvas_size = self.window.size;
                 self.scene.camera.set_size(self.window.size);
+                if !self.resized_once && (size.width != self.requested_size.w || size.height != self.requested_size.h) {
+                    self.resized_once = true;
+                    if let Some(w) = &self.window.inner {
+                        let _ = w.request_inner_size(PhysicalSize::new(self.requested_size.w, self.requested_size.h));
+                    }
+                }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.window.prev_cursor_pos = self.window.cursor_pos;
                 self.window.cursor_pos = (position.x, position.y);
-                self.window.cursor_delta = (
-                    position.x - self.window.prev_cursor_pos.0,
-                    position.y - self.window.prev_cursor_pos.1,
-                );
             }
             WindowEvent::CursorEntered { .. } => {
                 self.window.cursor_inside = true;
@@ -144,6 +159,16 @@ impl ApplicationHandler for Game {
         let _ = self.renderer.ctx.make_current(self.surface_index);
         self.renderer.clear();
         self.time.update();
+
+        if !self.started {
+            self.window.prev_cursor_pos = self.window.cursor_pos;
+        }
+        let delta_x = self.window.cursor_pos.0 - self.window.prev_cursor_pos.0;
+        let delta_y = self.window.prev_cursor_pos.1 - self.window.cursor_pos.1;
+        self.window.cursor_delta = (delta_x, delta_y);
+        self.window.prev_cursor_pos = self.window.cursor_pos;
+
+        self.scene.camera.pre_update();
 
         let mut runtime = self.runtime.take().unwrap();
         if !self.started {

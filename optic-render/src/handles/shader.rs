@@ -35,10 +35,14 @@ pub struct Workers {
 
 impl Workers {
     pub fn empty() -> Self { Self { group_x: 0, group_y: 0, group_z: 0 } }
+    pub fn one() -> Self { Self { group_x: 1, group_y: 1, group_z: 1 } }
     pub fn set_groups(&mut self, x: u32, y: u32, z: u32) {
-        self.group_x = x; self.group_y = y; self.group_z = z;
+        self.set_group_x(x); self.set_group_y(y); self.set_group_z(z);
     }
     pub fn groups(&self) -> (u32, u32, u32) { (self.group_x, self.group_y, self.group_z) }
+    pub fn group_x(&self) -> u32 { self.group_x }
+    pub fn group_y(&self) -> u32 { self.group_y }
+    pub fn group_z(&self) -> u32 { self.group_z }
     pub fn set_group_x(&mut self, x: u32) { self.group_x = x; }
     pub fn set_group_y(&mut self, y: u32) { self.group_y = y; }
     pub fn set_group_z(&mut self, z: u32) { self.group_z = z; }
@@ -61,6 +65,24 @@ impl Shader {
             is_compute,
             tex_ids: vec![None; Slot::total_slots()],
             sbo_ids: vec![None; Slot::total_slots()],
+        }
+    }
+
+    pub fn attach_tex(&mut self, tex: &Texture2D) {
+        for slot in self.tex_ids.iter_mut() {
+            if slot.is_none() {
+                *slot = Some(tex.id);
+                break;
+            }
+        }
+    }
+
+    pub fn attach_sbo(&mut self, sbo: &StorageBuffer) {
+        for slot in self.sbo_ids.iter_mut() {
+            if slot.is_none() {
+                *slot = Some(sbo.id);
+                break;
+            }
         }
     }
 

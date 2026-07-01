@@ -120,12 +120,7 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    ws.window.prev_cursor_pos = ws.window.cursor_pos;
                     ws.window.cursor_pos = (position.x, position.y);
-                    ws.window.cursor_delta = (
-                        position.x - ws.window.prev_cursor_pos.0,
-                        position.y - ws.window.prev_cursor_pos.1,
-                    );
                 }
                 WindowEvent::CursorEntered { .. } => {
                     ws.window.cursor_inside = true;

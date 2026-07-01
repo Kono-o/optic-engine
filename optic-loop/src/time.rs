@@ -63,11 +63,20 @@ impl Time {
     pub fn now_ms(&self) -> u64 {
         Instant::now().duration_since(self.start_time).as_millis() as u64
     }
+    pub fn now_as_ms(&self) -> u64 {
+        self.now_ms()
+    }
+    pub fn now_as_ns(&self) -> u64 {
+        Instant::now().duration_since(self.start_time).as_nanos() as u64
+    }
 
     pub fn sleep(&self, secs: f64) {
         std::thread::sleep(std::time::Duration::from_secs_f64(secs));
     }
     pub fn sleep_ms(&self, millis: u64) {
         std::thread::sleep(std::time::Duration::from_millis(millis));
+    }
+    pub fn sleep_ns(&self, nanos: u64) {
+        std::thread::sleep(std::time::Duration::from_nanos(nanos));
     }
 }

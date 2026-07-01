@@ -326,6 +326,7 @@ fn create_mesh3d_handle(mesh: &Mesh3DFile) -> MeshHandle {
     }
 
     crate::GL::bind_vao(vao_id);
+    crate::GL::bind_buffer(buf_id);
     let mut attr_id = 0u32;
     let mut offset = 0usize;
     let mut layouts = Vec::new();
@@ -340,14 +341,13 @@ fn create_mesh3d_handle(mesh: &Mesh3DFile) -> MeshHandle {
     if !buffer.is_empty() {
         fill_buffer(buf_id, &buffer);
     }
-    crate::GL::unbind_buffer();
 
     if !mesh.ind_attr.is_empty() {
         has_indices = true;
         ind_data = &mesh.ind_attr.data;
         ind_count = ind_data.len() as u32;
         fill_index_buffer(ind_id, ind_data);
-        crate::GL::unbind_ebo();
+
     }
 
     MeshHandle {
@@ -411,6 +411,7 @@ fn create_mesh2d_handle(mesh: &Mesh2DFile) -> MeshHandle {
     }
 
     crate::GL::bind_vao(vao_id);
+    crate::GL::bind_buffer(buf_id);
     let mut attr_id = 0u32;
     let mut offset = 0usize;
     let mut layouts = Vec::new();
@@ -425,14 +426,13 @@ fn create_mesh2d_handle(mesh: &Mesh2DFile) -> MeshHandle {
     if !buffer.is_empty() {
         fill_buffer(buf_id, &buffer);
     }
-    crate::GL::unbind_buffer();
 
     if !mesh.ind_attr.is_empty() {
         has_indices = true;
         ind_data = &mesh.ind_attr.data;
         ind_count = ind_data.len() as u32;
         fill_index_buffer(ind_id, ind_data);
-        crate::GL::unbind_ebo();
+
     }
 
     MeshHandle {

@@ -170,17 +170,11 @@ impl RenderContext {
         let native = raw_handle_to_native(raw_handle)?;
         let egl = egl::Instance::new(egl::Static);
 
-        let win_attribs = [
-            egl::WIDTH as i32, size.w as i32,
-            egl::HEIGHT as i32, size.h as i32,
-            egl::NONE as i32,
-        ];
-
         let surface = unsafe { egl.create_window_surface(
             self.display,
             self.config,
             native,
-            Some(&win_attribs[..]),
+            None,
         ).map_err(|e| OpticError::new(
             OpticErrorKind::OpenGL,
             &format!("EGL window surface creation failed: {e}"),

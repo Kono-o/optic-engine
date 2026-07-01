@@ -1,4 +1,4 @@
-use optic_core::{Cull, DrawMode, PolyMode, RGBA, Size2D};
+use optic_core::{log_info, Cull, DrawMode, PolyMode, RGBA, Size2D};
 
 use crate::context::RenderContext;
 use crate::glraw::GL;
@@ -14,6 +14,10 @@ pub struct GPU {
     pub msaa: bool,
     pub msaa_samples: u32,
     pub culling: bool,
+    pub fallback_shader2d: Shader,
+    pub fallback_shader3d: Shader,
+    pub fallback_texture: Texture2D,
+    pub canvas_size: Size2D,
 }
 
 impl GPU {
@@ -42,7 +46,35 @@ impl GPU {
             msaa_samples: 4,
             cull_face: Cull::AntiClock,
             poly_mode: PolyMode::Filled,
+            fallback_shader2d: Shader::new(0, false),
+            fallback_shader3d: Shader::new(0, false),
+            fallback_texture: Texture2D::new(0, Size2D::empty(), optic_core::ImgFormat::RGBA(8), optic_core::ImgFilter::Closest, optic_core::ImgWrap::Repeat),
+            canvas_size: Size2D::from(1, 1),
         };
+
+        // Load fallback assets
+        if let Ok(fallback_tex) = asset::Image::fallback() {
+            let mut tex = fallback_tex;
+            tex.set_wrap(optic_core::ImgWrap::Repeat);
+            gpu.fallback_texture = gpu.ship_texture(&tex);
+        }
+        if let Ok(shader_asset) = asset::ShaderAsset::default_3d() {
+            if let Some(shader) = gpu.ship_shader(&shader_asset) {
+                gpu.fallback_shader3d = shader;
+                let mut s = gpu.fallback_shader3d.clone();
+                s.attach_tex(&gpu.fallback_texture);
+                gpu.fallback_shader3d = s;
+            }
+        }
+        if let Ok(shader_asset) = asset::ShaderAsset::default_2d() {
+            if let Some(shader) = gpu.ship_shader(&shader_asset) {
+                gpu.fallback_shader2d = shader;
+                let mut s = gpu.fallback_shader2d.clone();
+                s.attach_tex(&gpu.fallback_texture);
+                gpu.fallback_shader2d = s;
+            }
+        }
+
         gpu.set_msaa(true);
         gpu.set_culling(true);
         gpu.set_wire_width(2.0);
@@ -112,6 +144,10 @@ impl GPU {
         GL::set_cull_face(self.cull_face);
     }
 
+    pub fn set_canvas_size(&mut self, size: Size2D) {
+        self.canvas_size = size;
+    }
+
     pub fn set_wire_width(&mut self, width: f32) {
         GL::set_wire_width(width);
     }
@@ -120,31 +156,75 @@ impl GPU {
         GL::set_point_size(size);
     }
 
-    pub fn add_mesh3d(&self, file: &asset::Mesh3DFile) -> Mesh3D {
+    pub fn log_backend_info(&self) {
+        log_info!("BACKEND: {} (GLSL {})", self.ctx.gl_ver, self.ctx.glsl_ver);
+    }
+
+    pub fn log_info(&self) {
+        log_info!("RENDERER");
+        log_info!(
+            "> mode: {}",
+            match self.poly_mode {
+                PolyMode::Points => "POINTS",
+                PolyMode::WireFrame => "WIREFRAME",
+                PolyMode::Filled => "RASTERIZE",
+            }
+        );
+        log_info!(
+            "> cull: {}",
+            if self.culling {
+                let face = match self.cull_face {
+                    Cull::Clock => "clockwise",
+                    Cull::AntiClock => "anti-clock",
+                };
+                format!("ON [{face}]")
+            } else {
+                "OFF".to_string()
+            }
+        );
+        log_info!(
+            "> msaa: {}",
+            if self.msaa {
+                format!("ON [{} samples]", self.msaa_samples)
+            } else {
+                "OFF".to_string()
+            }
+        );
+    }
+
+    pub fn fallback_shader3d(&self) -> Shader {
+        self.fallback_shader3d.clone()
+    }
+
+    pub fn fallback_shader2d(&self) -> Shader {
+        self.fallback_shader2d.clone()
+    }
+
+    pub fn ship_mesh3d(&self, file: &asset::Mesh3DFile) -> Mesh3D {
         Mesh3D {
             visibility: true,
             handle: file.ship(),
-            shader: None,
+            shader: Some(self.fallback_shader3d()),
             transform: Transform3D::default(),
             draw_mode: DrawMode::Triangles,
         }
     }
 
-    pub fn add_mesh2d(&self, file: &asset::Mesh2DFile) -> Mesh2D {
+    pub fn ship_mesh2d(&self, file: &asset::Mesh2DFile) -> Mesh2D {
         Mesh2D {
             visibility: true,
             handle: file.ship(),
-            shader: None,
+            shader: Some(self.fallback_shader2d()),
             transform: Transform2D::default(),
             draw_mode: DrawMode::Triangles,
         }
     }
 
-    pub fn add_shader(&self, asset: &asset::ShaderAsset) -> Option<Shader> {
+    pub fn ship_shader(&self, asset: &asset::ShaderAsset) -> Option<Shader> {
         asset.compile().ok()
     }
 
-    pub fn add_texture(&self, image: &asset::Image) -> Texture2D {
+    pub fn ship_texture(&self, image: &asset::Image) -> Texture2D {
         image.ship()
     }
 
@@ -153,6 +233,12 @@ impl GPU {
     }
 
     pub fn render2d(&self, mesh: &Mesh2D) {
-        mesh.render();
+        let aspect = if self.canvas_size.w > 0 && self.canvas_size.h > 0 {
+            self.canvas_size.w as f32 / self.canvas_size.h as f32
+        } else {
+            1.0
+        };
+        let proj = cgmath::ortho(-aspect, aspect, -1.0, 1.0, -1.0, 1.0);
+        mesh.render(&proj);
     }
 }

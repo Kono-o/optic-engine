@@ -122,6 +122,12 @@ impl Image {
     }
 }
 
+impl Image {
+    pub fn fallback() -> OpticResult<Self> {
+        Self::from_path("optic/assets/txtr/fallback.png")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
