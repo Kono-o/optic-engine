@@ -7,3 +7,4 @@ edition = "2021"
 optic-core = { path = "../optic-core" }
 winit = "0.30.12"
 raw-window-handle = "0.6"
+gilrs = "0.10"

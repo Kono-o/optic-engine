@@ -1,26 +1,29 @@
-use optic_core::Size2D;
-use winit::dpi::PhysicalSize;
+use optic_core::{Coord2D, CoordOffset, Size2D};
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::window::{CursorGrabMode, Fullscreen, Window as WinitWindow};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Window {
-    pub inner: Option<std::sync::Arc<WinitWindow>>,
-    pub size: Size2D,
-    pub title: String,
-    pub fullscreen: bool,
-    pub resizable: bool,
-    pub cursor_hidden: bool,
-    pub cursor_grabbed: bool,
-    pub cursor_inside: bool,
-    pub cursor_pos: (f64, f64),
-    pub prev_cursor_pos: (f64, f64),
-    pub cursor_delta: (f64, f64),
-    pub coord: (f64, f64),
-    pub prev_coord: (f64, f64),
-    pub prev_size: Size2D,
+    inner: Option<std::sync::Arc<WinitWindow>>,
+
+    // ── Frame-tracking (computed each frame) ─────────────────────────────
+    prev_cursor_pos: Coord2D,
+    cursor_delta: CoordOffset,
+    prev_position: Coord2D,
+    prev_size: Size2D,
+    cursor_inside: bool,
+    tracking_started: bool,
+
+    // ── Cached state (no live winit query available) ──────────────────────
+    cursor_pos: Coord2D,
+    cursor_visible: bool,
+    cursor_grabbed: bool,
+    min_size: Option<Size2D>,
+    max_size: Option<Size2D>,
 }
 
 impl Window {
+    // ── Construction ──────────────────────────────────────────────────────
     #[allow(deprecated)]
     pub fn new(el: &winit::event_loop::EventLoop<()>, title: &str, size: Size2D) -> Self {
         let attrs = WinitWindow::default_attributes()
@@ -30,19 +33,17 @@ impl Window {
         let arc = std::sync::Arc::new(w);
         Self {
             inner: Some(arc),
-            size,
-            title: title.to_string(),
-            fullscreen: false,
-            resizable: true,
-            cursor_hidden: false,
-            cursor_grabbed: false,
-            cursor_inside: true,
-            cursor_pos: (0.0, 0.0),
-            prev_cursor_pos: (0.0, 0.0),
-            cursor_delta: (0.0, 0.0),
-            coord: (0.0, 0.0),
-            prev_coord: (0.0, 0.0),
+            prev_cursor_pos: Coord2D::empty(),
+            cursor_delta: CoordOffset::empty(),
+            prev_position: Coord2D::empty(),
             prev_size: size,
+            cursor_inside: true,
+            tracking_started: false,
+            cursor_pos: Coord2D::empty(),
+            cursor_visible: true,
+            cursor_grabbed: false,
+            min_size: None,
+            max_size: None,
         }
     }
 
@@ -54,71 +55,111 @@ impl Window {
         self.inner.is_none()
     }
 
+    pub fn is_running(&self) -> bool {
+        self.inner.is_some()
+    }
+
+    // ── Identity ──────────────────────────────────────────────────────────
     pub fn raw_handle(&self) -> Option<raw_window_handle::RawWindowHandle> {
         use raw_window_handle::HasWindowHandle;
         self.inner.as_ref().map(|w| w.window_handle().unwrap().as_raw())
     }
 
-    pub fn size(&self) -> Size2D { self.size }
-    pub fn actual_size(&self) -> Size2D {
-        self.inner.as_ref().map(|w| {
-            let size = w.inner_size();
-            Size2D::from(size.width, size.height)
-        }).unwrap_or(self.size)
-    }
-    pub fn title(&self) -> &str { &self.title }
-    pub fn fullscreen(&self) -> bool { self.fullscreen }
-
-    pub fn coord(&self) -> (f64, f64) { self.coord }
-    pub fn set_coord(&mut self, x: f64, y: f64) {
-        self.coord = (x, y);
-        if let Some(ref w) = self.inner {
-            use winit::dpi::PhysicalPosition;
-            let _ = w.set_outer_position(PhysicalPosition::new(x, y));
-        }
+    pub fn id(&self) -> Option<winit::window::WindowId> {
+        self.inner.as_ref().map(|w| w.id())
     }
 
-    pub fn is_cursor_inside(&self) -> bool { self.cursor_inside }
-
-    pub fn cursor_coord(&self) -> (f64, f64) { self.cursor_pos }
-
-    pub fn cursor_coord_normalized(&self) -> (f64, f64) {
-        if self.size.w == 0 || self.size.h == 0 {
-            return (0.0, 0.0);
-        }
-        (
-            self.cursor_pos.0 / self.size.w as f64,
-            1.0 - self.cursor_pos.1 / self.size.h as f64,
-        )
+    // ── Sizing ────────────────────────────────────────────────────────────
+    /// Live query via winit `inner_size()`.
+    pub fn size(&self) -> Size2D {
+        self.inner.as_ref().map_or(self.prev_size, |w| {
+            let s = w.inner_size();
+            Size2D::from(s.width, s.height)
+        })
     }
 
-    pub fn set_cursor_coord(&self, x: f64, y: f64) {
-        use winit::dpi::PhysicalPosition;
-        if let Some(ref w) = self.inner {
-            let _ = w.set_cursor_position(PhysicalPosition::new(x, y));
-        }
-    }
-
-    pub fn cursor_offset(&self) -> (f64, f64) {
-        self.cursor_delta
-    }
-
-    pub fn set_title(&mut self, title: &str) {
-        self.title = title.to_string();
-        if let Some(ref w) = self.inner {
-            w.set_title(title);
-        }
-    }
-
-    pub fn set_size(&mut self, size: Size2D) {
-        self.size = size;
+    pub fn set_size(&self, size: Size2D) {
         if let Some(ref w) = self.inner {
             let _ = w.request_inner_size(PhysicalSize::new(size.w, size.h));
         }
     }
 
-    pub fn set_fullscreen(&mut self, enable: bool) {
-        self.fullscreen = enable;
+    pub fn prev_size(&self) -> Size2D {
+        self.prev_size
+    }
+
+    /// Cached from the last `set_min_size` call (no live winit query).
+    pub fn min_size(&self) -> Option<Size2D> {
+        self.min_size
+    }
+
+    pub fn set_min_size(&mut self, size: Option<Size2D>) {
+        self.min_size = size;
+        if let Some(ref w) = self.inner {
+            w.set_min_inner_size(size.map(|s| PhysicalSize::new(s.w, s.h)));
+        }
+    }
+
+    /// Cached from the last `set_max_size` call (no live winit query).
+    pub fn max_size(&self) -> Option<Size2D> {
+        self.max_size
+    }
+
+    pub fn set_max_size(&mut self, size: Option<Size2D>) {
+        self.max_size = size;
+        if let Some(ref w) = self.inner {
+            w.set_max_inner_size(size.map(|s| PhysicalSize::new(s.w, s.h)));
+        }
+    }
+
+    /// Live query via winit `is_resizable()`.
+    pub fn resizable(&self) -> bool {
+        self.inner.as_ref().map_or(true, |w| w.is_resizable())
+    }
+
+    pub fn set_resizable(&self, enable: bool) {
+        if let Some(ref w) = self.inner {
+            w.set_resizable(enable);
+        }
+    }
+
+    // ── Desktop Position ──────────────────────────────────────────────────
+    /// Live query via winit `outer_position()`.
+    pub fn position(&self) -> Coord2D {
+        self.inner.as_ref().and_then(|w| {
+            w.outer_position().ok().map(|p| Coord2D::from(p.x as f64, p.y as f64))
+        }).unwrap_or(self.prev_position)
+    }
+
+    pub fn set_position(&self, pos: Coord2D) {
+        if let Some(ref w) = self.inner {
+            let _ = w.set_outer_position(PhysicalPosition::new(pos.x as i32, pos.y as i32));
+        }
+    }
+
+    pub fn prev_position(&self) -> Coord2D {
+        self.prev_position
+    }
+
+    // ── Title ─────────────────────────────────────────────────────────────
+    /// Live query via winit `title()`.
+    pub fn title(&self) -> String {
+        self.inner.as_ref().map_or(String::new(), |w| w.title())
+    }
+
+    pub fn set_title(&self, title: &str) {
+        if let Some(ref w) = self.inner {
+            w.set_title(title);
+        }
+    }
+
+    // ── Fullscreen ────────────────────────────────────────────────────────
+    /// Live query via winit `fullscreen()`.
+    pub fn is_fullscreen(&self) -> bool {
+        self.inner.as_ref().and_then(|w| w.fullscreen()).is_some()
+    }
+
+    pub fn set_fullscreen(&self, enable: bool) {
         if let Some(ref w) = self.inner {
             if enable {
                 w.set_fullscreen(Some(Fullscreen::Borderless(None)));
@@ -128,89 +169,169 @@ impl Window {
         }
     }
 
-    pub fn toggle_fullscreen(&mut self) {
-        self.set_fullscreen(!self.fullscreen);
+    pub fn toggle_fullscreen(&self) {
+        self.set_fullscreen(!self.is_fullscreen());
     }
 
-    pub fn is_running(&self) -> bool {
-        self.inner.is_some()
+    // ── Window State ──────────────────────────────────────────────────────
+    /// Live query via winit `is_visible()`.
+    pub fn is_visible(&self) -> bool {
+        self.inner.as_ref().and_then(|w| w.is_visible()).unwrap_or(false)
     }
 
-    pub fn set_resizable(&mut self, enable: bool) {
-        self.resizable = enable;
+    pub fn set_visible(&self, visible: bool) {
         if let Some(ref w) = self.inner {
-            w.set_resizable(enable);
+            w.set_visible(visible);
         }
     }
-    pub fn toggle_resizable(&mut self) {
-        self.set_resizable(!self.resizable);
+
+    /// Live query via winit `is_minimized()`.
+    pub fn is_minimized(&self) -> bool {
+        self.inner.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false)
     }
 
-    pub fn set_cursor_visibility(&mut self, hide: bool) {
-        self.cursor_hidden = hide;
+    pub fn minimize(&self) {
         if let Some(ref w) = self.inner {
-            w.set_cursor_visible(!hide);
+            w.set_minimized(true);
         }
-    }
-    pub fn toggle_cursor_visibility(&mut self) {
-        self.set_cursor_visibility(!self.cursor_hidden);
     }
 
-    pub fn set_cursor_usage(&mut self, enable: bool) {
-        if self.cursor_grabbed != enable {
-            self.toggle_cursor_usage()
-        }
-    }
-    pub fn toggle_cursor_usage(&mut self) {
-        self.cursor_grabbed = !self.cursor_grabbed;
+    pub fn restore(&self) {
         if let Some(ref w) = self.inner {
-            let mode = if self.cursor_grabbed {
-                CursorGrabMode::Locked
-            } else if self.cursor_hidden {
-                CursorGrabMode::None
-            } else {
-                CursorGrabMode::None
-            };
-            let _ = w.set_cursor_grab(mode);
+            w.set_minimized(false);
         }
     }
 
-    pub fn set_cursor_grab(&mut self, grab: bool) -> Result<(), ()> {
-        self.cursor_grabbed = grab;
-        match self.inner.as_ref() {
-            Some(w) => match w.set_cursor_grab(if grab { CursorGrabMode::Locked } else { CursorGrabMode::None }) {
-                Ok(_) => Ok(()),
-                Err(_) => Err(()),
-            },
-            None => Err(()),
-        }
+    /// Live query via winit `is_maximized()`.
+    pub fn is_maximized(&self) -> bool {
+        self.inner.as_ref().map_or(false, |w| w.is_maximized())
     }
 
-    pub fn set_cursor_visible(&mut self, visible: bool) {
-        self.cursor_hidden = !visible;
+    pub fn maximize(&self) {
         if let Some(ref w) = self.inner {
-            w.set_cursor_visible(visible);
+            w.set_maximized(true);
         }
     }
 
-    pub fn cursor_position(&self) -> (f64, f64) {
-        self.cursor_pos
+    pub fn unmaximize(&self) {
+        if let Some(ref w) = self.inner {
+            w.set_maximized(false);
+        }
     }
 
-    pub fn cursor_delta(&self) -> (f64, f64) {
-        self.cursor_delta
+    /// Live query via winit `has_focus()`.
+    pub fn has_focus(&self) -> bool {
+        self.inner.as_ref().map_or(false, |w| w.has_focus())
     }
 
+    pub fn focus(&self) {
+        if let Some(ref w) = self.inner {
+            w.focus_window();
+        }
+    }
+
+    // ── Frame Control ─────────────────────────────────────────────────────
     pub fn request_redraw(&self) {
         if let Some(ref w) = self.inner {
             w.request_redraw();
         }
     }
 
-    pub fn set_vsync(&mut self, enable: bool) {
-        let _ = enable; // vsync is handled by EGL in context
+    // ── Cursor ────────────────────────────────────────────────────────────
+    /// Returns the last-known cursor position (updated via events or `set_cursor_pos`).
+    pub fn cursor_pos(&self) -> Coord2D {
+        self.cursor_pos
     }
-    pub fn toggle_vsync(&mut self) {
-        // vsync is handled by EGL in context
+
+    /// Moves the OS cursor and updates the cached position.
+    pub fn set_cursor_pos(&mut self, pos: Coord2D) {
+        self.cursor_pos = pos;
+        if let Some(ref w) = self.inner {
+            let _ = w.set_cursor_position(PhysicalPosition::new(pos.x, pos.y));
+        }
+    }
+
+    pub fn cursor_delta(&self) -> CoordOffset {
+        self.cursor_delta
+    }
+
+    pub fn cursor_pos_normalized(&self) -> Coord2D {
+        let sz = self.size();
+        if sz.w == 0 || sz.h == 0 {
+            return Coord2D::empty();
+        }
+        Coord2D::from(self.cursor_pos.x / sz.w as f64, 1.0 - self.cursor_pos.y / sz.h as f64)
+    }
+
+    /// Updated via `CursorEntered`/`CursorLeft` events.
+    pub fn is_cursor_inside(&self) -> bool {
+        self.cursor_inside
+    }
+
+    pub fn is_cursor_visible(&self) -> bool {
+        self.cursor_visible
+    }
+
+    pub fn set_cursor_visible(&mut self, visible: bool) {
+        self.cursor_visible = visible;
+        if let Some(ref w) = self.inner {
+            w.set_cursor_visible(visible);
+        }
+    }
+
+    pub fn toggle_cursor_visible(&mut self) {
+        self.set_cursor_visible(!self.cursor_visible);
+    }
+
+    pub fn is_cursor_grabbed(&self) -> bool {
+        self.cursor_grabbed
+    }
+
+    pub fn set_cursor_grab(&mut self, grab: bool) -> Result<(), ()> {
+        let result = match self.inner.as_ref() {
+            Some(w) => w.set_cursor_grab(if grab { CursorGrabMode::Locked } else { CursorGrabMode::None })
+                .map_err(|_| ()),
+            None => Err(()),
+        };
+        if result.is_ok() {
+            self.cursor_grabbed = grab;
+        }
+        result
+    }
+
+    pub fn toggle_cursor_grab(&mut self) {
+        let _ = self.set_cursor_grab(!self.cursor_grabbed);
+    }
+
+    // ── Frame Update ──────────────────────────────────────────────────────
+    /// Call once per frame after processing events.
+    /// Snapshots live/tracked state and computes cursor delta.
+    pub fn update_frame(&mut self) {
+        if !self.tracking_started {
+            self.prev_cursor_pos = self.cursor_pos;
+            self.prev_position = self.position();
+            self.prev_size = self.size();
+            self.cursor_delta = CoordOffset::empty();
+            self.tracking_started = true;
+        } else {
+            self.cursor_delta = CoordOffset::from(
+                self.cursor_pos.x - self.prev_cursor_pos.x,
+                self.prev_cursor_pos.y - self.cursor_pos.y,
+            );
+            self.prev_cursor_pos = self.cursor_pos;
+            self.prev_position = self.position();
+            self.prev_size = self.size();
+        }
+    }
+
+    // ── Internal (called by optic-loop event handlers) ───────────────────
+    #[doc(hidden)]
+    pub fn notify_cursor_moved(&mut self, pos: Coord2D) {
+        self.cursor_pos = pos;
+    }
+
+    #[doc(hidden)]
+    pub fn notify_cursor_inside(&mut self, inside: bool) {
+        self.cursor_inside = inside;
     }
 }

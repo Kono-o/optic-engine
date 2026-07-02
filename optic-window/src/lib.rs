@@ -5,3 +5,4 @@ pub use events::*;
 pub use window::*;
 
 pub use winit;
+pub use gilrs;

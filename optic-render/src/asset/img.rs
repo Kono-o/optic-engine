@@ -1,4 +1,5 @@
 use image::{ColorType, GenericImageView};
+use optic_core::consts::{ASSET_TYPE_TEXTURE, CACHE_VERSION, OPTIC_MAGIC};
 use optic_core::{ImgFilter, ImgFormat, ImgWrap, OpticError, OpticErrorKind, OpticResult, Size2D};
 
 use crate::handles::texture::{create_texture, Texture2D};
@@ -12,7 +13,26 @@ pub struct TextureFile {
 }
 
 impl TextureFile {
-    pub fn from_path(path: &str) -> OpticResult<Self> {
+    pub fn pixel_count(&self) -> usize {
+        self.size.w as usize * self.size.h as usize
+    }
+    pub fn set_wrap(&mut self, wrap: ImgWrap) { self.wrap = wrap; }
+    pub fn set_filter(&mut self, filter: ImgFilter) { self.filter = filter; }
+
+    pub fn ship(&self) -> Texture2D {
+        let id = create_texture(&self.bytes, self.size, &self.fmt, &self.filter, &self.wrap);
+        Texture2D::new(id, self.size, self.fmt, self.filter, self.wrap)
+    }
+
+    pub fn fallback() -> OpticResult<Self> {
+        Self::from_disk("optic/assets/txtr/fallback.png")
+    }
+}
+
+// --- from_disk: debug loads source + overwrites cache; release loads cache only ---
+#[cfg(debug_assertions)]
+impl TextureFile {
+    pub fn from_disk(path: &str) -> OpticResult<Self> {
         let img = image::open(path)
             .map_err(|e| OpticError::new(OpticErrorKind::File, &format!("failed to load image {path}: {e}")))?;
 
@@ -34,41 +54,35 @@ impl TextureFile {
             _ => ImgFormat::RGBA(8),
         };
 
-        Ok(Self {
+        let tex = Self {
             bytes,
             size: Size2D::from(w, h),
             fmt,
             filter: ImgFilter::Closest,
             wrap: ImgWrap::Clip,
-        })
-    }
+        };
 
-    pub fn pixel_count(&self) -> usize {
-        self.size.w as usize * self.size.h as usize
+        let cache = optic_file::cached_path(path, "otxtr");
+        tex.save_cached(&cache)?;
+        Ok(tex)
     }
-    pub fn set_wrap(&mut self, wrap: ImgWrap) { self.wrap = wrap; }
-    pub fn set_filter(&mut self, filter: ImgFilter) { self.filter = filter; }
+}
 
-    pub fn ship(&self) -> Texture2D {
-        let id = create_texture(&self.bytes, self.size, &self.fmt, &self.filter, &self.wrap);
-        Texture2D::new(id, self.size, self.fmt, self.filter, self.wrap)
+#[cfg(not(debug_assertions))]
+impl TextureFile {
+    pub fn from_disk(path: &str) -> OpticResult<Self> {
+        let cache = optic_file::cached_path(path, "otxtr");
+        Self::from_cached(&cache)
     }
+}
 
-    pub fn from_path_cached(path: &str) -> OpticResult<Self> {
-        let cached = optic_file::cached_path(path, "otxtr");
-        if optic_file::exists(&cached) {
-            return Self::from_cached(&cached);
-        }
-        let img = Self::from_path(path)?;
-        if let Some(parent) = std::path::Path::new(&cached).parent() {
-            let _ = optic_file::create_dir(&parent.to_string_lossy());
-        }
-        img.save_cached(&cached)?;
-        Ok(img)
-    }
-
+// --- binary cache read/write (internal) ---
+impl TextureFile {
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
-        let mut data = Vec::with_capacity(12 + self.bytes.len());
+        let mut data = Vec::with_capacity(31 + self.bytes.len());
+        data.extend_from_slice(&OPTIC_MAGIC);
+        data.push(CACHE_VERSION);
+        data.push(ASSET_TYPE_TEXTURE);
         data.push(self.fmt.channels());
         data.push(self.fmt.bit_depth());
         data.extend_from_slice(&(self.size.w as u32).to_le_bytes());
@@ -86,26 +100,36 @@ impl TextureFile {
         optic_file::write_bytes(path, &data)
     }
 
-    pub fn from_cached(path: &str) -> OpticResult<Self> {
+    #[cfg_attr(debug_assertions, allow(dead_code))]
+    pub(crate) fn from_cached(path: &str) -> OpticResult<Self> {
         let data = optic_file::read_bytes(path)?;
-        if data.len() < 10 {
+        if data.len() < 31 {
             return Err(OpticError::new(OpticErrorKind::Asset, &format!("cached texture too short: {path}")));
         }
-        let channels = data[0];
-        let bit_depth = data[1];
-        let w = u32::from_le_bytes([data[2], data[3], data[4], data[5]]);
-        let h = u32::from_le_bytes([data[6], data[7], data[8], data[9]]);
-        let filter = match data[10] {
+        if data[0..17] != OPTIC_MAGIC {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("invalid optic magic in cached texture: {path}")));
+        }
+        if data[17] != CACHE_VERSION {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("unsupported cache version {} in {path}", data[17])));
+        }
+        if data[18] != ASSET_TYPE_TEXTURE {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("type mismatch: expected texture in {path}")));
+        }
+        let channels = data[19];
+        let bit_depth = data[20];
+        let w = u32::from_le_bytes([data[21], data[22], data[23], data[24]]);
+        let h = u32::from_le_bytes([data[25], data[26], data[27], data[28]]);
+        let filter = match data[29] {
             0 => ImgFilter::Closest,
             1 => ImgFilter::Linear,
             _ => ImgFilter::Closest,
         };
-        let wrap = match data[11] {
+        let wrap = match data[30] {
             0 => ImgWrap::Repeat,
             1 => ImgWrap::Extend,
             _ => ImgWrap::Clip,
         };
-        let bytes = data[12..].to_vec();
+        let bytes = data[31..].to_vec();
         let expected = w as usize * h as usize * channels as usize * (bit_depth as usize / 8);
         if bytes.len() != expected {
             return Err(OpticError::new(OpticErrorKind::Asset, &format!(
@@ -119,12 +143,6 @@ impl TextureFile {
             filter,
             wrap,
         })
-    }
-}
-
-impl TextureFile {
-    pub fn fallback() -> OpticResult<Self> {
-        Self::from_path("optic/assets/txtr/fallback.png")
     }
 }
 
@@ -173,6 +191,15 @@ mod tests {
         assert_eq!(loaded.fmt, img.fmt);
         assert_eq!(loaded.filter, img.filter);
         assert_eq!(loaded.wrap, img.wrap);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn image_from_cached_bad_magic() {
+        let path = "/tmp/optic_test_img_badmagic.bin";
+        optic_file::write_bytes(path, &[0u8; 30]).unwrap();
+        let result = TextureFile::from_cached(path);
+        assert!(result.is_err());
         let _ = std::fs::remove_file(path);
     }
 

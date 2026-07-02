@@ -79,7 +79,7 @@ optic/                          # Workspace root
 │       └── asset/
 │           ├── mod.rs
 │           ├── img.rs          # TextureFile (load PNG, cache, ship to GPU)
-│           ├── msh.rs          # Mesh3DFile, Mesh2DFile, Center (OBJ parser, quad gen)
+│           ├── msh.rs          # Mesh3DFile, Mesh2DFile, Center (OBJ parser, quad gen, primitives)
 │           ├── shdr.rs         # ShaderFile, ShaderType (load GLSL, compile)
 │           └── attr/
 │               ├── mod.rs
@@ -210,6 +210,17 @@ ASSET="opt/", TEMP="opt/temp/", SHDR_ASSET="opt/shdr/",
 MESH_ASSET="opt/mesh/", TXTR_ASSET="opt/txtr/",
 VERT="vert", FRAG="frag", GLSL="glsl", OBJ="obj", PNG="png",
 OSHDR="oshdr", OMESH="omesh", OTXTR="otxtr"
+
+**Binary cache format constants:**
+```
+OPTIC_MAGIC: [u8; 17] = b"o/0ptiC+EngiNEx*_"   // Magic signature in .otxtr/.oshdr/.omesh
+CACHE_VERSION: u8 = 1                            // Current cache version
+ASSET_TYPE_TEXTURE: u8 = 0                       // Discriminator for texture caches
+ASSET_TYPE_SHADER: u8  = 1                       // Discriminator for shader caches
+ASSET_TYPE_MESH: u8   = 2                        // Discriminator for mesh caches
+SHADER_PIPELINE: u8 = 0                          // Sub-type for pipeline shaders
+SHADER_COMPUTE: u8  = 1                          // Sub-type for compute shaders
+```
 ```
 
 ### 2.7 Logging Macros (all #[macro_export])
@@ -674,6 +685,19 @@ RenderTarget<'a> { Screen, Canvas(&'a Canvas) }
 
 ### 5.6 Asset Loaders
 
+All three cache formats (`.otxtr`, `.oshdr`, `.omesh`) share a **unified 17-byte magic header**:
+
+```
+ 0-16   OPTIC_MAGIC = b"o/0ptiC+EngiNEx*_"   ← 17 bytes
+17      CACHE_VERSION (1)
+18      Asset type: 0=Texture | 1=Shader | 2=Mesh
+19+     Type-specific payload
+```
+
+Every `from_disk()` method follows the same pattern:
+- **Debug builds**: Load source file (PNG/GLSL/OBJ/STL) → decode → save `.otxtr`/`.oshdr`/`.omesh` cache (always overwrite) → return asset
+- **Release builds**: Load cache file only; hard error if missing (user forgot to pre-cache)
+
 #### 5.6.1 TextureFile (`asset/img.rs`)
 
 ```rust
@@ -686,15 +710,12 @@ TextureFile {
 }
 
 // Methods:
-//   from_path(path) -> OpticResult<Self>  — Uses image crate to load PNG etc.
-//   from_path_cached(path) -> OpticResult<Self>  — Loads from cache or from path + saves cache
+//   from_disk(path) -> OpticResult<Self>  — debug: load PNG/etc → save .otxtr cache; release: load .otxtr cache only
 //   ship(&self) -> Texture2D  — Calls create_texture(), returns Texture2D
-//   save_cached(&self, path)
-//   from_cached(path) -> OpticResult<Self>
 //   fallback() -> OpticResult<Self>  — Loads "optic/assets/txtr/fallback.png"
 ```
 
-Cached format: binary file with `[channels:u8, bit_depth:u8, w:u32le, h:u32le, filter:u8, wrap:u8, bytes...]`.
+Cached format (`.otxtr`): binary file with unified optic signature header, then `[channels:u8, bit_depth:u8, w:u32le, h:u32le, filter:u8, wrap:u8, bytes...]`.
 
 `ship()` calls `create_texture()` which is the central GL texture creation function.
 
@@ -709,7 +730,17 @@ Mesh3DFile {
     pub ind_attr: IndATTR,
     pub cus_attrs: Vec<CustomATTR>,
 }
-// Methods: empty(), from_obj_src(src), from_obj(path), from_obj_cached(path), ship() -> MeshHandle
+// Methods: empty(), from_obj_src(src), from_stl_src(data), from_disk(path), ship() -> MeshHandle
+//   from_disk — debug: load .obj/.stl → save .omesh cache; release: load .omesh cache only
+//
+// Primitive constructors (all return Mesh3DFile with pos, col, uvm, nrm, ind):
+//   cube(side)                                          — unit cube scaled by side length
+//   cuboid(width, height, depth)                        — rectangular box
+//   sphere(radius, stacks, sectors)                     — UV sphere
+//   cylinder(radius, height, segments, cap)             — cylinder along Y, optional end caps
+//   cone(radius, height, segments, cap)                 — cone along Y, optional base cap
+//   torus(major_radius, minor_radius, major_segs, minor_segs) — torus in XZ plane
+//   plane(width, depth)                                 — flat plane facing +Y
 
 Mesh2DFile {
     pub pos_attr: Pos2DATTR,
@@ -722,6 +753,12 @@ Mesh2DFile {
 }
 // Methods: empty(), quad(size) -> centered quad with UVs, fullscreen_quad() -> NDC quad (-1..1),
 //          ship() -> MeshHandle, set_pos_attr, set_center(Center), etc.
+//
+// Primitive constructors (all return Mesh2DFile with pos, col, uvm, ind):
+//   circle(radius, segments)                            — filled circle
+//   polygon(radius, sides)                              — regular N-sided polygon
+//   ring(inner_radius, outer_radius, segments)          — filled annulus
+//   rect(width, height)                                 — axis-aligned rectangle
 
 Center { TopLeft, TopRight, BottomLeft, BottomRight, Middle, Custom(f32, f32) }
 ```
@@ -736,6 +773,8 @@ Center { TopLeft, TopRight, BottomLeft, BottomRight, Middle, Custom(f32, f32) }
 
 **OBJ parser** (`OBJ::parse`): Handles `v`, `vt`, `vn`, `f` lines. Only triangles. Deduplicates vertices by position+uv+normal key. Returns `OBJ::Parsed { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr }` or `NonTriangle`.
 
+**STL parser** (`from_stl_src`): Handles both ASCII and binary STL. Deduplicates vertices by position+normal key (STL has no UV data). Defaults UVs to `[0,0]` and color to white. Triangles only — STL is always triangulated by specification.
+
 #### 5.6.3 ShaderFile (`asset/shdr.rs`)
 
 ```rust
@@ -749,14 +788,15 @@ ShaderFile {
 
 // Methods:
 //   from_src(src, typ) -> OpticResult<Self>  — Parses GLSL source for //VERTEX/FRAGMENT markers
-//   from_path(path, typ) -> OpticResult<Self>
+//   from_disk(path, typ) -> OpticResult<Self>  — debug: load .glsl → save .oshdr cache; release: load .oshdr cache only
 //   from_vert_frag(v_src, f_src) -> Self  — Direct construction
-//   from_path_cached(path, typ) -> OpticResult<Self>
 //   compile(&self) -> OpticResult<Shader>  — Links program, returns Shader
 //   default_3d() / default_2d() -> OpticResult<Self>  — Loads from optic/assets/shdr/
 ```
 
 **GLSL parsing:** For `Pipeline` type, splits source at `//v` / `//vert` / `//VERTEX` markers (and various `//` comment style variants like `#VERTEX`, `//VERT`, etc.) into vertex and fragment sections.
+
+**Cache format:** The `.oshdr` binary cache stores already-parsed source (v_src/f_src split) with the unified optic signature header, shader type byte, and length-prefixed strings. Cache load skips GLSL re-parsing.
 
 #### 5.6.4 Attribute System (`asset/attr/`)
 
@@ -1409,7 +1449,7 @@ Camera transform. Computed in `calc_matrices()`:
 
 ## 15. Complete Type Index
 
-### optic-core (26 types + 65 colors + 48 ANSI + 13 consts)
+### optic-core (26 types + 65 colors + 48 ANSI + 22 consts)
 | Category | Items |
 |----------|-------|
 | Structs | `RGBA`, `RGB`, `Coord2D`, `CoordOffset`, `Size2D`, `Size3D`, `ClipDist`, `Rect`, `ANSI`, `OpticError` |

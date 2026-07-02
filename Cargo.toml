@@ -6,5 +6,5 @@ members = [
     "optic-window",
     "optic-render",
     "optic-loop",
-    "optic",
+    "optic", "dogma",
 ]

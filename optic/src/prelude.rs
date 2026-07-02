@@ -18,8 +18,8 @@ pub use optic_core::{
 pub use optic_core::{log_color, log_event, log_fatal, log_info, log_warn};
 pub use optic_core::{end, end_error, end_success, ERROR, SUCCESS};
 pub use optic_file;
-pub use optic_loop::{FrameState, Game, GameBuilder, GameLoop, Runtime, Scene, Time, WindowState, run};
+pub use optic_loop::{FrameState, Game, GameLoop, Runtime, Time, WindowState, run};
 pub use optic_render::asset::attr::{ATTRInfo, ATTRName, ColATTR, CustomATTR, DataType, IndATTR, NrmATTR, Pos2DATTR, Pos3DATTR, UVMATTR};
 pub use optic_render::asset::{Center, Mesh2DFile, Mesh3DFile, ShaderFile, ShaderType, TextureFile};
 pub use optic_render::{Camera, Canvas, CanvasDesc, GL, GPU, Mesh2D, Mesh3D, MeshHandle, RenderContext, RenderTarget, Shader, Slot, StorageBuffer, Texture2D, Transform2D, Transform3D, WindowSurface, Workers};
-pub use optic_window::{Events, Is, KeyBitMap, KeyCode, Mouse, MouseBitMap, Window};
+pub use optic_window::{Events, Is, KeyCode, Mouse, Window};

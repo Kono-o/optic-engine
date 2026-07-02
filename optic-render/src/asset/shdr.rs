@@ -1,3 +1,4 @@
+use optic_core::consts::{ASSET_TYPE_SHADER, CACHE_VERSION, OPTIC_MAGIC, SHADER_COMPUTE, SHADER_PIPELINE};
 use optic_core::{OpticError, OpticErrorKind, OpticResult};
 
 use crate::handles::shader::{link_compute_program, link_program, Shader};
@@ -91,44 +92,12 @@ impl ShaderFile {
         }
     }
 
-    pub fn from_path(path: &str, typ: ShaderType) -> OpticResult<Self> {
-        let src = optic_file::read_string(path)?;
-        Self::from_src(&src, typ)
-    }
-
     pub fn from_vert_frag(v_src: &str, f_src: &str) -> Self {
         Self {
             v_src: v_src.to_string(),
             f_src: f_src.to_string(),
             is_compute: false,
         }
-    }
-
-    pub fn from_path_cached(path: &str, typ: ShaderType) -> OpticResult<Self> {
-        let cached = optic_file::cached_path(path, "oshdr");
-        if optic_file::exists(&cached) {
-            return Self::from_cached(&cached, typ);
-        }
-        let shader = Self::from_path(path, typ)?;
-        if let Some(parent) = std::path::Path::new(&cached).parent() {
-            let _ = optic_file::create_dir(&parent.to_string_lossy());
-        }
-        shader.save_cached(&cached)?;
-        Ok(shader)
-    }
-
-    pub fn save_cached(&self, path: &str) -> OpticResult<()> {
-        if self.is_compute {
-            optic_file::write_string(path, &self.v_src)
-        } else {
-            let src = format!("// VERTEX\n{}\n// FRAGMENT\n{}", self.v_src.trim_end(), self.f_src.trim_end());
-            optic_file::write_string(path, &src)
-        }
-    }
-
-    pub fn from_cached(path: &str, typ: ShaderType) -> OpticResult<Self> {
-        let src = optic_file::read_string(path)?;
-        Self::from_src(&src, typ)
     }
 
     pub fn compile(&self) -> OpticResult<Shader> {
@@ -142,13 +111,97 @@ impl ShaderFile {
     }
 }
 
+// --- from_disk: debug loads source + overwrites cache; release loads cache only ---
+#[cfg(debug_assertions)]
+impl ShaderFile {
+    pub fn from_disk(path: &str, typ: ShaderType) -> OpticResult<Self> {
+        let src = optic_file::read_string(path)?;
+        let shader = Self::from_src(&src, typ)?;
+        let cache = optic_file::cached_path(path, "oshdr");
+        shader.save_cached(&cache)?;
+        Ok(shader)
+    }
+}
+
+#[cfg(not(debug_assertions))]
+impl ShaderFile {
+    pub fn from_disk(path: &str, _typ: ShaderType) -> OpticResult<Self> {
+        let cache = optic_file::cached_path(path, "oshdr");
+        Self::from_cached(&cache)
+    }
+}
+
+// --- binary cache read/write (internal) ---
+impl ShaderFile {
+    pub fn save_cached(&self, path: &str) -> OpticResult<()> {
+        let typ_byte = if self.is_compute { SHADER_COMPUTE } else { SHADER_PIPELINE };
+        let v_bytes = self.v_src.as_bytes();
+        let f_bytes = self.f_src.as_bytes();
+        let mut data = Vec::with_capacity(22 + v_bytes.len() + f_bytes.len());
+        data.extend_from_slice(&OPTIC_MAGIC);
+        data.push(CACHE_VERSION);
+        data.push(ASSET_TYPE_SHADER);
+        data.push(typ_byte);
+        data.extend_from_slice(&(v_bytes.len() as u32).to_le_bytes());
+        data.extend_from_slice(v_bytes);
+        data.extend_from_slice(&(f_bytes.len() as u32).to_le_bytes());
+        data.extend_from_slice(f_bytes);
+        optic_file::write_bytes(path, &data)
+    }
+
+    #[cfg_attr(debug_assertions, allow(dead_code))]
+    fn from_cached(path: &str) -> OpticResult<Self> {
+        let data = optic_file::read_bytes(path)?;
+        if data.len() < 24 {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("cached shader too short: {path}")));
+        }
+        if data[0..17] != OPTIC_MAGIC {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("invalid optic magic in cached shader: {path}")));
+        }
+        if data[17] != CACHE_VERSION {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("unsupported cache version {} in {path}", data[17])));
+        }
+        if data[18] != ASSET_TYPE_SHADER {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("type mismatch: expected shader in {path}")));
+        }
+        let is_compute = data[19] == SHADER_COMPUTE;
+
+        let mut off = 20usize;
+        let v_len = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
+        off += 4;
+        if off + v_len > data.len() {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached shader (vertex section): {path}")));
+        }
+        let v_src = String::from_utf8(data[off..off + v_len].to_vec())
+            .map_err(|_| OpticError::new(OpticErrorKind::Asset, &format!("invalid UTF-8 in cached shader: {path}")))?;
+        off += v_len;
+
+        if off + 4 > data.len() {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached shader (fragment length): {path}")));
+        }
+        let f_len = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
+        off += 4;
+        if off + f_len > data.len() {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached shader (fragment section): {path}")));
+        }
+        let f_src = if f_len > 0 {
+            String::from_utf8(data[off..off + f_len].to_vec())
+                .map_err(|_| OpticError::new(OpticErrorKind::Asset, &format!("invalid UTF-8 in cached shader: {path}")))?
+        } else {
+            String::new()
+        };
+
+        Ok(Self { v_src, f_src, is_compute })
+    }
+}
+
 impl ShaderFile {
     pub fn default_3d() -> OpticResult<Self> {
-        Self::from_path("optic/assets/shdr/fallback3d.glsl", ShaderType::Pipeline)
+        Self::from_disk("optic/assets/shdr/fallback3d.glsl", ShaderType::Pipeline)
     }
 
     pub fn default_2d() -> OpticResult<Self> {
-        Self::from_path("optic/assets/shdr/fallback2d.glsl", ShaderType::Pipeline)
+        Self::from_disk("optic/assets/shdr/fallback2d.glsl", ShaderType::Pipeline)
     }
 }
 
@@ -214,7 +267,7 @@ mod tests {
         let asset = ShaderFile::from_src(src, ShaderType::Pipeline).unwrap();
         let path = "/tmp/optic_test_shdr_pipe.oshdr";
         asset.save_cached(path).unwrap();
-        let loaded = ShaderFile::from_cached(path, ShaderType::Pipeline).unwrap();
+        let loaded = ShaderFile::from_cached(path).unwrap();
         assert!(!loaded.is_compute);
         assert_eq!(loaded.v_src, asset.v_src);
         assert_eq!(loaded.f_src, asset.f_src);
@@ -227,7 +280,7 @@ mod tests {
         let asset = ShaderFile::from_src(src, ShaderType::Compute).unwrap();
         let path = "/tmp/optic_test_shdr_comp.oshdr";
         asset.save_cached(path).unwrap();
-        let loaded = ShaderFile::from_cached(path, ShaderType::Compute).unwrap();
+        let loaded = ShaderFile::from_cached(path).unwrap();
         assert!(loaded.is_compute);
         assert_eq!(loaded.v_src, src);
         let _ = std::fs::remove_file(path);

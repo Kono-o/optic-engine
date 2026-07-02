@@ -1,3 +1,4 @@
+use optic_core::consts::{ASSET_TYPE_MESH, CACHE_VERSION, OPTIC_MAGIC};
 use optic_core::{DrawMode, OpticError, OpticErrorKind, OpticResult};
 use cgmath::Vector2;
 use std::collections::HashMap;
@@ -139,24 +140,528 @@ impl Mesh3DFile {
         }
     }
 
-    pub fn from_obj(path: &str) -> OpticResult<Self> {
-        let src = optic_file::read_string(path)?;
-        Self::from_obj_src(&src)
+    pub fn from_stl_src(data: &[u8]) -> OpticResult<Self> {
+        let mut pos_attr = Pos3DATTR::empty();
+        let mut col_attr = ColATTR::empty();
+        let mut uvm_attr = UVMATTR::empty();
+        let mut nrm_attr = NrmATTR::empty();
+        let mut ind_attr = IndATTR::empty();
+
+        let def_col = [1.0, 1.0, 1.0, 1.0];
+        let def_uvm = [0.0, 0.0];
+        let mut unique_verts: HashMap<(u32, u32, u32, u32, u32, u32), u32> = HashMap::new();
+
+        // Closure to deduplicate and push a vertex
+        let push_vert = |pos: [f32; 3], nrm: [f32; 3], unique: &mut HashMap<(u32, u32, u32, u32, u32, u32), u32>,
+                              pos_attr: &mut Pos3DATTR, nrm_attr: &mut NrmATTR,
+                              col_attr: &mut ColATTR, uvm_attr: &mut UVMATTR| -> u32 {
+            let key = (pos[0].to_bits(), pos[1].to_bits(), pos[2].to_bits(),
+                       nrm[0].to_bits(), nrm[1].to_bits(), nrm[2].to_bits());
+            if let Some(&idx) = unique.get(&key) {
+                idx
+            } else {
+                let idx = pos_attr.data.len() as u32;
+                unique.insert(key, idx);
+                pos_attr.push(pos);
+                nrm_attr.push(nrm);
+                col_attr.push(def_col);
+                uvm_attr.push(def_uvm);
+                idx
+            }
+        };
+
+        // Detect ASCII vs binary: binary STL never starts with "solid " (it's 80-byte header)
+        let is_ascii = data.len() >= 6 && &data[0..6] == b"solid ";
+
+        if is_ascii {
+            let text = std::str::from_utf8(data)
+                .map_err(|_| OpticError::new(OpticErrorKind::Asset, "STL file is not valid UTF-8"))?;
+            let mut nrm = [0.0f32; 3];
+            let mut tri_verts = Vec::new();
+
+            for line in text.lines() {
+                let line = line.trim();
+                if line.starts_with("facet normal") {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 5 {
+                        nrm = [
+                            parts[2].parse().unwrap_or(0.0),
+                            parts[3].parse().unwrap_or(0.0),
+                            parts[4].parse().unwrap_or(0.0),
+                        ];
+                    }
+                    tri_verts.clear();
+                } else if line.starts_with("vertex") {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 4 {
+                        tri_verts.push([
+                            parts[1].parse().unwrap_or(0.0),
+                            parts[2].parse().unwrap_or(0.0),
+                            parts[3].parse().unwrap_or(0.0),
+                        ]);
+                    }
+                } else if line.starts_with("endfacet") && tri_verts.len() == 3 {
+                    for v in &tri_verts {
+                        let idx = push_vert(*v, nrm, &mut unique_verts, &mut pos_attr, &mut nrm_attr, &mut col_attr, &mut uvm_attr);
+                        ind_attr.push(idx);
+                    }
+                }
+            }
+        } else {
+            if data.len() < 84 {
+                return Err(OpticError::new(OpticErrorKind::Asset, &format!("binary STL too short: {} bytes", data.len())));
+            }
+            let tri_count = u32::from_le_bytes([data[80], data[81], data[82], data[83]]) as usize;
+            if data.len() < 84 + tri_count * 50 {
+                return Err(OpticError::new(OpticErrorKind::Asset, &format!("binary STL truncated: expected {} triangles, got {} bytes", tri_count, data.len())));
+            }
+            for i in 0..tri_count {
+                let base = 84 + i * 50;
+                let nrm = [
+                    f32::from_le_bytes([data[base], data[base + 1], data[base + 2], data[base + 3]]),
+                    f32::from_le_bytes([data[base + 4], data[base + 5], data[base + 6], data[base + 7]]),
+                    f32::from_le_bytes([data[base + 8], data[base + 9], data[base + 10], data[base + 11]]),
+                ];
+                let verts = [
+                    [f32::from_le_bytes([data[base + 12], data[base + 13], data[base + 14], data[base + 15]]),
+                     f32::from_le_bytes([data[base + 16], data[base + 17], data[base + 18], data[base + 19]]),
+                     f32::from_le_bytes([data[base + 20], data[base + 21], data[base + 22], data[base + 23]])],
+                    [f32::from_le_bytes([data[base + 24], data[base + 25], data[base + 26], data[base + 27]]),
+                     f32::from_le_bytes([data[base + 28], data[base + 29], data[base + 30], data[base + 31]]),
+                     f32::from_le_bytes([data[base + 32], data[base + 33], data[base + 34], data[base + 35]])],
+                    [f32::from_le_bytes([data[base + 36], data[base + 37], data[base + 38], data[base + 39]]),
+                     f32::from_le_bytes([data[base + 40], data[base + 41], data[base + 42], data[base + 43]]),
+                     f32::from_le_bytes([data[base + 44], data[base + 45], data[base + 46], data[base + 47]])],
+                ];
+                for v in &verts {
+                    let idx = push_vert(*v, nrm, &mut unique_verts, &mut pos_attr, &mut nrm_attr, &mut col_attr, &mut uvm_attr);
+                    ind_attr.push(idx);
+                }
+            }
+        }
+
+        Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, cus_attrs: Vec::new() })
     }
 
-    pub fn from_obj_cached(path: &str) -> OpticResult<Self> {
-        let cached = optic_file::cached_path(path, "omesh");
-        if optic_file::exists(&cached) {
-            let src = optic_file::read_string(&cached)?;
-            return Self::from_obj_src(&src);
-        }
-        let src = optic_file::read_string(path)?;
-        let mesh = Self::from_obj_src(&src)?;
-        if let Some(parent) = std::path::Path::new(&cached).parent() {
-            let _ = optic_file::create_dir(&parent.to_string_lossy());
-        }
-        optic_file::write_string(&cached, &src)?;
+    // --- from_disk: debug loads source + overwrites cache; release loads cache only ---
+    #[cfg(debug_assertions)]
+    pub fn from_disk(path: &str) -> OpticResult<Self> {
+        let ext = optic_file::extension(path).unwrap_or_default();
+        let mesh = match ext.as_str() {
+            "obj" => {
+                let src = optic_file::read_string(path)?;
+                Self::from_obj_src(&src)?
+            }
+            "stl" => {
+                let data = optic_file::read_bytes(path)?;
+                Self::from_stl_src(&data)?
+            }
+            _ => return Err(OpticError::new(OpticErrorKind::Asset, &format!("unsupported mesh format: .{ext}"))),
+        };
+        let cache = optic_file::cached_path(path, "omesh");
+        mesh.save_cached(&cache)?;
         Ok(mesh)
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn from_disk(path: &str) -> OpticResult<Self> {
+        let cache = optic_file::cached_path(path, "omesh");
+        Self::from_cached(&cache)
+    }
+
+    pub fn save_cached(&self, path: &str) -> OpticResult<()> {
+        let has_normals = !self.nrm_attr.data.is_empty();
+        let has_uvs = !self.uvm_attr.data.is_empty();
+        let flags = (has_normals as u8) | ((has_uvs as u8) << 1);
+
+        let pos_bytes = self.pos_attr.data.len() * 12;
+        let nrm_bytes = self.nrm_attr.data.len() * 12;
+        let uvm_bytes = self.uvm_attr.data.len() * 8;
+        let col_bytes = self.col_attr.data.len() * 16;
+        let ind_bytes = self.ind_attr.data.len() * 4;
+
+        let size = 19 + 20 + pos_bytes + nrm_bytes + uvm_bytes + col_bytes + ind_bytes;
+        let mut data = Vec::with_capacity(size);
+        data.extend_from_slice(&OPTIC_MAGIC);
+        data.push(CACHE_VERSION);
+        data.push(ASSET_TYPE_MESH);
+        data.push(flags);
+
+        // Position (required)
+        data.extend_from_slice(&(pos_bytes as u32).to_le_bytes());
+        for v in &self.pos_attr.data {
+            data.extend_from_slice(&v[0].to_le_bytes());
+            data.extend_from_slice(&v[1].to_le_bytes());
+            data.extend_from_slice(&v[2].to_le_bytes());
+        }
+
+        // Normals (optional)
+        data.extend_from_slice(&(nrm_bytes as u32).to_le_bytes());
+        for v in &self.nrm_attr.data {
+            data.extend_from_slice(&v[0].to_le_bytes());
+            data.extend_from_slice(&v[1].to_le_bytes());
+            data.extend_from_slice(&v[2].to_le_bytes());
+        }
+
+        // UVs (optional)
+        data.extend_from_slice(&(uvm_bytes as u32).to_le_bytes());
+        for v in &self.uvm_attr.data {
+            data.extend_from_slice(&v[0].to_le_bytes());
+            data.extend_from_slice(&v[1].to_le_bytes());
+        }
+
+        // Colors (always present)
+        data.extend_from_slice(&(col_bytes as u32).to_le_bytes());
+        for v in &self.col_attr.data {
+            data.extend_from_slice(&v[0].to_le_bytes());
+            data.extend_from_slice(&v[1].to_le_bytes());
+            data.extend_from_slice(&v[2].to_le_bytes());
+            data.extend_from_slice(&v[3].to_le_bytes());
+        }
+
+        // Indices (always present)
+        data.extend_from_slice(&(ind_bytes as u32).to_le_bytes());
+        for v in &self.ind_attr.data {
+            data.extend_from_slice(&v.to_le_bytes());
+        }
+
+        optic_file::write_bytes(path, &data)
+    }
+
+    #[cfg_attr(debug_assertions, allow(dead_code))]
+    fn from_cached(path: &str) -> OpticResult<Self> {
+        let data = optic_file::read_bytes(path)?;
+        if data.len() < 24 {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("cached mesh too short: {path}")));
+        }
+        if data[0..17] != OPTIC_MAGIC {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("invalid optic magic in cached mesh: {path}")));
+        }
+        if data[17] != CACHE_VERSION {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("unsupported cache version {} in {path}", data[17])));
+        }
+        if data[18] != ASSET_TYPE_MESH {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("type mismatch: expected mesh in {path}")));
+        }
+
+        let mut off = 20usize;
+
+        let read_f32x3 = |off: &mut usize, data: &[u8]| -> [f32; 3] {
+            let x = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;
+            let y = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;
+            let z = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;
+            [x, y, z]
+        };
+
+        let read_f32x2 = |off: &mut usize, data: &[u8]| -> [f32; 2] {
+            let x = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;
+            let y = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;
+            [x, y]
+        };
+
+        let read_f32x4 = |off: &mut usize, data: &[u8]| -> [f32; 4] {
+            let x = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;
+            let y = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;
+            let z = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;
+            let w = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;
+            [x, y, z, w]
+        };
+
+        // Position
+        let pos_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
+        off += 4;
+        if off + pos_size > data.len() {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached mesh (position): {path}")));
+        }
+        let vert_count = pos_size / 12;
+        let mut pos_attr = Pos3DATTR::empty();
+        for _ in 0..vert_count {
+            pos_attr.push(read_f32x3(&mut off, &data));
+        }
+
+        // Normals
+        let nrm_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
+        off += 4;
+        let mut nrm_attr = NrmATTR::empty();
+        if nrm_size > 0 {
+            if off + nrm_size > data.len() {
+                return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached mesh (normals): {path}")));
+            }
+            let nrm_count = nrm_size / 12;
+            for _ in 0..nrm_count {
+                nrm_attr.push(read_f32x3(&mut off, &data));
+            }
+        }
+
+        // UVs
+        let uvm_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
+        off += 4;
+        let mut uvm_attr = UVMATTR::empty();
+        if uvm_size > 0 {
+            if off + uvm_size > data.len() {
+                return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached mesh (UVs): {path}")));
+            }
+            let uvm_count = uvm_size / 8;
+            for _ in 0..uvm_count {
+                uvm_attr.push(read_f32x2(&mut off, &data));
+            }
+        }
+
+        // Colors
+        let col_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
+        off += 4;
+        if off + col_size > data.len() {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached mesh (colors): {path}")));
+        }
+        let mut col_attr = ColATTR::empty();
+        let col_count = col_size / 16;
+        for _ in 0..col_count {
+            col_attr.push(read_f32x4(&mut off, &data));
+        }
+
+        // Indices
+        let ind_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
+        off += 4;
+        if off + ind_size > data.len() {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached mesh (indices): {path}")));
+        }
+        let mut ind_attr = IndATTR::empty();
+        let ind_count = ind_size / 4;
+        for _ in 0..ind_count {
+            let idx = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+            off += 4;
+            ind_attr.push(idx);
+        }
+
+        Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, cus_attrs: Vec::new() })
+    }
+
+    pub fn cube(side: f32) -> Self {
+        Self::cuboid(side, side, side)
+    }
+
+    pub fn cuboid(w: f32, h: f32, d: f32) -> Self {
+        let mut mesh = Self::empty();
+        let hw = w * 0.5;
+        let hh = h * 0.5;
+        let hd = d * 0.5;
+        let faces: Vec<([f32; 3], [[f32; 3]; 4])> = vec![
+            ([0.0, 0.0, 1.0], [[-hw, -hh, hd], [hw, -hh, hd], [hw, hh, hd], [-hw, hh, hd]]),
+            ([0.0, 0.0, -1.0], [[hw, -hh, -hd], [-hw, -hh, -hd], [-hw, hh, -hd], [hw, hh, -hd]]),
+            ([0.0, 1.0, 0.0], [[-hw, hh, hd], [hw, hh, hd], [hw, hh, -hd], [-hw, hh, -hd]]),
+            ([0.0, -1.0, 0.0], [[-hw, -hh, -hd], [hw, -hh, -hd], [hw, -hh, hd], [-hw, -hh, hd]]),
+            ([1.0, 0.0, 0.0], [[hw, -hh, hd], [hw, -hh, -hd], [hw, hh, -hd], [hw, hh, hd]]),
+            ([-1.0, 0.0, 0.0], [[-hw, -hh, -hd], [-hw, -hh, hd], [-hw, hh, hd], [-hw, hh, -hd]]),
+        ];
+        for (nrm, verts) in &faces {
+            let base = mesh.pos_attr.data.len() as u32;
+            for v in verts {
+                mesh.pos_attr.push(*v);
+                mesh.nrm_attr.push(*nrm);
+            }
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.uvm_attr.push([0.0, 0.0]);
+            mesh.uvm_attr.push([1.0, 0.0]);
+            mesh.uvm_attr.push([1.0, 1.0]);
+            mesh.uvm_attr.push([0.0, 1.0]);
+            mesh.ind_attr.push(base);
+            mesh.ind_attr.push(base + 1);
+            mesh.ind_attr.push(base + 2);
+            mesh.ind_attr.push(base);
+            mesh.ind_attr.push(base + 2);
+            mesh.ind_attr.push(base + 3);
+        }
+        mesh
+    }
+
+    pub fn sphere(radius: f32, stacks: u32, sectors: u32) -> Self {
+        let mut mesh = Self::empty();
+        let pi = std::f32::consts::PI;
+        for i in 0..=stacks {
+            let phi = pi * i as f32 / stacks as f32;
+            for j in 0..=sectors {
+                let theta = std::f32::consts::TAU * j as f32 / sectors as f32;
+                let x = phi.sin() * theta.cos();
+                let y = phi.cos();
+                let z = phi.sin() * theta.sin();
+                mesh.pos_attr.push([radius * x, radius * y, radius * z]);
+                mesh.nrm_attr.push([x, y, z]);
+                mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+                mesh.uvm_attr.push([j as f32 / sectors as f32, i as f32 / stacks as f32]);
+            }
+        }
+        for i in 0..stacks {
+            for j in 0..sectors {
+                let first = i * (sectors + 1) + j;
+                let second = first + sectors + 1;
+                mesh.ind_attr.push(first);
+                mesh.ind_attr.push(second);
+                mesh.ind_attr.push(first + 1);
+                mesh.ind_attr.push(second);
+                mesh.ind_attr.push(second + 1);
+                mesh.ind_attr.push(first + 1);
+            }
+        }
+        mesh
+    }
+
+    pub fn cylinder(radius: f32, height: f32, segments: u32, cap: bool) -> Self {
+        let mut mesh = Self::empty();
+        let hh = height * 0.5;
+        for i in 0..=segments {
+            let a = std::f32::consts::TAU * i as f32 / segments as f32;
+            let (s, c) = a.sin_cos();
+            mesh.pos_attr.push([radius * c, hh, radius * s]);
+            mesh.nrm_attr.push([c, 0.0, s]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.uvm_attr.push([i as f32 / segments as f32, 1.0]);
+        }
+        for i in 0..=segments {
+            let a = std::f32::consts::TAU * i as f32 / segments as f32;
+            let (s, c) = a.sin_cos();
+            mesh.pos_attr.push([radius * c, -hh, radius * s]);
+            mesh.nrm_attr.push([c, 0.0, s]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.uvm_attr.push([i as f32 / segments as f32, 0.0]);
+        }
+        for i in 0..segments {
+            let t = i;
+            let b = segments + 1 + i;
+            mesh.ind_attr.push(t);
+            mesh.ind_attr.push(b);
+            mesh.ind_attr.push(t + 1);
+            mesh.ind_attr.push(b);
+            mesh.ind_attr.push(b + 1);
+            mesh.ind_attr.push(t + 1);
+        }
+        if cap {
+            let top_center = mesh.pos_attr.data.len() as u32;
+            mesh.pos_attr.push([0.0, hh, 0.0]);
+            mesh.nrm_attr.push([0.0, 1.0, 0.0]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.uvm_attr.push([0.5, 0.5]);
+            for i in 0..segments {
+                mesh.ind_attr.push(top_center);
+                mesh.ind_attr.push(i);
+                mesh.ind_attr.push(i + 1);
+            }
+            let bot_center = mesh.pos_attr.data.len() as u32;
+            mesh.pos_attr.push([0.0, -hh, 0.0]);
+            mesh.nrm_attr.push([0.0, -1.0, 0.0]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.uvm_attr.push([0.5, 0.5]);
+            for i in 0..segments {
+                let b = segments + 1 + i;
+                mesh.ind_attr.push(bot_center);
+                mesh.ind_attr.push(b + 1);
+                mesh.ind_attr.push(b);
+            }
+        }
+        mesh
+    }
+
+    pub fn cone(radius: f32, height: f32, segments: u32, cap: bool) -> Self {
+        let mut mesh = Self::empty();
+        let hh = height * 0.5;
+        mesh.pos_attr.push([0.0, hh, 0.0]);
+        mesh.nrm_attr.push([0.0, 1.0, 0.0]);
+        mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+        mesh.uvm_attr.push([0.5, 1.0]);
+        for i in 0..=segments {
+            let a = std::f32::consts::TAU * i as f32 / segments as f32;
+            let (s, c) = a.sin_cos();
+            let nx = c;
+            let nz = s;
+            let ny = radius / height;
+            let len = (nx * nx + ny * ny + nz * nz).sqrt();
+            mesh.pos_attr.push([radius * c, -hh, radius * s]);
+            mesh.nrm_attr.push([nx / len, ny / len, nz / len]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.uvm_attr.push([i as f32 / segments as f32, 0.0]);
+        }
+        for i in 0..segments {
+            mesh.ind_attr.push(0);
+            mesh.ind_attr.push(i + 1);
+            mesh.ind_attr.push(i + 2);
+        }
+        if cap {
+            let center = mesh.pos_attr.data.len() as u32;
+            mesh.pos_attr.push([0.0, -hh, 0.0]);
+            mesh.nrm_attr.push([0.0, -1.0, 0.0]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+            mesh.uvm_attr.push([0.5, 0.5]);
+            for i in 0..segments {
+                mesh.ind_attr.push(center);
+                mesh.ind_attr.push(center + 1 + i + 1);
+                mesh.ind_attr.push(center + 1 + i);
+            }
+        }
+        mesh
+    }
+
+    pub fn torus(major_radius: f32, minor_radius: f32, major_segments: u32, minor_segments: u32) -> Self {
+        let mut mesh = Self::empty();
+        for i in 0..=major_segments {
+            let u = std::f32::consts::TAU * i as f32 / major_segments as f32;
+            for j in 0..=minor_segments {
+                let v = std::f32::consts::TAU * j as f32 / minor_segments as f32;
+                let x = (major_radius + minor_radius * v.cos()) * u.cos();
+                let y = minor_radius * v.sin();
+                let z = (major_radius + minor_radius * v.cos()) * u.sin();
+                mesh.pos_attr.push([x, y, z]);
+                let nx = v.cos() * u.cos();
+                let ny = v.sin();
+                let nz = v.cos() * u.sin();
+                mesh.nrm_attr.push([nx, ny, nz]);
+                mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+                mesh.uvm_attr.push([
+                    i as f32 / major_segments as f32,
+                    j as f32 / minor_segments as f32,
+                ]);
+            }
+        }
+        let stride = minor_segments + 1;
+        for i in 0..major_segments {
+            for j in 0..minor_segments {
+                let first = i * stride + j;
+                let second = first + stride;
+                mesh.ind_attr.push(first);
+                mesh.ind_attr.push(second);
+                mesh.ind_attr.push(first + 1);
+                mesh.ind_attr.push(second);
+                mesh.ind_attr.push(second + 1);
+                mesh.ind_attr.push(first + 1);
+            }
+        }
+        mesh
+    }
+
+    pub fn plane(width: f32, depth: f32) -> Self {
+        let mut mesh = Self::empty();
+        let hw = width * 0.5;
+        let hd = depth * 0.5;
+        mesh.pos_attr.push([-hw, 0.0, hd]);
+        mesh.pos_attr.push([hw, 0.0, hd]);
+        mesh.pos_attr.push([hw, 0.0, -hd]);
+        mesh.pos_attr.push([-hw, 0.0, -hd]);
+        for _ in 0..4 {
+            mesh.nrm_attr.push([0.0, 1.0, 0.0]);
+            mesh.col_attr.push([1.0, 1.0, 1.0, 1.0]);
+        }
+        mesh.uvm_attr.push([0.0, 0.0]);
+        mesh.uvm_attr.push([1.0, 0.0]);
+        mesh.uvm_attr.push([1.0, 1.0]);
+        mesh.uvm_attr.push([0.0, 1.0]);
+        mesh.ind_attr.push(0);
+        mesh.ind_attr.push(2);
+        mesh.ind_attr.push(1);
+        mesh.ind_attr.push(0);
+        mesh.ind_attr.push(3);
+        mesh.ind_attr.push(2);
+        mesh
     }
 
     pub fn attach_custom_attr(&mut self, attr: CustomATTR) {
@@ -261,6 +766,82 @@ impl Mesh2DFile {
 
     pub fn attach_custom_attr(&mut self, attr: CustomATTR) {
         self.cus_attrs.push(attr);
+    }
+
+    pub fn circle(radius: f32, segments: u32) -> Self {
+        let mut mesh = Self::empty();
+        let mut pos = vec![[0.0f32, 0.0f32]];
+        let mut uvm = vec![[0.5f32, 0.5f32]];
+        for i in 0..segments {
+            let a = std::f32::consts::TAU * i as f32 / segments as f32;
+            pos.push([radius * a.cos(), radius * a.sin()]);
+            uvm.push([0.5 + 0.5 * a.cos(), 0.5 + 0.5 * a.sin()]);
+        }
+        let mut ind = Vec::new();
+        for i in 0..segments {
+            ind.push(0);
+            ind.push(i + 1);
+            ind.push(if i + 1 < segments { i + 2 } else { 1 });
+        }
+        let vert_count = (segments + 1) as usize;
+        mesh.set_pos_attr(Pos2DATTR::from(pos));
+        mesh.set_col_attr(ColATTR::from(vec![[1.0f32; 4]; vert_count]));
+        mesh.set_uvm_attr(UVMATTR::from(uvm));
+        mesh.set_ind_attr(IndATTR::from(ind));
+        mesh
+    }
+
+    pub fn polygon(radius: f32, sides: u32) -> Self {
+        Self::circle(radius, sides)
+    }
+
+    pub fn ring(inner_radius: f32, outer_radius: f32, segments: u32) -> Self {
+        let mut mesh = Self::empty();
+        let mut pos = Vec::new();
+        let mut uvm = Vec::new();
+        for i in 0..segments {
+            let a = std::f32::consts::TAU * i as f32 / segments as f32;
+            let (s, c) = a.sin_cos();
+            pos.push([outer_radius * c, outer_radius * s]);
+            uvm.push([0.5 + 0.5 * c, 0.5 + 0.5 * s]);
+        }
+        for i in 0..segments {
+            let a = std::f32::consts::TAU * i as f32 / segments as f32;
+            let (s, c) = a.sin_cos();
+            pos.push([inner_radius * c, inner_radius * s]);
+            uvm.push([0.5 + 0.5 * c * inner_radius / outer_radius, 0.5 + 0.5 * s * inner_radius / outer_radius]);
+        }
+        let mut ind = Vec::new();
+        for i in 0..segments {
+            let next = (i + 1) % segments;
+            let o1 = i;
+            let o2 = next;
+            let i1 = segments + i;
+            let i2 = segments + next;
+            ind.push(o1);
+            ind.push(o2);
+            ind.push(i1);
+            ind.push(i1);
+            ind.push(o2);
+            ind.push(i2);
+        }
+        let vert_count = (segments * 2) as usize;
+        mesh.set_pos_attr(Pos2DATTR::from(pos));
+        mesh.set_col_attr(ColATTR::from(vec![[1.0f32; 4]; vert_count]));
+        mesh.set_uvm_attr(UVMATTR::from(uvm));
+        mesh.set_ind_attr(IndATTR::from(ind));
+        mesh
+    }
+
+    pub fn rect(width: f32, height: f32) -> Self {
+        let mut mesh = Self::empty();
+        let x = width * 0.5;
+        let y = height * 0.5;
+        mesh.set_pos_attr(Pos2DATTR::from_array(&[[-x, y], [x, y], [x, -y], [-x, -y]]));
+        mesh.set_col_attr(ColATTR::from_array(&[[1.0, 1.0, 1.0, 1.0]; 4]));
+        mesh.set_uvm_attr(UVMATTR::from_array(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]));
+        mesh.set_ind_attr(IndATTR::from_array(&[0, 2, 1, 2, 0, 3]));
+        mesh
     }
 
     pub fn starts_with_custom(&self) -> bool {
@@ -613,22 +1194,35 @@ mod tests {
     }
 
     #[test]
-    fn mesh3d_from_obj_cached_roundtrip() {
+    fn mesh3d_cached_roundtrip() {
         let obj = "v 0.0 0.0 0.0\nv 1.0 0.0 0.0\nv 0.0 1.0 0.0\nf 1 2 3";
-        let obj_path = "/tmp/optic_test_mesh3d_cached.obj";
-        optic_file::write_string(obj_path, obj).unwrap();
-        // from_obj_cached should cache then return
-        let mesh = Mesh3DFile::from_obj_cached(obj_path).unwrap();
+        let mesh = Mesh3DFile::from_obj_src(obj).unwrap();
+        let path = "/tmp/optic_test_mesh3d_cache.omesh";
+        mesh.save_cached(path).unwrap();
+        let loaded = Mesh3DFile::from_cached(path).unwrap();
+        assert_eq!(loaded.pos_attr.data.len(), mesh.pos_attr.data.len());
+        assert_eq!(loaded.ind_attr.data.len(), mesh.ind_attr.data.len());
+        assert_eq!(loaded.pos_attr.data, mesh.pos_attr.data);
+        assert_eq!(loaded.ind_attr.data, mesh.ind_attr.data);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn mesh3d_from_stl_ascii() {
+        let stl = "solid cube\n\
+            facet normal 0.0 0.0 1.0\n\
+                outer loop\n\
+                    vertex -1.0 -1.0 1.0\n\
+                    vertex 1.0 -1.0 1.0\n\
+                    vertex 1.0 1.0 1.0\n\
+                endloop\n\
+            endfacet\n\
+            endsolid cube\n";
+        let mesh = Mesh3DFile::from_stl_src(stl.as_bytes()).unwrap();
         assert_eq!(mesh.pos_attr.data.len(), 3);
-        let cached = optic_file::cached_path(obj_path, "omesh");
-        assert!(optic_file::exists(&cached));
-        // second call should read from cache
-        let mesh2 = Mesh3DFile::from_obj_cached(obj_path).unwrap();
-        assert_eq!(mesh2.pos_attr.data.len(), 3);
-        let _ = std::fs::remove_file(obj_path);
-        if let Some(parent) = std::path::Path::new(&cached).parent() {
-            let _ = std::fs::remove_dir_all(parent);
-        }
+        assert_eq!(mesh.ind_attr.data.len(), 3);
+        assert_eq!(mesh.nrm_attr.data.len(), 3);
+        assert!((mesh.nrm_attr.data[0][2] - 1.0).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -702,5 +1296,109 @@ mod tests {
         assert_eq!(Center::BottomRight.offset(), Vector2::new(-1.0, 1.0));
         assert_eq!(Center::BottomLeft.offset(), Vector2::new(1.0, 1.0));
         assert_eq!(Center::Middle.offset(), Vector2::new(0.0, 0.0));
+    }
+
+    #[test]
+    fn mesh2d_circle() {
+        let m = Mesh2DFile::circle(1.0, 8);
+        assert_eq!(m.pos_attr.data.len(), 9);
+        assert_eq!(m.col_attr.data.len(), 9);
+        assert_eq!(m.uvm_attr.data.len(), 9);
+        assert_eq!(m.ind_attr.data.len(), 24);
+    }
+
+    #[test]
+    fn mesh2d_polygon() {
+        let m = Mesh2DFile::polygon(1.0, 6);
+        assert_eq!(m.pos_attr.data.len(), 7);
+        assert_eq!(m.ind_attr.data.len(), 18);
+    }
+
+    #[test]
+    fn mesh2d_ring() {
+        let m = Mesh2DFile::ring(0.5, 1.0, 8);
+        assert_eq!(m.pos_attr.data.len(), 16);
+        assert_eq!(m.ind_attr.data.len(), 48);
+    }
+
+    #[test]
+    fn mesh2d_rect() {
+        let m = Mesh2DFile::rect(2.0, 3.0);
+        assert_eq!(m.pos_attr.data.len(), 4);
+        assert_eq!(m.ind_attr.data.len(), 6);
+        assert!((m.pos_attr.data[0][0] - (-1.0)).abs() < f32::EPSILON);
+        assert!((m.pos_attr.data[0][1] - 1.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mesh3d_cube() {
+        let m = Mesh3DFile::cube(2.0);
+        assert_eq!(m.pos_attr.data.len(), 24);
+        assert_eq!(m.nrm_attr.data.len(), 24);
+        assert_eq!(m.ind_attr.data.len(), 36);
+    }
+
+    #[test]
+    fn mesh3d_cuboid() {
+        let m = Mesh3DFile::cuboid(1.0, 2.0, 3.0);
+        assert_eq!(m.pos_attr.data.len(), 24);
+        assert_eq!(m.ind_attr.data.len(), 36);
+    }
+
+    #[test]
+    fn mesh3d_sphere() {
+        let m = Mesh3DFile::sphere(1.0, 8, 16);
+        let verts = (8 + 1) * (16 + 1);
+        assert_eq!(m.pos_attr.data.len(), verts);
+        assert_eq!(m.nrm_attr.data.len(), verts);
+        assert_eq!(m.ind_attr.data.len(), 8 * 16 * 6);
+    }
+
+    #[test]
+    fn mesh3d_cylinder_with_caps() {
+        let m = Mesh3DFile::cylinder(0.5, 2.0, 16, true);
+        let body_verts = (16 + 1) * 2;
+        let cap_verts = 2;
+        assert_eq!(m.pos_attr.data.len(), body_verts + cap_verts);
+    }
+
+    #[test]
+    fn mesh3d_cylinder_no_caps() {
+        let m = Mesh3DFile::cylinder(0.5, 2.0, 16, false);
+        assert_eq!(m.pos_attr.data.len(), (16 + 1) * 2);
+    }
+
+    #[test]
+    fn mesh3d_cone_with_cap() {
+        let m = Mesh3DFile::cone(0.5, 2.0, 16, true);
+        let body_verts = 1 + (16 + 1);
+        let cap_verts = 1;
+        assert_eq!(m.pos_attr.data.len(), body_verts + cap_verts);
+    }
+
+    #[test]
+    fn mesh3d_cone_no_cap() {
+        let m = Mesh3DFile::cone(0.5, 2.0, 16, false);
+        assert_eq!(m.pos_attr.data.len(), 1 + (16 + 1));
+    }
+
+    #[test]
+    fn mesh3d_torus() {
+        let m = Mesh3DFile::torus(1.0, 0.3, 12, 8);
+        let verts = (12 + 1) * (8 + 1);
+        assert_eq!(m.pos_attr.data.len(), verts);
+        assert_eq!(m.nrm_attr.data.len(), verts);
+        assert_eq!(m.ind_attr.data.len(), 12 * 8 * 6);
+    }
+
+    #[test]
+    fn mesh3d_plane() {
+        let m = Mesh3DFile::plane(2.0, 3.0);
+        assert_eq!(m.pos_attr.data.len(), 4);
+        assert_eq!(m.nrm_attr.data.len(), 4);
+        assert_eq!(m.ind_attr.data.len(), 6);
+        for nrm in &m.nrm_attr.data {
+            assert!((nrm[1] - 1.0).abs() < f32::EPSILON);
+        }
     }
 }

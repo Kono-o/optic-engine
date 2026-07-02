@@ -366,7 +366,7 @@ impl Canvas {
         Ok(pixels)
     }
 
-    pub fn save_to_file(&self, index: usize, path: &str) -> OpticResult<()> {
+    pub fn save_to_disk(&self, index: usize, path: &str) -> OpticResult<()> {
         let data = self.read_pixels(index)?;
         let tex = self.color_tex(index)?;
         let channels = tex.fmt.channels() as u8;

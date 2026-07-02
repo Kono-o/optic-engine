@@ -1,14 +1,13 @@
 mod game;
 mod runtime;
-mod scene;
 mod time;
 
 pub use game::*;
 pub use runtime::*;
-pub use scene::*;
 pub use time::*;
 
-use optic_core::{CamProj, Size2D};
+use gilrs::Gilrs;
+use optic_core::{CamProj, Coord2D, Size2D};
 use optic_render::{Camera, GPU};
 use optic_window::{Events, Window};
 use winit::application::ApplicationHandler;
@@ -57,6 +56,7 @@ pub struct GameLoop<F: FnMut(&mut FrameState)> {
     gpu: Option<GPU>,
     camera: Camera,
     time: Time,
+    gilrs: Gilrs,
     frame_fn: F,
 }
 
@@ -70,11 +70,13 @@ impl<F: FnMut(&mut FrameState)> GameLoop<F> {
     ) -> Self {
         for ws in windows.iter_mut() {
             if let Some(handle) = ws.window.raw_handle() {
-                let size = ws.window.size;
+                let size = ws.window.size();
                 let idx = gpu.ctx.attach_window(handle, size).unwrap();
                 ws.surface_index = idx;
             }
         }
+
+        let gilrs = Gilrs::new().unwrap();
 
         Self {
             event_loop: Some(el),
@@ -82,6 +84,7 @@ impl<F: FnMut(&mut FrameState)> GameLoop<F> {
             gpu: Some(gpu),
             camera,
             time: Time::new(),
+            gilrs,
             frame_fn,
         }
     }
@@ -106,27 +109,25 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
         event: WindowEvent,
     ) {
         for ws in &mut self.windows {
-            let window_open = ws.window.inner.is_some();
-            if !window_open { continue; }
-            if ws.window.inner.as_ref().unwrap().id() != id { continue; }
+            if !ws.window.is_running() { continue; }
+            if ws.window.id().unwrap() != id { continue; }
 
             match &event {
-                WindowEvent::Resized(size) => {
-                    ws.window.size = Size2D::from(size.width, size.height);
+                WindowEvent::Resized(_size) => {
                     if let Some(gpu) = &mut self.gpu {
-                        gpu.ctx.resize_window(ws.surface_index, ws.window.size);
+                        gpu.ctx.resize_window(ws.surface_index, ws.window.size());
                         let _ = gpu.ctx.make_current(ws.surface_index);
-                        self.camera.set_size(ws.window.size);
+                        self.camera.set_size(ws.window.size());
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    ws.window.cursor_pos = (position.x, position.y);
+                    ws.window.notify_cursor_moved(Coord2D::from(position.x, position.y));
                 }
                 WindowEvent::CursorEntered { .. } => {
-                    ws.window.cursor_inside = true;
+                    ws.window.notify_cursor_inside(true);
                 }
                 WindowEvent::CursorLeft { .. } => {
-                    ws.window.cursor_inside = false;
+                    ws.window.notify_cursor_inside(false);
                 }
                 WindowEvent::CloseRequested => {
                     ws.events.close_requested = true;
@@ -149,6 +150,13 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
 
         if self.windows.is_empty() {
             return;
+        }
+
+        // Poll gamepad events
+        while let Some(gilrs_event) = self.gilrs.next_event() {
+            for ws in &mut self.windows {
+                ws.events.process_gilrs_event(&gilrs_event);
+            }
         }
 
         self.time.update();
@@ -181,8 +189,8 @@ where
     let el = EventLoop::new().unwrap();
     let ws = WindowState::new(&el, title, size);
     let handle = ws.window.raw_handle().unwrap();
-    let gpu = GPU::new_windowed(handle, ws.window.size).unwrap();
-    let camera = Camera::new(ws.window.size, CamProj::Persp);
+    let gpu = GPU::new_windowed(handle, ws.window.size()).unwrap();
+    let camera = Camera::new(ws.window.size(), CamProj::Persp);
     let game = GameLoop::new(el, gpu, camera, vec![ws], frame_fn);
     game.run();
 }
