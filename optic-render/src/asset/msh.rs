@@ -656,11 +656,11 @@ impl Mesh3DFile {
         mesh.uvm_attr.push([1.0, 1.0]);
         mesh.uvm_attr.push([0.0, 1.0]);
         mesh.ind_attr.push(0);
-        mesh.ind_attr.push(2);
         mesh.ind_attr.push(1);
-        mesh.ind_attr.push(0);
-        mesh.ind_attr.push(3);
         mesh.ind_attr.push(2);
+        mesh.ind_attr.push(0);
+        mesh.ind_attr.push(2);
+        mesh.ind_attr.push(3);
         mesh
     }
 

@@ -29,7 +29,7 @@ pub struct Game {
 
 impl Game {
     pub fn new<R: Runtime + 'static>(runtime: R) -> OpticResult<Game> {
-        let size = Size2D::from(250,250);
+        let size = Size2D::from(500,500);
         let bg_color =  CRIMSON;
         let title = "OPTIC GAME";
         let el = EventLoop::builder()

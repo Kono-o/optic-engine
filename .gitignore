@@ -4,5 +4,4 @@ Cargo.lock
 *.swo
 *~
 .DS_Store
-dogma/
 .idea/

@@ -18,6 +18,8 @@ pub struct Window {
     cursor_pos: Coord2D,
     cursor_visible: bool,
     cursor_grabbed: bool,
+    cursor_confined: bool,
+    cursor_loopback: bool,
     min_size: Option<Size2D>,
     max_size: Option<Size2D>,
 }
@@ -42,6 +44,8 @@ impl Window {
             cursor_pos: Coord2D::empty(),
             cursor_visible: true,
             cursor_grabbed: false,
+            cursor_confined: false,
+            cursor_loopback: false,
             min_size: None,
             max_size: None,
         }
@@ -303,6 +307,34 @@ impl Window {
         let _ = self.set_cursor_grab(!self.cursor_grabbed);
     }
 
+    pub fn is_cursor_confined(&self) -> bool {
+        self.cursor_confined
+    }
+
+    pub fn set_cursor_confine(&mut self, confine: bool) -> Result<(), ()> {
+        let result = match self.inner.as_ref() {
+            Some(w) => w.set_cursor_grab(if confine { CursorGrabMode::Confined } else { CursorGrabMode::None })
+                .map_err(|_| ()),
+            None => Err(()),
+        };
+        if result.is_ok() {
+            self.cursor_confined = confine;
+        }
+        result
+    }
+
+    pub fn toggle_cursor_confine(&mut self) {
+        let _ = self.set_cursor_confine(!self.cursor_confined);
+    }
+
+    pub fn is_cursor_loopback(&self) -> bool {
+        self.cursor_loopback
+    }
+
+    pub fn set_cursor_loopback(&mut self, loopback: bool) {
+        self.cursor_loopback = loopback;
+    }
+
     // ── Frame Update ──────────────────────────────────────────────────────
     /// Call once per frame after processing events.
     /// Snapshots live/tracked state and computes cursor delta.
@@ -321,6 +353,22 @@ impl Window {
             self.prev_cursor_pos = self.cursor_pos;
             self.prev_position = self.position();
             self.prev_size = self.size();
+        }
+
+        if self.cursor_loopback {
+            let sz = self.size();
+            if sz.w > 0 && sz.h > 0 {
+                let mut wrapped = false;
+                let mut new_pos = self.cursor_pos;
+                if new_pos.x <= 0.0 { new_pos.x = (sz.w - 1) as f64; wrapped = true; }
+                else if new_pos.x >= (sz.w - 1) as f64 { new_pos.x = 0.0; wrapped = true; }
+                if new_pos.y <= 0.0 { new_pos.y = (sz.h - 1) as f64; wrapped = true; }
+                else if new_pos.y >= (sz.h - 1) as f64 { new_pos.y = 0.0; wrapped = true; }
+                if wrapped {
+                    self.set_cursor_pos(new_pos);
+                    self.prev_cursor_pos = self.cursor_pos;
+                }
+            }
         }
     }
 
