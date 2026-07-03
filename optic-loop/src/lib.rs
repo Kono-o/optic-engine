@@ -189,7 +189,8 @@ where
     let el = EventLoop::new().unwrap();
     let ws = WindowState::new(&el, title, size);
     let handle = ws.window.raw_handle().unwrap();
-    let gpu = GPU::new_windowed(handle, ws.window.size()).unwrap();
+    let display_handle = ws.window.raw_display_handle().unwrap();
+    let gpu = GPU::new_windowed(handle, display_handle, ws.window.size()).unwrap();
     let camera = Camera::new(ws.window.size(), CamProj::Persp);
     let game = GameLoop::new(el, gpu, camera, vec![ws], frame_fn);
     game.run();

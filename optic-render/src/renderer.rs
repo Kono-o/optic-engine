@@ -32,9 +32,10 @@ impl GPU {
 
     pub fn new_windowed(
         raw_handle: raw_window_handle::RawWindowHandle,
+        display_handle: raw_window_handle::RawDisplayHandle,
         size: Size2D,
     ) -> optic_core::OpticResult<Self> {
-        let ctx = RenderContext::new_windowed(raw_handle, size)?;
+        let ctx = RenderContext::new_windowed(raw_handle, display_handle, size)?;
         Ok(Self::from_ctx(ctx))
     }
 

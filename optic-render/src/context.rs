@@ -154,12 +154,137 @@ impl RenderContext {
 
     pub fn new_windowed(
         raw_handle: RawWindowHandle,
+        display_handle: raw_window_handle::RawDisplayHandle,
         size: Size2D,
     ) -> OpticResult<Self> {
-        let mut ctx = Self::new_headless()?;
-        ctx.attach_window(raw_handle, size)?;
-        ctx.make_current(1)?;
-        Ok(ctx)
+        let egl_instance = egl::Instance::new(egl::Static);
+
+        // Use platform-specific display for better compatibility
+        let display: egl::Display = match display_handle {
+            raw_window_handle::RawDisplayHandle::Xlib(h) => {
+                let platform = 0x31D5; // EGL_PLATFORM_X11_EXT
+                let native_display = h.display.map_or(std::ptr::null_mut(), |d| d.as_ptr());
+                let r = unsafe {
+                    egl_instance.get_platform_display(platform, native_display, &[])
+                };
+                match r {
+                    Ok(d) => d,
+                    Err(_) => unsafe {
+                        egl_instance.get_display(egl::DEFAULT_DISPLAY)
+                            .ok_or_else(|| OpticError::new(OpticErrorKind::OpenGL, "no EGL display found"))?
+                    },
+                }
+            }
+            raw_window_handle::RawDisplayHandle::Wayland(h) => {
+                let platform = 0x31D6; // EGL_PLATFORM_WAYLAND_EXT
+                let native_display = h.display.as_ptr() as *mut c_void;
+                let r = unsafe {
+                    egl_instance.get_platform_display(platform, native_display, &[])
+                };
+                match r {
+                    Ok(d) => d,
+                    Err(_) => unsafe {
+                        egl_instance.get_display(egl::DEFAULT_DISPLAY)
+                            .ok_or_else(|| OpticError::new(OpticErrorKind::OpenGL, "no EGL display found"))?
+                    },
+                }
+            }
+            _ => unsafe {
+                egl_instance.get_display(egl::DEFAULT_DISPLAY)
+                    .ok_or_else(|| OpticError::new(OpticErrorKind::OpenGL, "no EGL display found"))?
+            },
+        };
+
+        egl_instance.initialize(display)
+            .map_err(|e| OpticError::new(OpticErrorKind::OpenGL, &format!("EGL init failed: {e}")))?;
+
+        let native = raw_handle_to_native(raw_handle)?;
+
+        let visual_id: Option<u32> = match raw_handle {
+            RawWindowHandle::Xlib(h) => Some(h.visual_id as u32),
+            RawWindowHandle::Xcb(h) => h.visual_id.map(|v| v.get()),
+            _ => None,
+        };
+
+        let result = if let Some(vid) = visual_id {
+            Self::try_create_windowed(&egl_instance, display, native, size, Some(vid))
+        } else {
+            Self::try_create_windowed(&egl_instance, display, native, size, None)
+        };
+
+        match result {
+            Ok(ctx) => Ok(ctx),
+            Err(_) if visual_id.is_some() => {
+                Self::try_create_windowed(&egl_instance, display, native, size, None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn try_create_windowed(
+        egl_instance: &egl::Instance<egl::Static>,
+        display: egl::Display,
+        native: *mut c_void,
+        size: Size2D,
+        visual_id: Option<u32>,
+    ) -> OpticResult<RenderContext> {
+        let mut cfg_attribs = Vec::new();
+        cfg_attribs.push(egl::SURFACE_TYPE as i32);
+        cfg_attribs.push(egl::WINDOW_BIT as i32);
+        cfg_attribs.push(egl::RENDERABLE_TYPE as i32);
+        cfg_attribs.push(egl::OPENGL_BIT as i32);
+        cfg_attribs.push(egl::RED_SIZE as i32); cfg_attribs.push(8);
+        cfg_attribs.push(egl::GREEN_SIZE as i32); cfg_attribs.push(8);
+        cfg_attribs.push(egl::BLUE_SIZE as i32); cfg_attribs.push(8);
+        cfg_attribs.push(egl::ALPHA_SIZE as i32); cfg_attribs.push(8);
+        cfg_attribs.push(egl::DEPTH_SIZE as i32); cfg_attribs.push(24);
+        if let Some(vid) = visual_id {
+            cfg_attribs.push(egl::NATIVE_VISUAL_ID as i32);
+            cfg_attribs.push(vid as i32);
+        }
+        cfg_attribs.push(egl::NONE as i32);
+
+        let mut configs = Vec::with_capacity(1);
+        egl_instance.choose_config(display, &cfg_attribs, &mut configs)
+            .map_err(|e| OpticError::new(OpticErrorKind::OpenGL, &format!("EGL config failed: {e}")))?;
+
+        let config = *configs.first()
+            .ok_or_else(|| OpticError::new(OpticErrorKind::OpenGL, "no suitable EGL config"))?;
+
+        egl_instance.bind_api(egl::OPENGL_API)
+            .map_err(|e| OpticError::new(OpticErrorKind::OpenGL, &format!("EGL bind API failed: {e}")))?;
+
+        let context = egl_instance.create_context(display, config, None, &GL_ATTRIBS)
+            .map_err(|e| OpticError::new(OpticErrorKind::OpenGL, &format!("EGL context creation failed: {e}")))?;
+
+        let surface = unsafe { egl_instance.create_window_surface(display, config, native, None)
+            .map_err(|e| OpticError::new(
+                OpticErrorKind::OpenGL,
+                &format!("EGL window surface creation failed: {e}"),
+            ))? };
+
+        egl_instance.make_current(display, Some(surface), Some(surface), Some(context))
+            .map_err(|e| OpticError::new(OpticErrorKind::OpenGL, &format!("make current failed: {e}")))?;
+
+        gl::load_with(|s| {
+            egl_instance.get_proc_address(s)
+                .map(|p| p as *const _)
+                .unwrap_or(ptr::null())
+        });
+
+        let (gl_ver, glsl_ver, device) = load_gl_info();
+        let window_surface = WindowSurface { surface, size };
+
+        Ok(Self {
+            display,
+            context,
+            config,
+            surfaces: vec![window_surface],
+            active_index: Some(0),
+            gl_ver,
+            glsl_ver,
+            device,
+        })
     }
 
     pub fn attach_window(

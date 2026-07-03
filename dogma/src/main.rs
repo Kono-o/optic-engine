@@ -111,6 +111,8 @@ struct FpsGame {
     score: u32,
     game_over: bool,
     cursor_free: bool,
+    vertical_velocity: f32,
+    on_ground: bool,
 }
 
 // ── Runtime impl ─────────────────────────────────────────────────────────
@@ -135,6 +137,7 @@ impl Runtime for FpsGame {
         game.window.set_cursor_confine(true).ok();
         game.window.set_cursor_loopback(true);
         game.window.set_cursor_visible(false);
+        game.window.set_size(Size2D::from(900,900));
 
         // Camera: eye height
         game.camera.transform.pos = Vector3::new(0.0, 1.7, 0.0);
@@ -186,8 +189,9 @@ impl Runtime for FpsGame {
             if game.camera.transform.rot.x < -89.0 { game.camera.transform.rot.x = -89.0; }
         }
 
-        // ── WASD (XZ-plane) ───────────────────────────────────────────
-        let speed = 6.0 * dt;
+        // ── WASD + Sprint (XZ-plane) ──────────────────────────────────
+        let mut speed = 6.0 * dt;
+        if game.events.key(KeyCode::ShiftLeft, Is::Held) { speed *= 2.0; }
         let front_dir = game.camera.transform.front;
         let mut fwd = Vector3::new(front_dir.x, 0.0, front_dir.z);
         if fwd.magnitude2() > 0.0 { fwd = fwd.normalize(); }
@@ -202,6 +206,22 @@ impl Runtime for FpsGame {
             mv = mv.normalize() * speed;
             let p = &mut game.camera.transform.pos;
             *p = Vector3::new(p.x + mv.x, p.y, p.z + mv.z);
+        }
+
+        // ── Jump & Gravity ────────────────────────────────────────────
+        self.vertical_velocity -= 20.0 * dt;
+        let p = &mut game.camera.transform.pos;
+        p.y += self.vertical_velocity * dt;
+        if p.y <= 1.7 {
+            p.y = 1.7;
+            self.vertical_velocity = 0.0;
+            self.on_ground = true;
+        } else {
+            self.on_ground = false;
+        }
+        if self.on_ground && game.events.key(KeyCode::Space, Is::Pressed) {
+            self.vertical_velocity = 6.0;
+            self.on_ground = false;
         }
 
         // ── Shoot ─────────────────────────────────────────────────────
@@ -232,9 +252,6 @@ impl Runtime for FpsGame {
                 let angle = dir.z.atan2(dir.x).to_degrees() - 90.0;
                 e.mesh.transform.set_rot_y(angle);
                 e.mesh.transform.calc_matrix();
-
-                // Damage player on contact
-                if dist < 1.0 { self.game_over = true; }
             }
         }
 
@@ -293,7 +310,7 @@ impl Runtime for FpsGame {
         }
 
         // ── Render ────────────────────────────────────────────────────
-        game.renderer.set_bg_color(RGBA(0.08, 0.08, 0.12, 1.0));
+        game.renderer.set_bg_color(RGBA(0.0, 0.0, 0.0, 0.0));
         let cam = &game.camera;
 
         if let Some(ref floor) = self.floor {
@@ -381,6 +398,8 @@ fn main() {
         score: 0,
         game_over: false,
         cursor_free: false,
+        vertical_velocity: 0.0,
+        on_ground: true,
     }).unwrap();
     game.run();
 }

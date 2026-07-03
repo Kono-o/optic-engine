@@ -38,13 +38,13 @@ impl Game {
         let window = Window::new(&el, title, size);
         let actual_size = window.size();
         let handle = window.raw_handle().unwrap();
+        let display_handle = window.raw_display_handle().unwrap();
         
-        let mut gpu = GPU::new_headless()?;
-        let surface_index = gpu.ctx.attach_window(handle, actual_size)?;
-        gpu.ctx.make_current(surface_index)?;
+        let mut gpu = GPU::new_windowed(handle, display_handle, actual_size)?;
         gpu.ctx.set_vsync(true);
         gpu.canvas_size = actual_size;
         gpu.set_bg_color(bg_color);
+        let surface_index = 0;
         
         let gilrs = Gilrs::new().unwrap();
         Ok(Game {
@@ -145,6 +145,8 @@ impl ApplicationHandler for Game {
         if !self.started {
             runtime.start(self);
             self.started = true;
+            self.window.set_visible(true);
+            self.window.center_on_screen();
         }
         runtime.update(self);
         self.runtime = Some(runtime);

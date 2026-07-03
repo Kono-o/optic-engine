@@ -2,6 +2,8 @@ use optic_core::{Coord2D, CoordOffset, Size2D};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::window::{CursorGrabMode, Fullscreen, Window as WinitWindow};
 
+use crate::ScreenInfo;
+
 #[derive(Debug)]
 pub struct Window {
     inner: Option<std::sync::Arc<WinitWindow>>,
@@ -30,10 +32,12 @@ impl Window {
     pub fn new(el: &winit::event_loop::EventLoop<()>, title: &str, size: Size2D) -> Self {
         let attrs = WinitWindow::default_attributes()
             .with_title(title)
-            .with_inner_size(PhysicalSize::new(size.w, size.h));
+            .with_inner_size(PhysicalSize::new(size.w, size.h))
+            .with_visible(false)
+            .with_transparent(true);
         let w = el.create_window(attrs).unwrap();
         let arc = std::sync::Arc::new(w);
-        Self {
+        let window = Self {
             inner: Some(arc),
             prev_cursor_pos: Coord2D::empty(),
             cursor_delta: CoordOffset::empty(),
@@ -48,7 +52,8 @@ impl Window {
             cursor_loopback: false,
             min_size: None,
             max_size: None,
-        }
+        };
+        window
     }
 
     pub fn close(&mut self) {
@@ -67,6 +72,11 @@ impl Window {
     pub fn raw_handle(&self) -> Option<raw_window_handle::RawWindowHandle> {
         use raw_window_handle::HasWindowHandle;
         self.inner.as_ref().map(|w| w.window_handle().unwrap().as_raw())
+    }
+
+    pub fn raw_display_handle(&self) -> Option<raw_window_handle::RawDisplayHandle> {
+        use raw_window_handle::HasDisplayHandle;
+        self.inner.as_ref().map(|w| w.display_handle().unwrap().as_raw())
     }
 
     pub fn id(&self) -> Option<winit::window::WindowId> {
@@ -138,6 +148,18 @@ impl Window {
     pub fn set_position(&self, pos: Coord2D) {
         if let Some(ref w) = self.inner {
             let _ = w.set_outer_position(PhysicalPosition::new(pos.x as i32, pos.y as i32));
+        }
+    }
+
+    pub fn center_on_screen(&self) {
+        if let Some(ref w) = self.inner {
+            if let Some(monitor) = w.current_monitor() {
+                let mon_size = monitor.size();
+                let win_size = w.outer_size();
+                let x = (mon_size.width.saturating_sub(win_size.width)) / 2;
+                let y = (mon_size.height.saturating_sub(win_size.height)) / 2;
+                let _ = w.set_outer_position(PhysicalPosition::new(x as i32, y as i32));
+            }
         }
     }
 
@@ -239,6 +261,13 @@ impl Window {
         if let Some(ref w) = self.inner {
             w.request_redraw();
         }
+    }
+
+    // ── Screen ────────────────────────────────────────────────────────
+    pub fn screen_info(&self) -> Option<ScreenInfo> {
+        self.inner.as_ref().and_then(|w| {
+            w.current_monitor().map(|m| ScreenInfo::from_handle(&m))
+        })
     }
 
     // ── Cursor ────────────────────────────────────────────────────────────
