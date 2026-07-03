@@ -57,3 +57,15 @@ macro_rules! log_fatal {
         println!("{}[FATAL] {}{}", $crate::ansi::BOLD_RED.prefix, fmt, $crate::ansi::BOLD_RED.suffix);
     };
 }
+
+#[macro_export]
+macro_rules! log_error {
+    ($fmt:expr) => {
+        let fmt = format!($fmt);
+        println!("{}[ERROR] {}{}", $crate::ansi::BOLD_RED.prefix, fmt, $crate::ansi::BOLD_RED.suffix);
+    };
+    ($fmt:expr, $($args:tt)*) => {
+        let fmt = format!($fmt, $($args)*);
+        println!("{}[ERROR] {}{}", $crate::ansi::BOLD_RED.prefix, fmt, $crate::ansi::BOLD_RED.suffix);
+    };
+}

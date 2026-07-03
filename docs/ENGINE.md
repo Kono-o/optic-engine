@@ -14,7 +14,7 @@
 4. [optic-window — Windowing & Input](#4-optic-window--windowing--input)
 5. [optic-render — OpenGL Rendering](#5-optic-render--opengl-rendering)
 6. [optic-loop — Game Loop](#6-optic-loop--game-loop)
-7. [optic — Crate Facade & Prelude](#7-optic--crate-facade--prelude)
+7. [optic — Crate Facade](#7-optic--crate-facade)
 8. [Initialization Flow](#8-initialization-flow)
 9. [Runtime Loop Flow](#9-runtime-loop-flow)
 10. [Shutdown Flow](#10-shutdown-flow)
@@ -34,14 +34,26 @@ optic/                          # Workspace root
 │   └── src/
 │       ├── lib.rs              # Module declarations + pub re-exports + pub use cgmath
 │       ├── ansi.rs             # ANSI terminal escape constants (48)
-│       ├── color.rs            # RGBA, RGB structs + 65 named color constants
+│       ├── color.rs            # Re-exports optic_color::* (RGBA, RGB, HSV, HSL, Gradient, traits, constants)
 │       ├── consts.rs           # Path/file-extension string constants (13)
-│       ├── coord.rs            # Coord2D, CoordOffset
+│       ├── coord.rs            # Coord2D (point), CoordOffset (vector) — Components<f64,2>, point/vector algebra, distance, length, normalize, lerp
 │       ├── enums.rs            # PolyMode, Cull, DrawMode, ImgFormat, ImgFilter, ImgWrap, ATTRType
 │       ├── error.rs            # OpticError, OpticErrorKind, OpticResult<T>
-│       ├── geometry.rs         # Size2D, Size3D, ClipDist, Rect, CamProj
+│       ├── geometry.rs         # Components<T,N> trait, componentwise_min/max, Size2D/Size3D (saturating ops, fit_within, scaling), ClipDist, CamProj
 │       ├── log.rs              # log_color!, log_event!, log_info!, log_warn!, log_fatal! macros
 │       └── proc.rs             # end(), end_success(), end_error(), SUCCESS, ERROR
+│
+├── optic-color/                 # Zero-dependency color library
+│   └── src/
+│       ├── lib.rs              # Module declarations + pub use of all types, traits, constants
+│       ├── channels.rs         # ChannelArray<N> trait + channel_lerp + impl_channel_ops! macro
+│       ├── convert.rs          # ToRgba, FromRgba, ColorInfo traits + sRGB/hsv/hsl conversions
+│       ├── rgba.rs             # RGBA struct (methods: hex, lighten, darken, srgb, etc.)
+│       ├── rgb.rs              # RGB struct
+│       ├── hsv.rs              # HSV struct (no arithmetic — hue wraparound)
+│       ├── hsl.rs              # HSL struct (no arithmetic)
+│       ├── gradient.rs         # Gradient, GradientStop, GradientInterp, GradientColorSpace, GradientWrap
+│       └── constants.rs        # 65 named RGBA constants (RED, BLUE, ...)
 │
 ├── optic-file/                 # Standalone file I/O: read/write/cache helpers
 │   └── src/lib.rs              # 8 pub free functions
@@ -96,8 +108,7 @@ optic/                          # Workspace root
 │
 ├── optic/                      # Facade crate — re-exports everything
 │   └── src/
-│       ├── lib.rs              # Feature-gated pub use of sub-crates
-│       └── prelude.rs          # ~120+ items imported via optic::prelude::*
+│       └── lib.rs              # Feature-gated pub use of sub-crates
 │
 └── docs/
     └── ENGINE.md               # ← This file
@@ -126,35 +137,38 @@ vcb3d  ───►  optic  ───┬──►  optic-core
 
 ## 2. optic-core — Foundation Types
 
-### 2.1 RGBA / RGB
+### 2.1 Color Types
 
-```rust
-// Tuple structs with 0.0–1.0 f32 fields
-RGBA(pub f32, pub f32, pub f32, pub f32);
-RGB(pub f32, pub f32, pub f32);
+Color types are defined in the `optic-color` crate (zero-dependency, no GL) and re-exported by
+`optic_core`. All types live in `optic-color/src/`:
 
-// Methods
-RGBA::grey(lum: f32) -> RGBA        // R=G=B=lum, A=1.0
-RGBA::from_rgb(rgb: RGB, a: f32) -> RGBA
-RGBA::to_rgb(&self) -> RGB
-RGB::grey(lum: f32) -> RGB
-RGB::from_rgba(rgba: RGBA) -> RGB
-RGB::to_rgba(&self, a: f32) -> RGBA
-```
+| File | Contents |
+|------|----------|
+| `rgba.rs` | `RGBA(pub f32, f32, f32, f32)` — hex, srgb, lighten/darken, saturate/desaturate, invert |
+| `rgb.rs` | `RGB(pub f32, f32, f32)` |
+| `hsv.rs` | `HSV { h, s, v }` — hue wraps 0..360, no arithmetic (hue wraparound) |
+| `hsl.rs` | `HSL { h, s, l }` — same caveat as HSV |
+| `gradient.rs` | `Gradient`, `GradientStop`, `GradientInterp`, `GradientColorSpace`, `GradientWrap` |
+| `convert.rs` | `ToRgba`, `FromRgba`, `ColorInfo` traits + sRGB piecewise EOTF/OETF + HSV/HSL ↔ RGBA |
+| `channels.rs` | `ChannelArray<N>` trait, `channel_lerp`, operator overloads via `impl_channel_ops!` |
+| `constants.rs` | 65 named `RGBA` constants (RED, CRIMSON, ..., SNOW) |
 
-**65 named color constants** (all `pub const RGBA`):
-RED, CRIMSON, PINK, BLUSH, CORAL, ORANGE, AMBER, GOLD, YELLOW, LIME, SPRING, SEA, FOREST, GREEN, TEAL, AQUA, SKY, CYAN, BLUE, MIDNIGHT, INDIGO, PURPLE, PLUM, DUSK, MAGENTA, FERN, SALMON, BROWN, GRAY, SILVER, WHITE, BLACK, OBSIDIAN, MAROON, BURGUNDY, SCARLET, PEACH, APRICOT, TANGERINE, MANGO, MUSTARD, OLIVE, CELADON, MINT, TURQUOISE, COBALT, NAVY, LAPIS, LAVENDER, VIOLET, WISTERIA, MULBERRY, ROSEWOOD, MAHOGANY, KHAKI, BEIGE, SAND, COPPER, BRONZE, SLATE, CHARCOAL, IVORY, ALABASTER, SNOW
+**Key design:**
+- `ToRgba` / `FromRgba` are hub traits — every color type implements both, making RGBA the canonical interchange type.
+- `ColorInfo` has a blanket impl: `impl<T: ToRgba> ColorInfo for T {}` — so `luminance()`, `is_light()`, `contrast_ratio()`, `to_hex()`, `to_bytes()` work on RGBA, RGB, HSV, HSL with zero per-type code.
+- HSV/HSL intentionally omit `ChannelArray`, arithmetic operators, and `lerp` — hue wraparound makes componentwise math produce wrong colors. The one correct place for HSV interpolation is `Gradient::sample()` with `GradientColorSpace::Hsv`, which uses proper `hue_lerp()`.
+- sRGB conversion uses real piecewise EOTF/OETF, not gamma-2.2 approximation.
+- Import via `use optic_core::RGBA;` (re-exported) or `use optic_color::RGBA;` (direct).
 
 ### 2.2 Coordinate & Geometry Types
 
 | Type | Fields | Key Methods |
 |------|--------|-------------|
-| `Coord2D` | `x: f64, y: f64` | `empty()`, `from(x,y)`, `from_tup((x,y))`, `is_inside(size)` |
-| `CoordOffset` | `x: f64, y: f64` | `empty()`, `from(x,y)`, `from_tup((x,y))`, `is_zero()` |
-| `Size2D` | `w: u32, h: u32` | `empty()`, `from(w,h)`, `shave(n)`, `aspect_ratio()` |
-| `Size3D` | `w: u32, h: u32, d: u32` | `empty()`, `from(w,h,d)`, `shave(n)` |
+| `Coord2D` | `x: f64, y: f64` | point — `is_inside(size)`, `distance_to()`, `midpoint()`, `lerp()`, `Sub→CoordOffset`, `Add/Sub<CoordOffset>` |
+| `CoordOffset` | `x: f64, y: f64` | vector — `is_zero()`, `length()`, `length_squared()`, `normalize()`, `dot()`, `lerp()`, `Add/Sub/Mul<f64>/Neg` |
+| `Size2D` | `w: u32, h: u32` | `shave(n)`, `aspect_ratio()`, `is_empty()`, `area()`, `min/max()`, `fit_within()`, `scaled_to_width/height()`, `to_size3d(d)`, `Add/Sub/Mul<f32>` (saturating) |
+| `Size3D` | `w: u32, h: u32, d: u32` | `shave(n)`, `is_empty()`, `volume()`, `min/max()`, `to_size2d()`, `Add/Sub/Mul<f32>` (saturating) |
 | `ClipDist` | `near: f32, far: f32` | `from(near, far)`, `Default` → `{0.01, 1000.0}` |
-| `Rect` | `x: i32, y: i32, w: i32, h: i32` | `from(x,y,w,h)` |
 
 ### 2.3 Enums
 
@@ -213,13 +227,10 @@ OSHDR="oshdr", OMESH="omesh", OTXTR="otxtr"
 
 **Binary cache format constants:**
 ```
-OPTIC_MAGIC: [u8; 17] = b"o/0ptiC+EngiNEx*_"   // Magic signature in .otxtr/.oshdr/.omesh
-CACHE_VERSION: u8 = 1                            // Current cache version
-ASSET_TYPE_TEXTURE: u8 = 0                       // Discriminator for texture caches
-ASSET_TYPE_SHADER: u8  = 1                       // Discriminator for shader caches
-ASSET_TYPE_MESH: u8   = 2                        // Discriminator for mesh caches
-SHADER_PIPELINE: u8 = 0                          // Sub-type for pipeline shaders
-SHADER_COMPUTE: u8  = 1                          // Sub-type for compute shaders
+OPTIC_MAGIC: [u8; 8] = b"/0PTIC_x"           // Magic signature in .otxtr/.oshdr/.omesh (never changes)
+OPTIC_CACHE_VERSION: u16 = 1                  // Current cache version (bump when format changes)
+SHADER_PIPELINE: u8 = 0                       // Sub-type for pipeline shaders
+SHADER_COMPUTE: u8  = 1                       // Sub-type for compute shaders
 ```
 ```
 
@@ -286,16 +297,17 @@ Window {
     cursor_hidden: bool,
     cursor_grabbed: bool,
     cursor_inside: bool,
-    cursor_pos: (f64, f64),
-    prev_cursor_pos: (f64, f64),
-    cursor_delta: (f64, f64),
-    coord: (f64, f64),             // window position on screen
-    prev_coord: (f64, f64),
+    cursor_pos: Coord2D,
+    prev_cursor_pos: Coord2D,
+    cursor_delta: CoordOffset,
+    coord: Coord2D,                 // window position on screen
+    prev_coord: Coord2D,
+    position_delta: CoordOffset,
     prev_size: Size2D,
 }
 ```
 
-**Key methods:** `new(el, title, size)`, `close()`, `is_closed()`, `raw_handle() -> Option<RawWindowHandle>`, `size()`, `actual_size()`, `set_title()`, `set_size()`, `set_fullscreen()`, `toggle_fullscreen()`, `set_cursor_visibility()`, `set_cursor_grab()`, `toggle_cursor_usage()`, `cursor_offset()`, `cursor_coord()`, `cursor_coord_normalized()`, `request_redraw()`.
+**Key methods:** `new(el, title, size)`, `close()`, `is_closed()`, `raw_handle() -> Option<RawWindowHandle>`, `size()`, `actual_size()`, `set_title()`, `set_size()`, `set_fullscreen()`, `toggle_fullscreen()`, `set_cursor_visibility()`, `set_cursor_grab()`, `toggle_cursor_usage()`, `cursor_offset()`, `cursor_coord()`, `cursor_coord_normalized()`, `position_delta()`, `request_redraw()`.
 
 Construction: `Window::new(&el, title, size)` creates a winit window via `el.create_window(attrs)` and wraps it in `Arc`. The `inner` field is `Some(arc)` when open, `None` when closed.
 
@@ -651,7 +663,7 @@ Canvas {
 //   set_size(new_size) -> OpticResult<()>  — Re-creates canvas at new size
 //   resolve() — Blits MSAA FBO → resolve FBO
 //   blit_to_screen(window_size) — Resolve + blit to default FBO
-//   set_renderable_area(Rect) — Viewport for rendering into canvas
+//   set_renderable_area(x, y, Size2D) — Viewport for rendering into canvas
 //   read_pixels(index) -> OpticResult<Vec<u8>>
 //   save_to_file(index, path) — Reads pixels, saves via image crate (supports L8..RGBA32F)
 //   delete(&mut self) — Deletes FBOs, RBOs, textures. Decrements counters.
@@ -685,14 +697,16 @@ RenderTarget<'a> { Screen, Canvas(&'a Canvas) }
 
 ### 5.6 Asset Loaders
 
-All three cache formats (`.otxtr`, `.oshdr`, `.omesh`) share a **unified 17-byte magic header**:
+All three cache formats (`.otxtr`, `.oshdr`, `.omesh`) share a **unified 10-byte header**:
 
 ```
- 0-16   OPTIC_MAGIC = b"o/0ptiC+EngiNEx*_"   ← 17 bytes
-17      CACHE_VERSION (1)
-18      Asset type: 0=Texture | 1=Shader | 2=Mesh
-19+     Type-specific payload
+ 0-7   OPTIC_MAGIC = b"/0PTIC_x"              ← 8 bytes
+ 8-9   OPTIC_CACHE_VERSION (u16 LE) [1]
+10+    Format-specific payload
 ```
+
+Loading a cache with wrong magic returns `"not a valid Optic cache file (bad magic)"`.
+Loading a cache with wrong version returns `"cache file version {found} is not supported (expected {expected})"`.
 
 Every `from_disk()` method follows the same pattern:
 - **Debug builds**: Load source file (PNG/GLSL/OBJ/STL) → decode → save `.otxtr`/`.oshdr`/`.omesh` cache (always overwrite) → return asset
@@ -715,7 +729,7 @@ TextureFile {
 //   fallback() -> OpticResult<Self>  — Loads "optic/assets/txtr/fallback.png"
 ```
 
-Cached format (`.otxtr`): binary file with unified optic signature header, then `[channels:u8, bit_depth:u8, w:u32le, h:u32le, filter:u8, wrap:u8, bytes...]`.
+Cached format (`.otxtr`): 10-byte unified header, then `[channels:u8, bit_depth:u8, w:u32le, h:u32le, filter:u8, wrap:u8, bytes...]`.
 
 `ship()` calls `create_texture()` which is the central GL texture creation function.
 
@@ -1016,13 +1030,11 @@ Scene {
 
 ---
 
-## 7. optic — Crate Facade & Prelude
+## 7. optic — Crate Facade
 
 ### 7.1 lib.rs
 
 ```rust
-pub mod prelude;
-
 #[cfg(feature = "core")]    pub use optic_core::*;
 #[cfg(feature = "file")]    pub use optic_file::*;
 #[cfg(feature = "render")]  pub use optic_render::*;
@@ -1030,39 +1042,7 @@ pub mod prelude;
 #[cfg(feature = "minimal")] pub use optic_loop::*;
 ```
 
-### 7.2 Prelude (~120+ items)
-
-```rust
-// cgmath
-pub use cgmath;
-pub use cgmath::{InnerSpace, Matrix4, Point3, Rad, Vector2, Vector3, vec3};
-
-// optic_core modules
-pub use optic_core::{ansi, consts};
-// optic_core types (20+)
-pub use optic_core::{CamProj, ClipDist, Coord2D, CoordOffset, Cull, ATTRType, ...};
-// 65 named color constants
-pub use optic_core::{RED, GREEN, ... SNOW};
-// 5 logging macros
-pub use optic_core::{log_color, log_event, log_fatal, log_info, log_warn};
-// 4 exit functions/consts
-pub use optic_core::{end, end_error, end_success, ERROR, SUCCESS};
-
-pub use optic_file;
-
-// optic_loop (9 items)
-pub use optic_loop::{FrameState, Game, GameBuilder, GameLoop, Runtime, Scene, Time, WindowState, run};
-
-// optic_render attrs (10)
-pub use optic_render::asset::attr::{ATTRInfo, ATTRName, ColATTR, ..., DataType};
-// optic_render assets (5)
-pub use optic_render::asset::{Center, Mesh2DFile, Mesh3DFile, ShaderFile, ShaderType, TextureFile};
-// optic_render handles (17)
-pub use optic_render::{Camera, Canvas, CanvasDesc, GL, GPU, GpuStats, Mesh2D, Mesh3D, ...};
-
-// optic_window (8)
-pub use optic_window::{Events, Is, KeyBitMap, KeyCode, Mouse, MouseBitMap, Window};
-```
+The `optic` crate re-exports all sub-crates unmodified. No curated prelude — filtering happens at each crate's own `lib.rs`. Users import everything via `use optic::*;` and access sub-module items through qualified paths (e.g. `optic::asset::ShaderFile`, `optic::cgmath::Vector3`).
 
 ---
 
@@ -1408,7 +1388,7 @@ Canvases use linear internal formats. Users compositing onto screen must do line
 | `set_size(new)` | Recreate at new size (same desc) |
 | `resolve()` | Blit MSAA FBO → resolve FBO |
 | `blit_to_screen(win)` | Blit to default FBO |
-| `set_renderable_area(Rect)` | Viewport for rendering into canvas |
+| `set_renderable_area(x, y, Size2D)` | Viewport for rendering into canvas |
 | `read_pixels(i)` | CPU readback of color attachment |
 | `save_to_file(i, path)` | Save color attachment as image file |
 | `delete(&mut self)` | Delete all GL objects |
@@ -1449,14 +1429,15 @@ Camera transform. Computed in `calc_matrices()`:
 
 ## 15. Complete Type Index
 
-### optic-core (26 types + 65 colors + 48 ANSI + 22 consts)
+### optic-core (27 types + 65 colors + 48 ANSI + 19 consts)
 | Category | Items |
 |----------|-------|
-| Structs | `RGBA`, `RGB`, `Coord2D`, `CoordOffset`, `Size2D`, `Size3D`, `ClipDist`, `Rect`, `ANSI`, `OpticError` |
+| Structs | `RGBA`, `RGB`, `Coord2D`, `CoordOffset`, `Size2D`, `Size3D`, `ClipDist`, `ANSI`, `OpticError` |
 | Enums | `PolyMode`, `Cull`, `DrawMode`, `ImgFormat`, `ImgFilter`, `ImgWrap`, `ATTRType`, `CamProj`, `OpticErrorKind` |
+| Traits | `Components<T,N>` |
 | Type Alias | `OpticResult<T>` |
 | Macros | `log_color!`, `log_event!`, `log_info!`, `log_warn!`, `log_fatal!` |
-| Functions | `end()`, `end_success()`, `end_error()` |
+| Functions | `end()`, `end_success()`, `end_error()`, `componentwise_min()`, `componentwise_max()` |
 
 ### optic-file (8 functions)
 `name`, `extension`, `exists`, `read_bytes`, `read_string`, `write_bytes`, `write_string`, `cached_path`, `create_dir`

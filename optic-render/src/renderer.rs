@@ -1,4 +1,4 @@
-use optic_core::{log_info, Cull, DrawMode, PolyMode, RGBA, Size2D};
+use optic_core::{log_info, ColorInfo, Cull, DrawMode, Gradient, PolyMode, RGBA, Size2D};
 
 use crate::context::RenderContext;
 use crate::glraw::GL;
@@ -252,6 +252,28 @@ impl GPU {
 
     pub fn ship_texture(&self, image: &asset::TextureFile) -> Texture2D {
         image.ship()
+    }
+
+    pub fn ship_gradient(&self, gradient: &Gradient, resolution: u32) -> Texture2D {
+        let res = resolution.max(1);
+        let colors = gradient.sample_n(res as usize);
+        let mut bytes = Vec::with_capacity(res as usize * 4);
+        for c in &colors {
+            let (r, g, b, a) = c.to_bytes();
+            bytes.push(r);
+            bytes.push(g);
+            bytes.push(b);
+            bytes.push(a);
+        }
+        let size = Size2D::from(res, 1);
+        let id = crate::handles::texture::create_texture(
+            &bytes,
+            size,
+            &optic_core::ImgFormat::RGBA(8),
+            &optic_core::ImgFilter::Linear,
+            &optic_core::ImgWrap::Clip,
+        );
+        Texture2D::new(id, size, optic_core::ImgFormat::RGBA(8), optic_core::ImgFilter::Linear, optic_core::ImgWrap::Clip)
     }
 
     pub fn ship_canvas(&mut self, desc: &crate::handles::CanvasDesc) -> optic_core::OpticResult<Canvas> {

@@ -1,5 +1,7 @@
-use optic::cgmath::Zero;
-use optic::prelude::*;
+use optic::*;
+use optic::asset::*;
+use optic::asset::attr::*;
+use optic::cgmath::{InnerSpace, Vector3, Zero};
 use rand::Rng;
 
 // ── Toon shader (compressed Lambertian) ─────────────────────────────────
@@ -180,6 +182,12 @@ impl Runtime for FpsGame {
             game.window.set_cursor_loopback(!self.cursor_free);
         }
 
+        // ── Escape: quit ───────────────────────────────────────────────
+        if game.events.key(KeyCode::Escape, Is::Pressed) {
+            game.exit();
+            return;
+        }
+
         // ── Mouse look ────────────────────────────────────────────────
         if !self.cursor_free {
             let delta = game.window.cursor_delta();
@@ -310,7 +318,7 @@ impl Runtime for FpsGame {
         }
 
         // ── Render ────────────────────────────────────────────────────
-        game.renderer.set_bg_color(RGBA(0.0, 0.0, 0.0, 0.0));
+        game.renderer.set_bg_color(RGBA(0.05, 0.05, 0.1, 1.0));
         let cam = &game.camera;
 
         if let Some(ref floor) = self.floor {
@@ -386,7 +394,7 @@ impl FpsGame {
 // ── Entry ────────────────────────────────────────────────────────────────
 
 fn main() {
-    let game = Game::new(FpsGame {
+    Game::run(FpsGame {
         floor: None,
         toon_shader: None,
         crosshair: None,
@@ -400,6 +408,5 @@ fn main() {
         cursor_free: false,
         vertical_velocity: 0.0,
         on_ground: true,
-    }).unwrap();
-    game.run();
+    });
 }

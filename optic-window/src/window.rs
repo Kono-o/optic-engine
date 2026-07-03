@@ -12,6 +12,7 @@ pub struct Window {
     prev_cursor_pos: Coord2D,
     cursor_delta: CoordOffset,
     prev_position: Coord2D,
+    position_delta: CoordOffset,
     prev_size: Size2D,
     cursor_inside: bool,
     tracking_started: bool,
@@ -33,6 +34,34 @@ impl Window {
         let attrs = WinitWindow::default_attributes()
             .with_title(title)
             .with_inner_size(PhysicalSize::new(size.w, size.h))
+            .with_visible(false);
+        let w = el.create_window(attrs).unwrap();
+        let arc = std::sync::Arc::new(w);
+        let window = Self {
+            inner: Some(arc),
+            prev_cursor_pos: Coord2D::empty(),
+            cursor_delta: CoordOffset::empty(),
+            prev_position: Coord2D::empty(),
+            position_delta: CoordOffset::empty(),
+            prev_size: size,
+            cursor_inside: true,
+            tracking_started: false,
+            cursor_pos: Coord2D::empty(),
+            cursor_visible: true,
+            cursor_grabbed: false,
+            cursor_confined: false,
+            cursor_loopback: false,
+            min_size: None,
+            max_size: None,
+        };
+        window
+    }
+
+    #[allow(deprecated)]
+    pub fn new_transparent(el: &winit::event_loop::EventLoop<()>, title: &str, size: Size2D) -> Self {
+        let attrs = WinitWindow::default_attributes()
+            .with_title(title)
+            .with_inner_size(PhysicalSize::new(size.w, size.h))
             .with_visible(false)
             .with_transparent(true);
         let w = el.create_window(attrs).unwrap();
@@ -42,6 +71,7 @@ impl Window {
             prev_cursor_pos: Coord2D::empty(),
             cursor_delta: CoordOffset::empty(),
             prev_position: Coord2D::empty(),
+            position_delta: CoordOffset::empty(),
             prev_size: size,
             cursor_inside: true,
             tracking_started: false,
@@ -165,6 +195,13 @@ impl Window {
 
     pub fn prev_position(&self) -> Coord2D {
         self.prev_position
+    }
+
+    /// Movement of the window on screen since last polled. Resets to zero on read.
+    pub fn position_delta(&mut self) -> CoordOffset {
+        let d = self.position_delta;
+        self.position_delta = CoordOffset::empty();
+        d
     }
 
     // ── Title ─────────────────────────────────────────────────────────────
@@ -368,19 +405,20 @@ impl Window {
     /// Call once per frame after processing events.
     /// Snapshots live/tracked state and computes cursor delta.
     pub fn update_frame(&mut self) {
+        let new_pos = self.position();
         if !self.tracking_started {
             self.prev_cursor_pos = self.cursor_pos;
-            self.prev_position = self.position();
+            self.prev_position = new_pos;
             self.prev_size = self.size();
+            self.position_delta = CoordOffset::empty();
             self.cursor_delta = CoordOffset::empty();
             self.tracking_started = true;
         } else {
-            self.cursor_delta = CoordOffset::from(
-                self.cursor_pos.x - self.prev_cursor_pos.x,
-                self.prev_cursor_pos.y - self.cursor_pos.y,
-            );
+            let raw = self.cursor_pos - self.prev_cursor_pos;
+            self.cursor_delta = CoordOffset { x: raw.x, y: -raw.y };
             self.prev_cursor_pos = self.cursor_pos;
-            self.prev_position = self.position();
+            self.position_delta = self.position_delta + (new_pos - self.prev_position);
+            self.prev_position = new_pos;
             self.prev_size = self.size();
         }
 

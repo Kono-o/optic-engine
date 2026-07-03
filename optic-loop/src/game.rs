@@ -1,6 +1,6 @@
 use gilrs::Gilrs;
-use optic_core::{CamProj, Coord2D, OpticResult, RGBA, Size2D, CRIMSON};
-use optic_core::end_success;
+use optic_core::{log_error, CamProj, Coord2D, OpticResult, Size2D, CRIMSON};
+use optic_core::{end, end_success, ERROR, SUCCESS};
 use optic_render::{Camera, GPU};
 use optic_window::{Events, Window};
 use winit::application::ApplicationHandler;
@@ -30,15 +30,17 @@ pub struct Game {
 impl Game {
     pub fn new<R: Runtime + 'static>(runtime: R) -> OpticResult<Game> {
         let size = Size2D::from(500,500);
-        let bg_color =  CRIMSON;
+        let bg_color = CRIMSON;
         let title = "OPTIC GAME";
         let el = EventLoop::builder()
            .build()
            .map_err(|e| optic_core::OpticError::custom(&format!("event loop creation failed: {e}")))?;
         let window = Window::new(&el, title, size);
         let actual_size = window.size();
-        let handle = window.raw_handle().unwrap();
-        let display_handle = window.raw_display_handle().unwrap();
+        let handle = window.raw_handle()
+            .ok_or_else(|| optic_core::OpticError::custom("failed to get raw window handle"))?;
+        let display_handle = window.raw_display_handle()
+            .ok_or_else(|| optic_core::OpticError::custom("failed to get raw display handle"))?;
         
         let mut gpu = GPU::new_windowed(handle, display_handle, actual_size)?;
         gpu.ctx.set_vsync(true);
@@ -46,7 +48,8 @@ impl Game {
         gpu.set_bg_color(bg_color);
         let surface_index = 0;
         
-        let gilrs = Gilrs::new().unwrap();
+        let gilrs = Gilrs::new()
+            .map_err(|e| optic_core::OpticError::custom(&format!("gilrs init failed: {e}")))?;
         Ok(Game {
             renderer: gpu,
             camera: Camera::new(size, CamProj::Persp),
@@ -64,7 +67,20 @@ impl Game {
         })
     }
     
-    pub fn run(mut self) {
+    pub fn run<R: Runtime + 'static>(runtime: R) {
+        match Game::new(runtime) {
+            Ok(game) => {
+                game.start();
+                end(SUCCESS);
+            }
+            Err(e) => {
+                log_error!("{}", e);
+                end(ERROR);
+            }
+        }
+    }
+
+    fn start(mut self) {
         let el = self.event_loop.take().unwrap();
         let _ = el.run_app(&mut self);
     }

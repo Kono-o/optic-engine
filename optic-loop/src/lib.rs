@@ -7,7 +7,7 @@ pub use runtime::*;
 pub use time::*;
 
 use gilrs::Gilrs;
-use optic_core::{CamProj, Coord2D, Size2D};
+use optic_core::{log_error, CamProj, Coord2D, OpticResult, Size2D};
 use optic_render::{Camera, GPU};
 use optic_window::{Events, Window};
 use winit::application::ApplicationHandler;
@@ -67,18 +67,20 @@ impl<F: FnMut(&mut FrameState)> GameLoop<F> {
         camera: Camera,
         mut windows: Vec<WindowState>,
         frame_fn: F,
-    ) -> Self {
+    ) -> OpticResult<Self> {
         for ws in windows.iter_mut() {
             if let Some(handle) = ws.window.raw_handle() {
                 let size = ws.window.size();
-                let idx = gpu.ctx.attach_window(handle, size).unwrap();
+                let idx = gpu.ctx.attach_window(handle, size)
+                    .map_err(|e| optic_core::OpticError::custom(&format!("attach window failed: {e}")))?;
                 ws.surface_index = idx;
             }
         }
 
-        let gilrs = Gilrs::new().unwrap();
+        let gilrs = Gilrs::new()
+            .map_err(|e| optic_core::OpticError::custom(&format!("gilrs init failed: {e}")))?;
 
-        Self {
+        Ok(Self {
             event_loop: Some(el),
             windows,
             gpu: Some(gpu),
@@ -86,7 +88,7 @@ impl<F: FnMut(&mut FrameState)> GameLoop<F> {
             time: Time::new(),
             gilrs,
             frame_fn,
-        }
+        })
     }
 
     pub fn run(mut self) {
@@ -110,7 +112,7 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
     ) {
         for ws in &mut self.windows {
             if !ws.window.is_running() { continue; }
-            if ws.window.id().unwrap() != id { continue; }
+            if ws.window.id().map_or(true, |wid| wid != id) { continue; }
 
             match &event {
                 WindowEvent::Resized(_size) => {
@@ -186,12 +188,28 @@ pub fn run<F>(title: &str, size: Size2D, frame_fn: F)
 where
     F: FnMut(&mut FrameState) + 'static,
 {
-    let el = EventLoop::new().unwrap();
+    let result = try_run(title, size, frame_fn);
+    if let Err(e) = result {
+        log_error!("{}", e);
+        optic_core::end(optic_core::ERROR);
+    }
+}
+
+fn try_run<F>(title: &str, size: Size2D, frame_fn: F) -> OpticResult<()>
+where
+    F: FnMut(&mut FrameState) + 'static,
+{
+    let el = EventLoop::new()
+        .map_err(|e| optic_core::OpticError::custom(&format!("event loop creation failed: {e}")))?;
     let ws = WindowState::new(&el, title, size);
-    let handle = ws.window.raw_handle().unwrap();
-    let display_handle = ws.window.raw_display_handle().unwrap();
-    let gpu = GPU::new_windowed(handle, display_handle, ws.window.size()).unwrap();
+    let handle = ws.window.raw_handle()
+        .ok_or_else(|| optic_core::OpticError::custom("failed to get raw window handle"))?;
+    let display_handle = ws.window.raw_display_handle()
+        .ok_or_else(|| optic_core::OpticError::custom("failed to get raw display handle"))?;
+    let gpu = GPU::new_windowed(handle, display_handle, ws.window.size())
+        .map_err(|e| optic_core::OpticError::custom(&format!("gpu init failed: {e}")))?;
     let camera = Camera::new(ws.window.size(), CamProj::Persp);
-    let game = GameLoop::new(el, gpu, camera, vec![ws], frame_fn);
+    let game = GameLoop::new(el, gpu, camera, vec![ws], frame_fn)?;
     game.run();
+    Ok(())
 }

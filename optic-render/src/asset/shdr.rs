@@ -1,4 +1,4 @@
-use optic_core::consts::{ASSET_TYPE_SHADER, CACHE_VERSION, OPTIC_MAGIC, SHADER_COMPUTE, SHADER_PIPELINE};
+use optic_core::consts::{OPTIC_CACHE_VERSION, OPTIC_MAGIC, SHADER_COMPUTE, SHADER_PIPELINE};
 use optic_core::{OpticError, OpticErrorKind, OpticResult};
 
 use crate::handles::shader::{link_compute_program, link_program, Shader};
@@ -137,10 +137,9 @@ impl ShaderFile {
         let typ_byte = if self.is_compute { SHADER_COMPUTE } else { SHADER_PIPELINE };
         let v_bytes = self.v_src.as_bytes();
         let f_bytes = self.f_src.as_bytes();
-        let mut data = Vec::with_capacity(22 + v_bytes.len() + f_bytes.len());
+        let mut data = Vec::with_capacity(13 + v_bytes.len() + f_bytes.len());
         data.extend_from_slice(&OPTIC_MAGIC);
-        data.push(CACHE_VERSION);
-        data.push(ASSET_TYPE_SHADER);
+        data.extend_from_slice(&OPTIC_CACHE_VERSION.to_le_bytes());
         data.push(typ_byte);
         data.extend_from_slice(&(v_bytes.len() as u32).to_le_bytes());
         data.extend_from_slice(v_bytes);
@@ -152,21 +151,21 @@ impl ShaderFile {
     #[cfg_attr(debug_assertions, allow(dead_code))]
     fn from_cached(path: &str) -> OpticResult<Self> {
         let data = optic_file::read_bytes(path)?;
-        if data.len() < 24 {
+        if data.len() < 15 {
             return Err(OpticError::new(OpticErrorKind::Asset, &format!("cached shader too short: {path}")));
         }
-        if data[0..17] != OPTIC_MAGIC {
-            return Err(OpticError::new(OpticErrorKind::Asset, &format!("invalid optic magic in cached shader: {path}")));
+        if data[0..8] != OPTIC_MAGIC {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("not a valid Optic cache file (bad magic): {path}")));
         }
-        if data[17] != CACHE_VERSION {
-            return Err(OpticError::new(OpticErrorKind::Asset, &format!("unsupported cache version {} in {path}", data[17])));
+        let version = u16::from_le_bytes([data[8], data[9]]);
+        if version != OPTIC_CACHE_VERSION {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!(
+                "cache file version {version} is not supported (expected {OPTIC_CACHE_VERSION}): {path}"
+            )));
         }
-        if data[18] != ASSET_TYPE_SHADER {
-            return Err(OpticError::new(OpticErrorKind::Asset, &format!("type mismatch: expected shader in {path}")));
-        }
-        let is_compute = data[19] == SHADER_COMPUTE;
+        let is_compute = data[10] == SHADER_COMPUTE;
 
-        let mut off = 20usize;
+        let mut off = 11usize;
         let v_len = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
         off += 4;
         if off + v_len > data.len() {

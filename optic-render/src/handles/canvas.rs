@@ -1,4 +1,4 @@
-use optic_core::{ImgFilter, ImgFormat, ImgWrap, OpticError, OpticErrorKind, OpticResult, Rect, Size2D};
+use optic_core::{ImgFilter, ImgFormat, ImgWrap, OpticError, OpticErrorKind, OpticResult, Size2D};
 
 use crate::handles::texture::{Texture2D, delete_texture};
 
@@ -318,24 +318,24 @@ impl Canvas {
         }
     }
 
-    pub fn set_renderable_area(&self, area: Rect) -> OpticResult<()> {
-        if area.x < 0
-            || area.y < 0
-            || area.w <= 0
-            || area.h <= 0
-            || area.x + area.w > self.size.w as i32
-            || area.y + area.h > self.size.h as i32
+    pub fn set_renderable_area(&self, x: i32, y: i32, size: Size2D) -> OpticResult<()> {
+        if x < 0
+            || y < 0
+            || size.w <= 0
+            || size.h <= 0
+            || x + size.w as i32 > self.size.w as i32
+            || y + size.h as i32 > self.size.h as i32
         {
             return Err(OpticError::new(
                 OpticErrorKind::Custom,
                 &format!(
                     "Canvas::set_renderable_area rect ({},{},{},{}) exceeds canvas size ({},{})",
-                    area.x, area.y, area.w, area.h, self.size.w, self.size.h,
+                    x, y, size.w, size.h, self.size.w, self.size.h,
                 ),
             ));
         }
         unsafe {
-            gl::Viewport(area.x, area.y, area.w, area.h);
+            gl::Viewport(x, y, size.w as i32, size.h as i32);
         }
         Ok(())
     }

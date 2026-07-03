@@ -39,7 +39,7 @@ optic-render = { git = "https://github.com/Kono-o/optic-engine" }
 ## Hello Window
 
 ```rust
-use optic::prelude::*;
+use optic::*;
 
 struct App;
 
@@ -61,7 +61,7 @@ fn main() {
 ## Loading and Rendering a 3D Mesh
 
 ```rust
-use optic::prelude::*;
+use optic::*;
 
 struct App {
     mesh: Option<Mesh3D>,
@@ -121,7 +121,7 @@ optic = { git = "https://github.com/Kono-o/optic-engine", default-features = fal
 ```
 
 ```rust
-use optic::prelude::*;
+use optic::*;
 
 let gpu = GPU::new_headless().unwrap();
 // dispatch compute shaders, read back SSBOs

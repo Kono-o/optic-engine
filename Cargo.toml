@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "optic-core",
     "optic-file",
+    "optic-color",
     "optic-window",
     "optic-render",
     "optic-loop",

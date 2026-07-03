@@ -1,4 +1,4 @@
-use optic_core::consts::{ASSET_TYPE_MESH, CACHE_VERSION, OPTIC_MAGIC};
+use optic_core::consts::{OPTIC_CACHE_VERSION, OPTIC_MAGIC};
 use optic_core::{DrawMode, OpticError, OpticErrorKind, OpticResult};
 use cgmath::Vector2;
 use std::collections::HashMap;
@@ -280,11 +280,10 @@ impl Mesh3DFile {
         let col_bytes = self.col_attr.data.len() * 16;
         let ind_bytes = self.ind_attr.data.len() * 4;
 
-        let size = 19 + 20 + pos_bytes + nrm_bytes + uvm_bytes + col_bytes + ind_bytes;
+        let size = 10 + 20 + pos_bytes + nrm_bytes + uvm_bytes + col_bytes + ind_bytes;
         let mut data = Vec::with_capacity(size);
         data.extend_from_slice(&OPTIC_MAGIC);
-        data.push(CACHE_VERSION);
-        data.push(ASSET_TYPE_MESH);
+        data.extend_from_slice(&OPTIC_CACHE_VERSION.to_le_bytes());
         data.push(flags);
 
         // Position (required)
@@ -331,20 +330,20 @@ impl Mesh3DFile {
     #[cfg_attr(debug_assertions, allow(dead_code))]
     fn from_cached(path: &str) -> OpticResult<Self> {
         let data = optic_file::read_bytes(path)?;
-        if data.len() < 24 {
+        if data.len() < 15 {
             return Err(OpticError::new(OpticErrorKind::Asset, &format!("cached mesh too short: {path}")));
         }
-        if data[0..17] != OPTIC_MAGIC {
-            return Err(OpticError::new(OpticErrorKind::Asset, &format!("invalid optic magic in cached mesh: {path}")));
+        if data[0..8] != OPTIC_MAGIC {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("not a valid Optic cache file (bad magic): {path}")));
         }
-        if data[17] != CACHE_VERSION {
-            return Err(OpticError::new(OpticErrorKind::Asset, &format!("unsupported cache version {} in {path}", data[17])));
-        }
-        if data[18] != ASSET_TYPE_MESH {
-            return Err(OpticError::new(OpticErrorKind::Asset, &format!("type mismatch: expected mesh in {path}")));
+        let version = u16::from_le_bytes([data[8], data[9]]);
+        if version != OPTIC_CACHE_VERSION {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!(
+                "cache file version {version} is not supported (expected {OPTIC_CACHE_VERSION}): {path}"
+            )));
         }
 
-        let mut off = 20usize;
+        let mut off = 11usize;
 
         let read_f32x3 = |off: &mut usize, data: &[u8]| -> [f32; 3] {
             let x = f32::from_le_bytes([data[*off], data[*off + 1], data[*off + 2], data[*off + 3]]); *off += 4;

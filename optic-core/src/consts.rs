@@ -17,14 +17,10 @@ pub const OSHDR: &str = "oshdr";
 pub const OMESH: &str = "omesh";
 pub const OTXTR: &str = "otxtr";
 
-// Magic signature for all optic engine binary cache files (16 bytes)
-pub const OPTIC_MAGIC: [u8; 17] = *b"o/0ptiC+EngiNEx*_";
-pub const CACHE_VERSION: u8 = 1;
-
-// Asset type discriminators
-pub const ASSET_TYPE_TEXTURE: u8 = 0;
-pub const ASSET_TYPE_SHADER: u8 = 1;
-pub const ASSET_TYPE_MESH: u8 = 2;
+// Magic signature for all optic engine binary cache files (8 bytes) — never changes
+pub const OPTIC_MAGIC: [u8; 8] = *b"/0PTIC_x";
+/// Version of the binary cache format — bump this when the layout after the header changes.
+pub const OPTIC_CACHE_VERSION: u16 = 1;
 
 // Shader type sub-discriminators
 pub const SHADER_PIPELINE: u8 = 0;

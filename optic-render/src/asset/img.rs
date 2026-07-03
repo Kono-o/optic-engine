@@ -1,5 +1,5 @@
 use image::{ColorType, GenericImageView};
-use optic_core::consts::{ASSET_TYPE_TEXTURE, CACHE_VERSION, OPTIC_MAGIC};
+use optic_core::consts::{OPTIC_CACHE_VERSION, OPTIC_MAGIC};
 use optic_core::{ImgFilter, ImgFormat, ImgWrap, OpticError, OpticErrorKind, OpticResult, Size2D};
 
 use crate::handles::texture::{create_texture, Texture2D};
@@ -79,10 +79,9 @@ impl TextureFile {
 // --- binary cache read/write (internal) ---
 impl TextureFile {
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
-        let mut data = Vec::with_capacity(31 + self.bytes.len());
+        let mut data = Vec::with_capacity(22 + self.bytes.len());
         data.extend_from_slice(&OPTIC_MAGIC);
-        data.push(CACHE_VERSION);
-        data.push(ASSET_TYPE_TEXTURE);
+        data.extend_from_slice(&OPTIC_CACHE_VERSION.to_le_bytes());
         data.push(self.fmt.channels());
         data.push(self.fmt.bit_depth());
         data.extend_from_slice(&(self.size.w as u32).to_le_bytes());
@@ -103,33 +102,33 @@ impl TextureFile {
     #[cfg_attr(debug_assertions, allow(dead_code))]
     pub(crate) fn from_cached(path: &str) -> OpticResult<Self> {
         let data = optic_file::read_bytes(path)?;
-        if data.len() < 31 {
+        if data.len() < 22 {
             return Err(OpticError::new(OpticErrorKind::Asset, &format!("cached texture too short: {path}")));
         }
-        if data[0..17] != OPTIC_MAGIC {
-            return Err(OpticError::new(OpticErrorKind::Asset, &format!("invalid optic magic in cached texture: {path}")));
+        if data[0..8] != OPTIC_MAGIC {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!("not a valid Optic cache file (bad magic): {path}")));
         }
-        if data[17] != CACHE_VERSION {
-            return Err(OpticError::new(OpticErrorKind::Asset, &format!("unsupported cache version {} in {path}", data[17])));
+        let version = u16::from_le_bytes([data[8], data[9]]);
+        if version != OPTIC_CACHE_VERSION {
+            return Err(OpticError::new(OpticErrorKind::Asset, &format!(
+                "cache file version {version} is not supported (expected {OPTIC_CACHE_VERSION}): {path}"
+            )));
         }
-        if data[18] != ASSET_TYPE_TEXTURE {
-            return Err(OpticError::new(OpticErrorKind::Asset, &format!("type mismatch: expected texture in {path}")));
-        }
-        let channels = data[19];
-        let bit_depth = data[20];
-        let w = u32::from_le_bytes([data[21], data[22], data[23], data[24]]);
-        let h = u32::from_le_bytes([data[25], data[26], data[27], data[28]]);
-        let filter = match data[29] {
+        let channels = data[10];
+        let bit_depth = data[11];
+        let w = u32::from_le_bytes([data[12], data[13], data[14], data[15]]);
+        let h = u32::from_le_bytes([data[16], data[17], data[18], data[19]]);
+        let filter = match data[20] {
             0 => ImgFilter::Closest,
             1 => ImgFilter::Linear,
             _ => ImgFilter::Closest,
         };
-        let wrap = match data[30] {
+        let wrap = match data[21] {
             0 => ImgWrap::Repeat,
             1 => ImgWrap::Extend,
             _ => ImgWrap::Clip,
         };
-        let bytes = data[31..].to_vec();
+        let bytes = data[22..].to_vec();
         let expected = w as usize * h as usize * channels as usize * (bit_depth as usize / 8);
         if bytes.len() != expected {
             return Err(OpticError::new(OpticErrorKind::Asset, &format!(
