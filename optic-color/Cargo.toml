@@ -6,4 +6,3 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Zero-dependency color library for Optic engine — RGBA, HSV, HSL, gradients, named constants"
-readme = "../README.md"

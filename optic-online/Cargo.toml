@@ -6,7 +6,6 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "UDP networking for Optic engine — background tokio thread with connection management"
-readme = "../README.md"
 
 [dependencies]
 optic-core = { path = "../optic-core", version = "0.0.2" }

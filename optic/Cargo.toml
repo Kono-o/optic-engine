@@ -6,7 +6,6 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Optic game engine — facade crate with feature-gated re-exports"
-readme = "../README.md"
 
 [features]
 default = ["full"]

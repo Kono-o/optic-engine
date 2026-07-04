@@ -6,7 +6,6 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Shared types, geometry, errors, and ANSI logging for Optic engine"
-readme = "../README.md"
 
 [dependencies]
 cgmath.workspace = true

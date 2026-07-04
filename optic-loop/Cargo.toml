@@ -6,7 +6,6 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Game loop, Runtime trait, and Game builder for Optic engine"
-readme = "../README.md"
 
 [features]
 online = ["optic-online"]
