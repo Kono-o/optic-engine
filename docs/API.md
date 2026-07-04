@@ -1028,6 +1028,8 @@ pub struct InstanceDesc3D {
 ```rust
 pub struct InstanceDesc2D {
     pub pos_attr: Pos2DATTR,
+    pub rot_attr: Rot2DATTR,
+    pub scale_attr: Scale2DATTR,
     pub col_attr: ColATTR,
     pub cus_attrs: Vec<CustomATTR>,
 }
@@ -1469,7 +1471,9 @@ pub struct Pos2DATTR   { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
 pub struct ColATTR     { pub data: Vec<[f32; 4]>, pub info: ATTRInfo }
 pub struct UVMATTR     { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
 pub struct NrmATTR     { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
+pub struct Rot2DATTR   { pub data: Vec<f32>,       pub info: ATTRInfo }
 pub struct Rot3DATTR   { pub data: Vec<[f32; 4]>, pub info: ATTRInfo }
+pub struct Scale2DATTR { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
 pub struct Scale3DATTR { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
 pub struct IndATTR     { pub data: Vec<u32>,      pub info: ATTRInfo }
 pub struct CustomATTR {
@@ -1519,7 +1523,7 @@ pub struct ATTRInfo {
 pub enum ATTRName {
     Custom(String),
     Pos2D, Pos3D, Col, UVM, Nrm, Ind,
-    Rot3D, Scale3D,
+    Rot2D, Rot3D, Scale2D, Scale3D,
 }
 ```
 
