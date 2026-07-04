@@ -8,5 +8,5 @@ members = [
     "optic-render",
     "optic-loop",
     "optic-online",
-    "optic", "dogma",
+    "optic",
 ]
