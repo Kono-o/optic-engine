@@ -1,10 +1,14 @@
 [package]
 name = "optic-window"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Windowing and input for Optic engine — winit wrapper with per-frame key/mouse/gamepad state"
 
 [dependencies]
 optic-core = { path = "../optic-core" }
-winit = "0.30.12"
-raw-window-handle = "0.6"
-gilrs = "0.10"
+winit.workspace = true
+raw-window-handle.workspace = true
+gilrs.workspace = true

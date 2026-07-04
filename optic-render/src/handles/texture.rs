@@ -2,6 +2,10 @@ use optic_core::{ImgFilter, ImgFormat, ImgWrap, Size2D};
 
 use crate::GL;
 
+/// A handle to an OpenGL 2D texture object.
+///
+/// Stores the GL texture ID, size, pixel format, filtering, and wrap mode.
+/// Created by [`create_texture`] or via [`TextureFile::ship`](crate::asset::TextureFile::ship).
 #[derive(Clone, Debug)]
 pub struct Texture2D {
     pub id: u32,
@@ -12,6 +16,7 @@ pub struct Texture2D {
 }
 
 impl Texture2D {
+    /// Creates a new texture handle from a raw GL texture ID.
     pub fn new(
         id: u32,
         size: Size2D,
@@ -22,15 +27,25 @@ impl Texture2D {
         Self { id, size, fmt, filter, wrap }
     }
 
+    /// Returns the texture dimensions.
     pub fn size(&self) -> Size2D { self.size }
+    /// Returns the current wrap mode.
     pub fn wrap(&self) -> ImgWrap { self.wrap }
+    /// Overrides the stored wrap mode.
     pub fn set_wrap(&mut self, wrap: ImgWrap) { self.wrap = wrap; }
+    /// Returns the current filter mode.
     pub fn filter(&self) -> ImgFilter { self.filter }
+    /// Overrides the stored filter mode.
     pub fn set_filter(&mut self, filter: ImgFilter) { self.filter = filter; }
 
+    /// Deletes the underlying OpenGL texture.
     pub fn delete(self) { delete_texture(self.id); }
 }
 
+/// Creates a new OpenGL 2D texture from raw pixel data.
+///
+/// Generates mipmaps automatically. The texture is left bound to texture unit 0
+/// after creation.
 pub fn create_texture(
     bytes: &[u8],
     size: Size2D,
@@ -98,6 +113,7 @@ pub fn create_texture(
     id
 }
 
+/// Deletes an OpenGL 2D texture by its ID.
 pub fn delete_texture(id: u32) {
     unsafe { gl::DeleteTextures(1, &id); }
 }

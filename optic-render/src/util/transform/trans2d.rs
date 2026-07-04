@@ -1,5 +1,35 @@
 use cgmath::*;
 
+/// A 2D transform with position, rotation, scale, layer, and aspect ratio.
+///
+/// The position is expressed in normalized coordinates (0–1 across the screen).
+/// The aspect ratio corrects the horizontal component so that a square sprite
+/// appears square regardless of the viewport dimensions.
+///
+/// Call [`calc_matrix`](Transform2D::calc_matrix) after mutating to recompute
+/// the 4×4 matrix used for rendering.
+///
+/// # Coordinate system
+///
+/// - **Position** — normalized space: `(0, 0)` is bottom-left, `(1, 1)` is
+///   top-right.
+/// - **Rotation** — degrees around the Z axis (counter-clockwise).
+/// - **Layer** — draw order: higher values are rendered on top.
+///
+/// # Operations
+///
+/// | Category | Methods |
+/// |---|---|
+/// | **Position** — getter | [`pos`](Transform2D::pos) |
+/// | **Position** — absolute setter | [`set_pos_all`](Transform2D::set_pos_all), [`set_pos_x`](Transform2D::set_pos_x), [`set_pos_y`](Transform2D::set_pos_y) |
+/// | **Position** — relative move | [`move_all`](Transform2D::move_all), [`move_x`](Transform2D::move_x), [`move_y`](Transform2D::move_y) |
+/// | **Rotation** — getter/setter | [`rot`](Transform2D::rot), [`set_rot`](Transform2D::set_rot), [`rotate`](Transform2D::rotate) |
+/// | **Scale** — getter | [`scale`](Transform2D::scale) |
+/// | **Scale** — absolute setter | [`set_scale_all`](Transform2D::set_scale_all), [`set_scale_same`](Transform2D::set_scale_same), [`set_scale_x`](Transform2D::set_scale_x), [`set_scale_y`](Transform2D::set_scale_y) |
+/// | **Scale** — relative add | [`scale_all`](Transform2D::scale_all), [`scale_same`](Transform2D::scale_same), [`scale_x`](Transform2D::scale_x), [`scale_y`](Transform2D::scale_y) |
+/// | **Layer** | [`layer`](Transform2D::layer), [`set_layer`](Transform2D::set_layer) |
+/// | **Aspect** | [`aspect`](Transform2D::aspect), [`set_aspect`](Transform2D::set_aspect) |
+/// | **Matrix** | [`matrix`](Transform2D::matrix), [`calc_matrix`](Transform2D::calc_matrix) |
 #[derive(Clone, Debug)]
 pub struct Transform2D {
     matrix: Matrix4<f32>,
@@ -38,36 +68,61 @@ impl Transform2D {
         Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, 1.0)
     }
 
+    /// Recomputes the transformation matrix from the current pos/rot/scale.
     pub fn calc_matrix(&mut self) {
         self.matrix = self.calc_pos_matrix() * self.calc_rot_matrix() * self.calc_scale_matrix();
     }
 
+    /// Returns the aspect ratio (width / height).
     pub fn aspect(&self) -> f32 { self.aspect }
+    /// Sets the aspect ratio.
     pub fn set_aspect(&mut self, aspect: f32) { self.aspect = aspect; }
+    /// Returns the position in normalized coordinates.
     pub fn pos(&self) -> Vector2<f32> { self.pos }
+    /// Returns the rotation in degrees.
     pub fn rot(&self) -> f32 { self.rot }
+    /// Returns the layer (draw order).
     pub fn layer(&self) -> u8 { self.layer }
+    /// Returns the scale factor.
     pub fn scale(&self) -> Vector2<f32> { self.scale }
+    /// Returns the cached 4×4 transformation matrix.
     pub fn matrix(&self) -> Matrix4<f32> { self.matrix }
 
+    /// Translates by `(x, y)` in normalized coordinates.
     pub fn move_all(&mut self, x: f32, y: f32) { self.pos += vec2(x, y); }
+    /// Translates along the X axis.
     pub fn move_x(&mut self, x: f32) { self.pos.x += x; }
+    /// Translates along the Y axis.
     pub fn move_y(&mut self, y: f32) { self.pos.y += y; }
+    /// Sets the position to `(x, y)`.
     pub fn set_pos_all(&mut self, x: f32, y: f32) { self.pos = vec2(x, y); }
+    /// Sets the X coordinate.
     pub fn set_pos_x(&mut self, x: f32) { self.pos.x = x; }
+    /// Sets the Y coordinate.
     pub fn set_pos_y(&mut self, y: f32) { self.pos.y = y; }
 
+    /// Adds `rot` degrees to the current rotation.
     pub fn rotate(&mut self, rot: f32) { self.rot += rot; }
+    /// Sets the rotation to `rot` degrees.
     pub fn set_rot(&mut self, rot: f32) { self.rot = rot; }
+    /// Sets the layer.
     pub fn set_layer(&mut self, layer: u8) { self.layer = layer; }
 
+    /// Adds `(x, y)` to the current scale.
     pub fn scale_all(&mut self, x: f32, y: f32) { self.scale += vec2(x, y); }
+    /// Adds `xy` to both scale components.
     pub fn scale_same(&mut self, xy: f32) { self.scale_all(xy, xy); }
+    /// Adds `x` to the scale X component.
     pub fn scale_x(&mut self, x: f32) { self.scale.x += x; }
+    /// Adds `y` to the scale Y component.
     pub fn scale_y(&mut self, y: f32) { self.scale.y += y; }
+    /// Sets the scale to `(x, y)`.
     pub fn set_scale_all(&mut self, x: f32, y: f32) { self.scale = vec2(x, y); }
+    /// Sets both scale components to `xy`.
     pub fn set_scale_same(&mut self, xy: f32) { self.set_scale_all(xy, xy); }
+    /// Sets the scale X component.
     pub fn set_scale_x(&mut self, x: f32) { self.scale.x = x; }
+    /// Sets the scale Y component.
     pub fn set_scale_y(&mut self, y: f32) { self.scale.y = y; }
 }
 

@@ -1,3 +1,10 @@
+/// Print colored output using an [`ANSI`](crate::ansi::ANSI) constant.
+///
+/// ```
+/// use optic_core::*;
+///
+/// log_color!("processing: {}", RED, "item 1");
+/// ```
 #[macro_export]
 macro_rules! log_color {
     ($fmt:expr, $color:expr) => {
@@ -10,6 +17,7 @@ macro_rules! log_color {
     };
 }
 
+/// Print a bold-blue `[EVENT]` message.
 #[macro_export]
 macro_rules! log_event {
     ($fmt:expr) => {
@@ -22,6 +30,7 @@ macro_rules! log_event {
     };
 }
 
+/// Print a bold-green `[INFO]` message.
 #[macro_export]
 macro_rules! log_info {
     ($fmt:expr) => {
@@ -34,6 +43,7 @@ macro_rules! log_info {
     };
 }
 
+/// Print a bold-yellow `[WARN]` message.
 #[macro_export]
 macro_rules! log_warn {
     ($fmt:expr) => {
@@ -46,6 +56,7 @@ macro_rules! log_warn {
     };
 }
 
+/// Print a bold-red `[FATAL]` message, then abort the process.
 #[macro_export]
 macro_rules! log_fatal {
     ($fmt:expr) => {
@@ -58,6 +69,7 @@ macro_rules! log_fatal {
     };
 }
 
+/// Print a bold-red `[ERROR]` message.
 #[macro_export]
 macro_rules! log_error {
     ($fmt:expr) => {

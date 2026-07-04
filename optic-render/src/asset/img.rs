@@ -4,6 +4,22 @@ use optic_core::{ImgFilter, ImgFormat, ImgWrap, OpticError, OpticErrorKind, Opti
 
 use crate::handles::texture::{create_texture, Texture2D};
 
+/// A texture loaded from disk (or cache) with metadata.
+///
+/// # Loading
+///
+/// ```ignore
+/// use optic_render::asset::TextureFile;
+///
+/// let tex = TextureFile::from_disk("textures/wood.png")?;
+/// let gpu_tex = tex.ship(); // uploads to GPU
+/// ```
+///
+/// # Caching
+///
+/// In debug builds, `from_disk` loads the source image and writes a binary
+/// cache (`.otxtr`). In release builds, it reads the cache directly for
+/// faster startup.
 pub struct TextureFile {
     pub bytes: Vec<u8>,
     pub size: Size2D,
@@ -13,17 +29,22 @@ pub struct TextureFile {
 }
 
 impl TextureFile {
+    /// Returns the total pixel count (width × height).
     pub fn pixel_count(&self) -> usize {
         self.size.w as usize * self.size.h as usize
     }
+    /// Overrides the wrap mode (used before [`ship`](TextureFile::ship)).
     pub fn set_wrap(&mut self, wrap: ImgWrap) { self.wrap = wrap; }
+    /// Overrides the filter mode (used before [`ship`](TextureFile::ship)).
     pub fn set_filter(&mut self, filter: ImgFilter) { self.filter = filter; }
 
+    /// Uploads this texture to the GPU and returns a [`Texture2D`] handle.
     pub fn ship(&self) -> Texture2D {
         let id = create_texture(&self.bytes, self.size, &self.fmt, &self.filter, &self.wrap);
         Texture2D::new(id, self.size, self.fmt, self.filter, self.wrap)
     }
 
+    /// Loads the fallback texture from `optic/assets/txtr/fallback.png`.
     pub fn fallback() -> OpticResult<Self> {
         Self::from_disk("optic/assets/txtr/fallback.png")
     }
@@ -32,6 +53,7 @@ impl TextureFile {
 // --- from_disk: debug loads source + overwrites cache; release loads cache only ---
 #[cfg(debug_assertions)]
 impl TextureFile {
+    /// Loads a texture from disk, caching it for release builds.
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         let img = image::open(path)
             .map_err(|e| OpticError::new(OpticErrorKind::File, &format!("failed to load image {path}: {e}")))?;
@@ -70,6 +92,7 @@ impl TextureFile {
 
 #[cfg(not(debug_assertions))]
 impl TextureFile {
+    /// Loads a texture from the binary cache (release only).
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         let cache = optic_file::cached_path(path, "otxtr");
         Self::from_cached(&cache)
@@ -78,6 +101,7 @@ impl TextureFile {
 
 // --- binary cache read/write (internal) ---
 impl TextureFile {
+    /// Saves this texture to a binary cache file.
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
         let mut data = Vec::with_capacity(22 + self.bytes.len());
         data.extend_from_slice(&OPTIC_MAGIC);
@@ -99,6 +123,7 @@ impl TextureFile {
         optic_file::write_bytes(path, &data)
     }
 
+    /// Loads a texture from a binary cache file.
     #[cfg_attr(debug_assertions, allow(dead_code))]
     pub(crate) fn from_cached(path: &str) -> OpticResult<Self> {
         let data = optic_file::read_bytes(path)?;

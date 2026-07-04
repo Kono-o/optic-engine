@@ -1,8 +1,12 @@
 [package]
 name = "optic-core"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared types, geometry, errors, and ANSI logging for Optic engine"
 
 [dependencies]
-cgmath = "0.18.0"
+cgmath.workspace = true
 optic-color = { path = "../optic-color" }

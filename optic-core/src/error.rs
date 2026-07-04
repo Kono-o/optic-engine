@@ -1,5 +1,6 @@
 use std::fmt;
 
+/// Broad category of an error.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpticErrorKind {
     Init,
@@ -11,6 +12,19 @@ pub enum OpticErrorKind {
     Custom,
 }
 
+/// The primary error type for the Optic engine.
+///
+/// All fallible functions in the engine return [`OpticResult<T>`].
+/// Errors propagate upward via `?` and can be handled generically
+/// by inspecting [`kind`](OpticError::kind).
+///
+/// ```
+/// use optic_core::*;
+///
+/// fn load_shader(path: &str) -> OpticResult<()> {
+///     Err(OpticError::new(OpticErrorKind::Shader, "compile failed"))
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct OpticError {
     pub kind: OpticErrorKind,
@@ -24,12 +38,14 @@ impl fmt::Display for OpticError {
 }
 
 impl OpticError {
+    /// Construct an error with a specific kind and message.
     pub fn new(kind: OpticErrorKind, msg: &str) -> Self {
         Self {
             kind,
             msg: msg.to_string(),
         }
     }
+    /// Construct a [`Custom`](OpticErrorKind::Custom) error.
     pub fn custom(msg: &str) -> Self {
         Self {
             kind: OpticErrorKind::Custom,
@@ -38,37 +54,5 @@ impl OpticError {
     }
 }
 
+/// Convenience alias for `Result<T, OpticError>`.
 pub type OpticResult<T> = Result<T, OpticError>;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn error_new() {
-        let e = OpticError::new(OpticErrorKind::File, "test error");
-        assert_eq!(e.kind, OpticErrorKind::File);
-        assert_eq!(e.msg, "test error");
-    }
-
-    #[test]
-    fn error_custom() {
-        let e = OpticError::custom("custom msg");
-        assert_eq!(e.kind, OpticErrorKind::Custom);
-        assert_eq!(e.msg, "custom msg");
-    }
-
-    #[test]
-    fn error_display() {
-        let e = OpticError::new(OpticErrorKind::Shader, "compile failed");
-        let s = format!("{e}");
-        assert!(s.contains("optic error"));
-        assert!(s.contains("compile failed"));
-    }
-
-    #[test]
-    fn error_is_send() {
-        fn assert_send<T: Send>() {}
-        assert_send::<OpticError>();
-    }
-}

@@ -10,3 +10,24 @@ members = [
     "optic-online",
     "optic",
 ]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Kono-o"]
+license = "MIT"
+repository = "https://github.com/Kono-o/optic-engine"
+
+[workspace.dependencies]
+cgmath = "0.18.0"
+winit = "0.30.12"
+raw-window-handle = "0.6"
+gilrs = "0.10"
+khronos-egl = { version = "6.0", features = ["static"] }
+gl = "0.14.0"
+image = "0.25.8"
+flate2 = "1.1.2"
+tokio = { version = "1", features = ["rt", "net", "sync", "time", "io-util", "macros"] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

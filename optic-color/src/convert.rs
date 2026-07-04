@@ -1,9 +1,32 @@
 use crate::{HSL, HSV, RGB, RGBA};
 
+/// Trait for types that can be converted to RGBA losslessly.
+///
+/// This is the primary conversion trait in the color system. Any type
+/// implementing `ToRgba` can be used as a color argument anywhere in
+/// the engine:
+///
+/// ```
+/// use optic_color::*;
+///
+/// fn set_color(c: impl ToRgba) {
+///     let rgba = c.to_rgba();
+///     // ...
+/// }
+///
+/// set_color(RED);
+/// set_color(HSV::new(200.0, 0.8, 0.9));
+/// ```
+///
+/// Implemented for [`RGBA`], [`RGB`], [`HSV`], [`HSL`].
 pub trait ToRgba: Copy {
+    /// Convert to RGBA.
     fn to_rgba(self) -> RGBA;
 }
 
+/// Trait for types that can be constructed from RGBA.
+///
+/// Implemented for [`RGBA`], [`RGB`], [`HSV`], [`HSL`].
 pub trait FromRgba: Sized {
     fn from_rgba(rgba: RGBA) -> Self;
 }
@@ -134,22 +157,49 @@ pub(crate) fn rgba_to_hsl(rgba: RGBA) -> HSL {
     HSL { h: h.clamp(0.0, 360.0), s: s.clamp(0.0, 1.0), l: l.clamp(0.0, 1.0) }
 }
 
+/// Trait for computing luminance, contrast, and hex/byte serialization.
+///
+/// This trait has a blanket impl for all [`ToRgba`] types, so every color
+/// type gets these methods automatically:
+///
+/// ```
+/// use optic_color::*;
+///
+/// let c = RGB(0.5, 0.2, 0.8);
+/// let lum = c.luminance();
+/// let hex = c.to_hex();
+/// let (r, g, b, a) = c.to_bytes();
+/// ```
 pub trait ColorInfo: ToRgba {
+    /// Relative luminance per ITU-R BT.709.
+    ///
+    /// Uses the standard coefficients: 0.2126 R + 0.7152 G + 0.0722 B.
     fn luminance(self) -> f32 {
         let c = self.to_rgba();
         0.2126 * c.0 + 0.7152 * c.1 + 0.0722 * c.2
     }
+
+    /// Returns true if the luminance is greater than 0.5.
     fn is_light(self) -> bool { self.luminance() > 0.5 }
+
+    /// Compute the WCAG contrast ratio against another color.
+    ///
+    /// The result is a value in 1..21. WCAG AA requires 4.5:1 for normal
+    /// text; WCAG AAA requires 7:1.
     fn contrast_ratio(self, other: impl ToRgba) -> f32 {
         let l1 = self.luminance();
         let l2 = other.luminance();
         let (lighter, darker) = if l1 > l2 { (l1, l2) } else { (l2, l1) };
         (lighter + 0.05) / (darker + 0.05)
     }
+
+    /// Encode as a hex string: `#RRGGBBAA`.
     fn to_hex(self) -> String {
         let (r, g, b, a) = self.to_bytes();
         format!("#{r:02x}{g:02x}{b:02x}{a:02x}")
     }
+
+    /// Convert to 8-bit byte channels: `(r, g, b, a)` in 0..255.
     fn to_bytes(self) -> (u8, u8, u8, u8) {
         let c = self.to_rgba();
         let r = (c.0.clamp(0.0, 1.0) * 255.0).round() as u8;

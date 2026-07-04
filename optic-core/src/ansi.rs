@@ -1,3 +1,9 @@
+/// ANSI terminal escape pair for colored output.
+///
+/// Used with the [`log_color!`] macro.
+///
+/// Each constant combines a SGR prefix (e.g. `\x1b[31m` for red foreground)
+/// and a reset suffix (`\x1b[0m`).
 pub struct ANSI {
     pub prefix: &'static str,
     pub suffix: &'static str,

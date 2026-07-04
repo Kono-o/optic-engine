@@ -97,6 +97,39 @@ pub(crate) struct InstanceKind {
 
 // ── InstanceDesc3D ────────────────────────────────────────────────────────
 
+/// Descriptor for preparing 3D instance data before uploading it to the GPU.
+///
+/// An instance buffer packs per-instance attributes (position, rotation, scale,
+/// colour, and custom attributes) into a single interleaved GPU buffer. This
+/// type collects attribute data on the CPU side and interleaves them when
+/// [`ship`](InstanceDesc3D::ship) is called.
+///
+/// # Attribute layout
+///
+/// Attributes appear in this fixed order within the interleaved stride:
+///
+/// 1. `pos` — 3 × `f32` (12 bytes)
+/// 2. `rot` — 4 × `f32` quaternion (16 bytes)
+/// 3. `scale` — 3 × `f32` (12 bytes)
+/// 4. `col` — 4 × `f32` RGBA (16 bytes)
+/// 5. custom attributes, in insertion order
+///
+/// Any of these may be omitted (left empty). The stride shrinks accordingly.
+///
+/// # Example
+///
+/// ```
+/// # use optic_render::handles::InstanceDesc3D;
+/// # use cgmath::Vector3;
+/// let mut desc = InstanceDesc3D::empty();
+///
+/// for i in 0..100 {
+///     desc.pos_attr.push([i as f32 * 2.0, 0.0, 0.0]);
+///     desc.col_attr.push([1.0, 0.0, 0.0, 1.0]);
+/// }
+///
+/// // desc.ship() transfers the interleaved data to a GPU buffer.
+/// ```
 pub struct InstanceDesc3D {
     pub pos_attr: Pos3DATTR,
     pub rot_attr: Rot3DATTR,
@@ -106,6 +139,10 @@ pub struct InstanceDesc3D {
 }
 
 impl InstanceDesc3D {
+    /// Creates an empty descriptor with no attributes.
+    ///
+    /// Push per-instance data into the individual attribute fields before calling
+    /// [`ship`](InstanceDesc3D::ship).
     pub fn empty() -> Self {
         Self {
             pos_attr: Pos3DATTR::empty(),
@@ -116,6 +153,9 @@ impl InstanceDesc3D {
         }
     }
 
+    /// Builds a descriptor from an array of 3D positions.
+    ///
+    /// All other attribute fields remain empty.
     pub fn from_positions(positions: &[Vector3<f32>]) -> Self {
         let mut desc = Self::empty();
         for p in positions {
@@ -124,19 +164,26 @@ impl InstanceDesc3D {
         desc
     }
 
+    /// Decomposes a slice of 4×4 transformation matrices into position, rotation
+    /// (quaternion), and scale attributes.
+    ///
+    /// This is a convenience constructor for users who already have transform
+    /// matrices. It assumes no shear and extracts a unit quaternion from the
+    /// upper-left 3×3 sub-matrix.
+    ///
+    /// # Panics
+    ///
+    /// May produce degenerate quaternions when a scale component is zero.
     pub fn from_transforms(transforms: &[Matrix4<f32>]) -> Self {
         let mut desc = Self::empty();
         for m in transforms {
-            // Extract translation
             desc.pos_attr.push([m[3][0], m[3][1], m[3][2]]);
 
-            // Extract scale: lengths of the upper-left 3x3 column vectors
             let sx = Vector3::new(m[0][0], m[1][0], m[2][0]).magnitude();
             let sy = Vector3::new(m[0][1], m[1][1], m[2][1]).magnitude();
             let sz = Vector3::new(m[0][2], m[1][2], m[2][2]).magnitude();
             desc.scale_attr.push([sx, sy, sz]);
 
-            // Extract rotation quaternion from the 3x3 rotation matrix (assuming no shear)
             let r00 = m[0][0] / sx;
             let r01 = m[0][1] / sy;
             let r02 = m[0][2] / sz;
@@ -165,13 +212,28 @@ impl InstanceDesc3D {
         desc
     }
 
+    /// Appends a custom (user-defined) attribute.
+    ///
+    /// Custom attribute names must not collide with the reserved names `iPos`,
+    /// `iRot`, `iScale`, or `iColor`, and must be unique among themselves.
+    ///
+    /// Returns `&mut self` for chaining.
     pub fn attach_custom_attr(&mut self, attr: CustomATTR) -> &mut Self {
         self.cus_attrs.push(attr);
         self
     }
 
+    /// Interleaves all non-empty attributes and uploads them to a new GPU buffer.
+    ///
+    /// Returns an [`InstanceBuffer`] ready for use in instanced draws.
+    ///
+    /// # Errors
+    ///
+    /// - Returns an error if all attributes are empty (no data to upload).
+    /// - Returns an error if non-empty attributes have mismatched element counts.
+    /// - Returns an error if custom attribute names collide with reserved names
+    ///   or each other.
     pub fn ship(&self) -> OpticResult<InstanceBuffer> {
-        // Collect non-empty default attrs
         let count = self.resolve_count();
         let has_any_attr = self.pos_attr.is_empty()
             && self.rot_attr.is_empty()
@@ -186,13 +248,9 @@ impl InstanceDesc3D {
             ));
         }
 
-        // Verify all non-empty attrs have the same count
         self.verify_counts()?;
-
-        // Check custom attr name collisions
         self.verify_custom_names()?;
 
-        // Build slots and interleave
         let slots = build_slots(
             Some(&self.pos_attr),
             Some(&self.rot_attr),
@@ -204,7 +262,6 @@ impl InstanceDesc3D {
         let stride: usize = slots.iter().map(|s| s.size).sum();
         let instance_count = count.unwrap_or(0);
 
-        // Collect raw byte slices for each non-empty attr
         let mut raw: Vec<&[u8]> = Vec::new();
         if !self.pos_attr.is_empty() {
             raw.push(self.pos_attr.data.as_bytes());
@@ -230,7 +287,6 @@ impl InstanceDesc3D {
 
         let layouts: Vec<(ATTRInfo, u32)> = slots.iter().enumerate().map(|(i, s)| (s.info.clone(), i as u32)).collect();
 
-        // Build InstanceKind
         let mut custom_offsets = Vec::new();
         for c in &self.cus_attrs {
             let off = slots.iter()
@@ -254,7 +310,6 @@ impl InstanceDesc3D {
             custom_offsets,
         };
 
-        // Create GL buffer
         let buf_id = create_instance_buffer();
         if !cpu_mirror.is_empty() {
             upload_instance_data(buf_id, &cpu_mirror);
@@ -291,7 +346,7 @@ impl InstanceDesc3D {
     fn verify_counts(&self) -> OpticResult<()> {
         let count = match self.resolve_count() {
             Some(c) => c,
-            None => return Ok(()), // no attrs at all — caught by has_any_attr check above
+            None => return Ok(()),
         };
 
         macro_rules! check {
@@ -345,7 +400,6 @@ impl InstanceDesc3D {
                 ));
             }
         }
-        // Check for duplicates among custom attrs
         for i in 0..self.cus_attrs.len() {
             for j in i + 1..self.cus_attrs.len() {
                 let ni = match &self.cus_attrs[i].info.name { ATTRName::Custom(n) => n, _ => continue };
@@ -364,6 +418,19 @@ impl InstanceDesc3D {
 
 // ── InstanceDesc2D ────────────────────────────────────────────────────────
 
+/// Descriptor for preparing 2D instance data before uploading it to the GPU.
+///
+/// Like [`InstanceDesc3D`], but uses 2-element vectors for position and scale
+/// and single-precision scalars for rotation (angle in radians). The same
+/// interleaving, validation, and upload semantics apply.
+///
+/// # Attribute layout
+///
+/// 1. `pos` — 2 × `f32` (8 bytes)
+/// 2. `rot` — 1 × `f32` angle (4 bytes)
+/// 3. `scale` — 2 × `f32` (8 bytes)
+/// 4. `col` — 4 × `f32` RGBA (16 bytes)
+/// 5. custom attributes, in insertion order
 pub struct InstanceDesc2D {
     pub pos_attr: Pos2DATTR,
     pub rot_attr: Rot2DATTR,
@@ -373,6 +440,7 @@ pub struct InstanceDesc2D {
 }
 
 impl InstanceDesc2D {
+    /// Creates an empty 2D descriptor.
     pub fn empty() -> Self {
         Self {
             pos_attr: Pos2DATTR::empty(),
@@ -383,11 +451,17 @@ impl InstanceDesc2D {
         }
     }
 
+    /// Appends a custom attribute for chaining.
     pub fn attach_custom_attr(&mut self, attr: CustomATTR) -> &mut Self {
         self.cus_attrs.push(attr);
         self
     }
 
+    /// Interleaves all non-empty 2D attributes and uploads to a new GPU buffer.
+    ///
+    /// # Errors
+    ///
+    /// Same error conditions as [`InstanceDesc3D::ship`].
     pub fn ship(&self) -> OpticResult<InstanceBuffer> {
         let has_any_attr = self.pos_attr.is_empty()
             && self.rot_attr.is_empty()
@@ -402,7 +476,6 @@ impl InstanceDesc2D {
             ));
         }
 
-        // Build slots (2D variant — uses the 2D types directly)
         let mut slots = Vec::new();
         let mut offset = 0usize;
 
@@ -422,7 +495,6 @@ impl InstanceDesc2D {
         let count = self.resolve_count();
         let instance_count = count.unwrap_or(0);
 
-        // Collect raw byte slices
         let mut raw: Vec<&[u8]> = Vec::new();
         if !self.pos_attr.is_empty() { raw.push(self.pos_attr.data.as_bytes()); }
         if !self.rot_attr.is_empty() { raw.push(self.rot_attr.data.as_bytes()); }
@@ -438,7 +510,6 @@ impl InstanceDesc2D {
 
         let layouts: Vec<(ATTRInfo, u32)> = slots.iter().enumerate().map(|(i, s)| (s.info.clone(), i as u32)).collect();
 
-        // Build InstanceKind
         let mut custom_offsets = Vec::new();
         for c in &self.cus_attrs {
             let off = slots.iter()
@@ -498,6 +569,68 @@ impl InstanceDesc2D {
 
 // ── InstanceBuffer ────────────────────────────────────────────────────────
 
+/// A GPU buffer of interleaved per-instance attributes with a CPU-side mirror
+/// for random access.
+///
+/// Created by [`InstanceDesc3D::ship`] or [`InstanceDesc2D::ship`]. Each
+/// instance is a single packed row of attributes (position, rotation, scale,
+/// colour, and custom data). The buffer is designed for use with
+/// `glDrawArraysInstanced` / `glDrawElementsInstanced`.
+///
+/// # CPU mirror
+///
+/// An [`InstanceBuffer`] keeps a complete CPU copy of all instance data. This
+/// enables reads and partial writes without a GPU round-trip. Every mutating
+/// method writes through to both the CPU mirror and the GPU buffer
+/// transparently.
+///
+/// | Read method | Source | Latency |
+/// |---|---|---|
+/// | [`get_position`], [`get_color`], [`get_instance`] | CPU mirror | Instant |
+/// | _Read from GPU_ | Not supported | — |
+///
+/// # Growth
+///
+/// The buffer grows or shrinks in place via [`set_instance_count`]. New slots
+/// are filled with defaults:
+///
+/// | Attribute | Default |
+/// |---|---|
+/// | Position | `(0, 0, 0)` |
+/// | Rotation | Identity quaternion `(0, 0, 0, 1)` |
+/// | Scale | `(1, 1, 1)` |
+/// | Colour | White `(1, 1, 1, 1)` |
+///
+/// # Convenience methods
+///
+/// | You want to… | Use |
+/// |---|---|
+/// | Move an instance | [`set_position`] |
+/// | Rotate an instance | [`set_rotation`] |
+/// | Scale an instance | [`set_scale`] |
+/// | Recolour an instance | [`set_color`] |
+/// | Write raw bytes | [`update_instance`] |
+///
+/// # Example
+///
+/// ```ignore
+/// use optic_render::handles::{InstanceBuffer, InstanceDesc3D};
+/// use cgmath::Vector3;
+///
+/// // Create 100 red instances along the x-axis
+/// let mut desc = InstanceDesc3D::empty();
+/// for i in 0..100 {
+///     desc.pos_attr.push([i as f32 * 2.0, 0.0, 0.0]);
+///     desc.col_attr.push([1.0, 0.0, 0.0, 1.0]);
+/// }
+/// let mut buffer = desc.ship()?;
+///
+/// // Re-position instance 5
+/// buffer.set_position(5, Vector3::new(20.0, 0.0, 0.0))?;
+///
+/// // Add 50 more instances at the end
+/// buffer.set_instance_count(150);
+/// ```
 pub struct InstanceBuffer {
     pub(crate) buf_id: u32,
     pub(crate) capacity: u32,
@@ -509,9 +642,39 @@ pub struct InstanceBuffer {
 }
 
 impl InstanceBuffer {
+    /// Returns the number of active instances.
     pub fn count(&self) -> u32 { self.count }
+
+    /// Returns the total capacity (allocated slots, may be larger than count).
     pub fn capacity(&self) -> u32 { self.capacity }
 
+    /// Updates a single attribute of one instance by attribute index.
+    ///
+    /// This is the lowest-level update — it writes raw bytes into both the CPU
+    /// mirror and the GPU buffer in one operation. The `attr_index` refers to
+    /// the attribute's position in the interleaved layout (0 = first attribute).
+    ///
+    /// For convenience wrappers, see:
+    ///
+    /// | Attribute | Convenience method |
+    /// |---|---|
+    /// | Position (3D) | [`set_position`](Self::set_position) |
+    /// | Rotation (3D) | [`set_rotation`](Self::set_rotation) |
+    /// | Scale (3D) | [`set_scale`](Self::set_scale) |
+    /// | Colour | [`set_color`](Self::set_color) |
+    /// | Custom (by name) | [`update_custom`](Self::update_custom) |
+    ///
+    /// # Type safety
+    ///
+    /// `value` must be a [`DataType`] whose byte count, element count, and
+    /// format exactly match the attribute's declared type. A mismatch produces
+    /// a descriptive error at runtime.
+    ///
+    /// # Errors
+    ///
+    /// - `index` >= `count` — instance index out of bounds.
+    /// - `attr_index` out of range — invalid attribute slot.
+    /// - `D`'s type parameters do not match the attribute slot.
     pub fn update_instance<D: DataType>(&mut self, index: u32, attr_index: usize, value: D) -> OpticResult<()> {
         if index >= self.count {
             return Err(OpticError::new(OpticErrorKind::Custom, &format!("instance index {index} out of bounds (count: {})", self.count)));
@@ -545,15 +708,26 @@ impl InstanceBuffer {
             )));
         }
 
-        // Write to CPU mirror
         self.cpu_mirror[off..off + size].copy_from_slice(&bytes);
-
-        // Upload just this instance
         subfill_instance_data(self.buf_id, off, &bytes);
 
         Ok(())
     }
 
+    /// Reads a single attribute of one instance from the CPU mirror.
+    ///
+    /// This is the lowest-level read. It copies bytes from the CPU mirror and
+    /// deserialises them into `D`. The GPU buffer is **not** touched — once an
+    /// instance buffer is shipped, data flows from the CPU mirror to the GPU,
+    /// never the other way.
+    ///
+    /// For convenience readers, see [`get_position`](Self::get_position),
+    /// [`get_rotation`](Self::get_rotation), [`get_scale`](Self::get_scale),
+    /// [`get_color`](Self::get_color), and [`get_custom`](Self::get_custom).
+    ///
+    /// # Errors
+    ///
+    /// Same as [`update_instance`](Self::update_instance).
     pub fn get_instance<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D> {
         if index >= self.count {
             return Err(OpticError::new(OpticErrorKind::Custom, &format!("instance index {index} out of bounds (count: {})", self.count)));
@@ -581,11 +755,22 @@ impl InstanceBuffer {
         let size = slot_info.elem_count * slot_info.byte_count;
         let raw = &self.cpu_mirror[off..off + size];
 
-        // Reconstruct D from raw bytes
         let d = deserialize::<D>(raw);
         Ok(d)
     }
 
+    /// Updates a custom attribute of one instance by name.
+    ///
+    /// Use this when you defined a custom attribute via
+    /// [`InstanceDesc3D::attach_custom_attr`] or
+    /// [`InstanceDesc2D::attach_custom_attr`] and ship with that descriptor.
+    /// The attribute is looked up by name (not by index), making this robust
+    /// against layout reordering.
+    ///
+    /// # Errors
+    ///
+    /// - No custom attribute with that name exists.
+    /// - `D`'s type parameters do not match the attribute's declared format.
     pub fn update_custom<D: DataType>(&mut self, index: u32, name: &str, value: D) -> OpticResult<()> {
         let slot = self.kind.custom_offsets.iter().find(|s| s.name == name)
             .ok_or_else(|| OpticError::new(OpticErrorKind::Custom, &format!("custom attribute \"{name}\" not found")))?;
@@ -609,6 +794,13 @@ impl InstanceBuffer {
         Ok(())
     }
 
+    /// Reads a custom attribute of one instance by name.
+    ///
+    /// Does **not** read back from the GPU.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`update_custom`](InstanceBuffer::update_custom).
     pub fn get_custom<D: DataType>(&self, index: u32, name: &str) -> OpticResult<D> {
         let slot = self.kind.custom_offsets.iter().find(|s| s.name == name)
             .ok_or_else(|| OpticError::new(OpticErrorKind::Custom, &format!("custom attribute \"{name}\" not found")))?;
@@ -628,14 +820,32 @@ impl InstanceBuffer {
         Ok(deserialize::<D>(raw))
     }
 
+    /// Sets the position of a single instance in world space.
+    ///
+    /// This is a typed convenience over [`update_instance`](Self::update_instance).
+    /// It automatically resolves `attr_index = 0` and converts the `cgmath`
+    /// vector to the raw `[f32; 3]` the GPU expects.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no position attribute (i.e. the
+    /// descriptor that created it did not push to `pos_attr`).
     pub fn set_position(&mut self, index: u32, pos: Vector3<f32>) -> OpticResult<()> {
         if !self.kind.has_pos {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no position attribute"));
         }
-        let attr_index = 0; // pos is always first if present
+        let attr_index = 0;
         self.update_instance(index, attr_index, [pos.x, pos.y, pos.z])
     }
 
+    /// Returns the position of a single instance from the CPU mirror.
+    ///
+    /// The counterpart to [`set_position`](Self::set_position). Reads raw bytes
+    /// from the CPU mirror and wraps them back into a `cgmath::Vector3`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no position attribute.
     pub fn get_position(&self, index: u32) -> OpticResult<Vector3<f32>> {
         if !self.kind.has_pos {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no position attribute"));
@@ -644,6 +854,24 @@ impl InstanceBuffer {
         Ok(Vector3::new(arr[0], arr[1], arr[2]))
     }
 
+    /// Sets the rotation quaternion of a single instance.
+    ///
+    /// The quaternion is stored as `[x, y, z, w]` in the interleaved buffer.
+    /// Use `cgmath::Quaternion::new(w, x, y, z)` to construct the value, then
+    /// pass `.v` (a `Vector4`) or a raw `Vector4` to this method.
+    ///
+    /// # Attribute-index resolution
+    ///
+    /// The method skips past the position attribute if present:
+    ///
+    /// | Layout | attr_index passed to [`update_instance`] |
+    /// |---|---|
+    /// | Position + Rotation | 1 |
+    /// | Rotation only | 0 |
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no rotation attribute.
     pub fn set_rotation(&mut self, index: u32, rot: Vector4<f32>) -> OpticResult<()> {
         if !self.kind.has_rot {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no rotation attribute"));
@@ -652,6 +880,14 @@ impl InstanceBuffer {
         self.update_instance(index, attr_index, [rot.x, rot.y, rot.z, rot.w])
     }
 
+    /// Returns the rotation quaternion of a single instance.
+    ///
+    /// The counterpart to [`set_rotation`](Self::set_rotation). Uses the same
+    /// attribute-index resolution logic to locate the correct slot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no rotation attribute.
     pub fn get_rotation(&self, index: u32) -> OpticResult<Vector4<f32>> {
         if !self.kind.has_rot {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no rotation attribute"));
@@ -661,6 +897,19 @@ impl InstanceBuffer {
         Ok(Vector4::new(arr[0], arr[1], arr[2], arr[3]))
     }
 
+    /// Sets the scale of a single instance.
+    ///
+    /// Each component is applied independently — use a uniform scale like
+    /// `Vector3::new(2.0, 2.0, 2.0)` for isotropic scaling or vary components
+    /// for non-uniform stretching.
+    ///
+    /// # Attribute-index resolution
+    ///
+    /// Skips past position and rotation attributes if present.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no scale attribute.
     pub fn set_scale(&mut self, index: u32, scale: Vector3<f32>) -> OpticResult<()> {
         if !self.kind.has_scale {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no scale attribute"));
@@ -670,6 +919,14 @@ impl InstanceBuffer {
         self.update_instance(index, attr_index, [scale.x, scale.y, scale.z])
     }
 
+    /// Returns the scale of a single instance.
+    ///
+    /// The counterpart to [`set_scale`](Self::set_scale). Uses the same
+    /// attribute-index resolution logic.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no scale attribute.
     pub fn get_scale(&self, index: u32) -> OpticResult<Vector3<f32>> {
         if !self.kind.has_scale {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no scale attribute"));
@@ -677,12 +934,24 @@ impl InstanceBuffer {
         let mut attr_index = 0u32;
         if self.kind.has_pos { attr_index += 1; }
         if self.kind.has_rot { attr_index += 1; }
-        // attr_index is now at scale (always after pos/rot if present)
         let actual_idx = attr_index as usize;
         let arr: [f32; 3] = self.get_instance(index, actual_idx)?;
         Ok(Vector3::new(arr[0], arr[1], arr[2]))
     }
 
+    /// Sets the colour of a single instance.
+    ///
+    /// Accepts an [`optic_core::RGBA`] value constructed with
+    /// [`RGBA::new(r, g, b, a)`](optic_core::RGBA::new) or from an integer hex
+    /// like [`RGBA::from(0xFF8800FF)`](optic_core::RGBA#impl-From<u32>).
+    ///
+    /// # Attribute-index resolution
+    ///
+    /// Skips past position, rotation, and scale attributes if present.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no colour attribute.
     pub fn set_color(&mut self, index: u32, color: optic_core::RGBA) -> OpticResult<()> {
         if !self.kind.has_col {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no color attribute"));
@@ -695,6 +964,14 @@ impl InstanceBuffer {
         self.update_instance(index, attr_index as usize, rgba)
     }
 
+    /// Returns the colour of a single instance.
+    ///
+    /// The counterpart to [`set_color`](Self::set_color). Uses the same
+    /// attribute-index resolution logic. Returns an [`optic_core::RGBA`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no colour attribute.
     pub fn get_color(&self, index: u32) -> OpticResult<optic_core::RGBA> {
         if !self.kind.has_col {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no color attribute"));
@@ -709,19 +986,45 @@ impl InstanceBuffer {
 
     // ── Growth / shrink ──────────────────────────────────────────────────────
 
+    /// Resizes the instance count, filling new slots with defaults.
+    ///
+    /// Use this to add or remove instances at the end of the buffer without
+    /// creating a new descriptor and re-shipping. New slots are filled with
+    /// sensible defaults:
+    ///
+    /// | Attribute | Default |
+    /// |---|---|
+    /// | Position | `(0, 0, 0)` |
+    /// | Rotation | Identity quaternion `(0, 0, 0, 1)` |
+    /// | Scale | `(1, 1, 1)` |
+    /// | Colour | White `(1, 1, 1, 1)` |
+    ///
+    /// # Capacity
+    ///
+    /// If `new_count` exceeds the current capacity the allocation doubles each
+    /// time (amortized O(1) growth). If `new_count` is smaller, excess
+    /// instances become inaccessible but memory is **not** reclaimed — call
+    /// [`shrink_to_fit`](Self::shrink_to_fit) if the buffer is persistently
+    /// oversized.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// # let mut buffer: InstanceBuffer = desc.ship()?;
+    /// buffer.set_instance_count(200);  // grow from 100 to 200
+    /// buffer.set_instance_count(50);   // shrink: last 150 are inaccessible
+    /// buffer.shrink_to_fit();          // release GPU memory
+    /// ```
     pub fn set_instance_count(&mut self, new_count: u32) {
         if new_count > self.capacity {
-            // Grow with amortized doubling
             let new_cap = new_count.max(self.capacity * 2);
             self.reserve_internal(new_cap);
         }
         if new_count > self.count {
-            // Fill new slots with defaults
             let old_count = self.count as usize;
             let new_count_usize = new_count as usize;
             let stride = self.stride as usize;
             self.cpu_mirror.resize(new_count_usize * stride, 0u8);
-            // Set defaults for new slots: pos=(0,0,0), rot=(0,0,0,1), scale=(1,1,1), col=white
             let default_slot = self.make_default_instance_bytes();
             for i in old_count..new_count_usize {
                 let off = i * stride;
@@ -732,6 +1035,9 @@ impl InstanceBuffer {
         upload_instance_data(self.buf_id, &self.cpu_mirror);
     }
 
+    /// Reserves capacity for `additional` extra instances without changing the
+    /// active count. Useful before a batch of [`push_raw`](Self::push_raw)
+    /// calls to avoid repeated reallocations.
     pub fn reserve(&mut self, additional: u32) {
         let needed = self.count + additional;
         if needed > self.capacity {
@@ -740,6 +1046,11 @@ impl InstanceBuffer {
         }
     }
 
+    /// Shrinks the GPU allocation to exactly fit the current instance count.
+    ///
+    /// Use after a large [`set_instance_count`](Self::set_instance_count) shrink
+    /// to free GPU memory. Calling this frequently (e.g. every frame) may
+    /// cause performance churn.
     pub fn shrink_to_fit(&mut self) {
         if self.count < self.capacity {
             let new_cap = self.count;
@@ -748,6 +1059,16 @@ impl InstanceBuffer {
         }
     }
 
+    /// Appends a raw, pre-interleaved instance at the end of the buffer.
+    ///
+    /// Use this when you have already packed instance bytes (e.g. from reading
+    /// a binary file or from a previous buffer's CPU mirror). For structured
+    /// appends, prefer [`set_instance_count`](Self::set_instance_count) plus
+    /// the typed setters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `bytes.len()` does not match `self.stride`.
     pub fn push_raw(&mut self, bytes: &[u8]) -> OpticResult<u32> {
         if bytes.len() != self.stride as usize {
             return Err(OpticError::new(
@@ -763,6 +1084,17 @@ impl InstanceBuffer {
         Ok(idx)
     }
 
+    /// Removes the instance at `index` by swapping it with the last instance
+    /// (unordered, O(1)).
+    ///
+    /// This is the fastest removal — it simply copies the last instance over
+    /// the target and decrements the count. Instance ordering is **not**
+    /// preserved. Use [`remove_instance_ordered`](Self::remove_instance_ordered)
+    /// if index stability matters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `index >= count`.
     pub fn remove_instance(&mut self, index: u32) -> OpticResult<()> {
         if index >= self.count {
             return Err(OpticError::new(OpticErrorKind::Custom, &format!("remove index {index} out of bounds (count: {})", self.count)));
@@ -780,6 +1112,11 @@ impl InstanceBuffer {
         Ok(())
     }
 
+    /// Removes the instance at `index` while preserving the order of remaining
+    /// instances (O(n)).
+    ///
+    /// Shifts all subsequent instances down by one. Prefer the O(1) unordered
+    /// [`remove_instance`](Self::remove_instance) when order does not matter.
     pub fn remove_instance_ordered(&mut self, index: u32) -> OpticResult<()> {
         if index >= self.count {
             return Err(OpticError::new(OpticErrorKind::Custom, &format!("remove index {index} out of bounds (count: {})", self.count)));
@@ -798,8 +1135,15 @@ impl InstanceBuffer {
 
     // ── Whole-buffer / ranged updates ────────────────────────────────────────
 
+    /// Replaces the entire buffer's data from a 3D instance descriptor.
+    ///
+    /// This is a full re-ship: the old GPU buffer handle is replaced and the
+    /// old handle is **leaked**. If you need explicit GPU-side cleanup, free
+    /// the old handle via `glDeleteBuffers` before calling this method.
+    ///
+    /// Use this when the attribute layout has changed (e.g. added or removed
+    /// a custom attribute) so the old interleaved format is incompatible.
     pub fn write_all(&mut self, desc: &InstanceDesc3D) -> OpticResult<()> {
-        // Re-ship to validate, then take the data
         let new_buf = desc.ship()?;
         self.buf_id = new_buf.buf_id;
         self.capacity = new_buf.capacity;
@@ -811,6 +1155,16 @@ impl InstanceBuffer {
         Ok(())
     }
 
+    /// Overwrites a contiguous range of instances with raw interleaved bytes.
+    ///
+    /// Useful when you have pre-computed instance data externally (e.g. a
+    /// particle system updating all particles each frame). The byte slice must
+    /// be aligned to `stride` boundaries.
+    ///
+    /// # Errors
+    ///
+    /// - `bytes.len()` is not a multiple of `stride`.
+    /// - The range `[start, start + instance_count)` exceeds `self.count`.
     pub fn write_range(&mut self, start: u32, bytes: &[u8]) -> OpticResult<()> {
         let stride = self.stride as usize;
         if bytes.len() % stride != 0 {
@@ -847,7 +1201,6 @@ impl InstanceBuffer {
         let old_size = self.cpu_mirror.len();
         let new_size = new_cap as usize * self.stride as usize;
         self.cpu_mirror.resize(new_size, 0u8);
-        // Fill the newly added capacity with defaults
         let stride = self.stride as usize;
         let default_slot = self.make_default_instance_bytes();
         for i in (old_size / stride)..new_cap as usize {
@@ -866,15 +1219,13 @@ impl InstanceBuffer {
             // pos = (0,0,0) is already zero
         }
         if self.kind.has_rot {
-            let off = if self.kind.has_pos { 12 } else { 0 }; // 3 * 4 bytes
-            // quaternion identity = (0,0,0,1)
+            let off = if self.kind.has_pos { 12 } else { 0 };
             bytes[off + 12..off + 16].copy_from_slice(&1.0f32.to_le_bytes());
         }
         if self.kind.has_scale {
             let mut off = 0usize;
             if self.kind.has_pos { off += 12; }
             if self.kind.has_rot { off += 16; }
-            // scale = (1,1,1)
             bytes[off..off + 4].copy_from_slice(&1.0f32.to_le_bytes());
             bytes[off + 4..off + 8].copy_from_slice(&1.0f32.to_le_bytes());
             bytes[off + 8..off + 12].copy_from_slice(&1.0f32.to_le_bytes());
@@ -884,7 +1235,6 @@ impl InstanceBuffer {
             if self.kind.has_pos { off += 12; }
             if self.kind.has_rot { off += 16; }
             if self.kind.has_scale { off += 12; }
-            // color = white (1,1,1,1)
             for i in 0..4 {
                 bytes[off + i * 4..off + (i + 1) * 4].copy_from_slice(&1.0f32.to_le_bytes());
             }
@@ -949,7 +1299,6 @@ impl<T> AsCount for Vec<T> {
     fn is_empty(&self) -> bool { self.is_empty() }
 }
 
-// If CustomAttr doesn't implement AsCount naturally (it uses Vec<u8>), we implement it:
 impl AsCount for CustomATTR {
     fn len(&self) -> usize {
         if self.info.elem_count == 0 || self.info.byte_count == 0 { return 0; }
@@ -961,11 +1310,6 @@ impl AsCount for CustomATTR {
 // ── Deserialize helper ─────────────────────────────────────────────────────
 
 fn deserialize<D: DataType>(bytes: &[u8]) -> D {
-    // DataType is implemented for scalars (f32, u32, etc.) and arrays ([f32; 3], etc.)
-    // We need to reconstruct D from its raw bytes using the same layout as u8ify.
-
-    // Use std::mem::transmute-like approach via from_ne_bytes / from_raw_parts
-    // D is either a scalar or a fixed-size array.
     unsafe {
         let ptr = bytes.as_ptr() as *const D;
         std::ptr::read_unaligned(ptr)

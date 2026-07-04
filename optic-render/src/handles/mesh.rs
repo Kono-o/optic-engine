@@ -12,6 +12,11 @@ use crate::asset::attr::DataType;
 use crate::handles::instance::InstanceBuffer;
 use crate::handles::Shader;
 
+/// Low-level OpenGL mesh handle wrapping VAO, VBO, IBO, and instance state.
+///
+/// Created by [`Mesh3DFile::ship`](crate::asset::Mesh3DFile::ship) or
+/// [`Mesh2DFile::ship`](crate::asset::Mesh2DFile::ship). Contains the vertex
+/// layouts, draw mode, index state, and instance buffer binding.
 #[derive(Clone, Debug)]
 pub struct MeshHandle {
     pub layouts: Vec<(ATTRInfo, u32)>,
@@ -28,6 +33,7 @@ pub struct MeshHandle {
 }
 
 impl MeshHandle {
+    /// Issues the draw call for this mesh (instanced or non-instanced, indexed or array).
     pub fn draw(&self) {
         GL::bind_vao(self.vao_id);
         if self.instance_buf_id != 0 && self.instance_count > 0 {
@@ -89,6 +95,10 @@ impl MeshHandle {
         }
     }
 
+    /// Binds an instance buffer to this mesh for instanced rendering.
+    ///
+    /// Instance attributes are appended after the vertex attributes using
+    /// `glVertexAttribDivisor(1)`.
     pub fn set_instances(&mut self, buffer: &InstanceBuffer) {
         if buffer.count() == 0 {
             self.instance_buf_id = 0;
@@ -113,6 +123,9 @@ impl MeshHandle {
         self.instance_count = buffer.count();
     }
 
+    /// Updates a single vertex attribute value on the GPU.
+    ///
+    /// The type `D` must match the attribute's declared type at creation time.
     pub fn update_vertex<D: DataType>(&self, index: u32, attr_index: usize, value: D) -> OpticResult<()> {
         if index >= self.vert_count {
             return Err(OpticError::new(
@@ -146,6 +159,7 @@ impl MeshHandle {
         Ok(())
     }
 
+    /// Reads a single vertex attribute value from the GPU.
     pub fn get_vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D> {
         if index >= self.vert_count {
             return Err(OpticError::new(
@@ -188,6 +202,9 @@ impl MeshHandle {
         Ok(unsafe { std::ptr::read_unaligned(data.as_ptr() as *const D) })
     }
 
+    /// Writes raw vertex data starting at `start_vertex`.
+    ///
+    /// `data` length must be a multiple of the vertex stride.
     pub fn write_range(&self, start_vertex: u32, data: &[u8]) -> OpticResult<()> {
         let stride = self.vert_stride as usize;
         if data.len() % stride != 0 {
@@ -217,6 +234,7 @@ impl MeshHandle {
         offset
     }
 
+    /// Deletes the VAO, VBO, and IBO from the GPU.
     pub fn delete(self) {
         unsafe {
             gl::DeleteVertexArrays(1, &self.vao_id);
@@ -239,6 +257,9 @@ fn match_draw_mode(dm: &DrawMode) -> GLenum {
 
 macro_rules! mesh_struct {
     ($mesh:ident, $transform:ty) => {
+        /// High-level mesh with visibility, shader, transform, and draw mode.
+        ///
+        /// Cloning is cheap — the handle shares the same GPU buffers.
         #[derive(Clone, Debug)]
         pub struct $mesh {
             pub visibility: bool,
@@ -249,27 +270,43 @@ macro_rules! mesh_struct {
         }
 
         impl $mesh {
+            /// Attaches a shader to this mesh.
             pub fn set_shader(&mut self, shader: Shader) { self.shader = Some(shader); }
+            /// Detaches the current shader.
             pub fn remove_shader(&mut self) { self.shader = None; }
+            /// Returns the current draw mode.
             pub fn get_draw_mode(&self) -> DrawMode { self.handle.draw_mode }
+            /// Sets the draw mode.
             pub fn set_draw_mode(&mut self, draw_mode: DrawMode) { self.handle.draw_mode = draw_mode; }
+            /// Returns the index count.
             pub fn index_count(&self) -> u32 { self.handle.ind_count }
+            /// Returns the vertex count.
             pub fn vertex_count(&self) -> u32 { self.handle.vert_count }
+            /// Returns `true` if this mesh uses indexed drawing.
             pub fn has_indices(&self) -> bool { self.handle.has_indices }
+            /// Returns `true` when the mesh has no vertices.
             pub fn is_empty(&self) -> bool { self.vertex_count() == 0 }
+            /// Returns `true` when the mesh is both visible and non-empty.
             pub fn is_visible(&self) -> bool { self.visibility && !self.is_empty() }
+            /// Shows or hides this mesh.
             pub fn set_visibility(&mut self, enable: bool) { self.visibility = enable; }
+            /// Toggles visibility.
             pub fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
+            /// Recomputes the transformation matrix.
             pub fn update(&mut self) { self.transform.calc_matrix(); }
+            /// Deletes the GPU resources for this mesh's handle.
             pub fn delete(self) { self.handle.delete(); }
         }
     };
 }
 
+// A 3D mesh with position, rotation, and scale.
 mesh_struct!(Mesh3D, crate::util::transform::Transform3D);
+// A 2D mesh with position, rotation, scale, and layer.
 mesh_struct!(Mesh2D, crate::util::transform::Transform2D);
 
 impl Mesh3D {
+    /// Prints debug information about this mesh to stdout.
     pub fn log_info(&self) {
         let shader_id = self.shader.as_ref().map(|s| s.id).unwrap_or(0);
         let mode = format!("{:?}", self.get_draw_mode());
@@ -287,6 +324,10 @@ impl Mesh3D {
         );
     }
 
+    /// Renders this mesh with the given view and projection matrices.
+    ///
+    /// Binds the shader, sets `uView`, `uProj`, `uTfm` uniforms, binds
+    /// textures and storage buffers, then issues the draw call.
     pub fn render(&self, view: &cgmath::Matrix4<f32>, proj: &cgmath::Matrix4<f32>) {
         if !self.is_visible() { return; }
         let shader = match &self.shader { None => return, Some(sh) => sh };
@@ -303,6 +344,7 @@ impl Mesh3D {
 }
 
 impl Mesh2D {
+    /// Prints debug information about this mesh to stdout.
     pub fn log_info(&self) {
         let shader_id = self.shader.as_ref().map(|s| s.id).unwrap_or(0);
         let mode = format!("{:?}", self.get_draw_mode());
@@ -320,6 +362,10 @@ impl Mesh2D {
         );
     }
 
+    /// Renders this 2D mesh with an orthographic projection matrix.
+    ///
+    /// Sets `uProj`, `uTfm`, `uLayer` uniforms, binds textures and
+    /// storage buffers, then issues the draw call.
     pub fn render(&self, proj: &cgmath::Matrix4<f32>) {
         if !self.is_visible() { return; }
         let shader = match &self.shader { None => return, Some(sh) => sh };
@@ -337,6 +383,7 @@ impl Mesh2D {
     }
 }
 
+/// Creates a VAO + VBO pair and returns their IDs.
 pub fn create_mesh_buffer() -> (u32, u32) {
     let (mut v_id, mut b_id) = (0u32, 0u32);
     unsafe {
@@ -346,6 +393,7 @@ pub fn create_mesh_buffer() -> (u32, u32) {
     (v_id, b_id)
 }
 
+/// Configures a vertex attribute pointer for the given layout.
 pub fn set_attr_layout(attr: &ATTRInfo, attr_id: u32, stride: usize, local_offset: usize) {
     unsafe {
         gl::VertexAttribPointer(
@@ -363,6 +411,7 @@ pub fn set_attr_layout(attr: &ATTRInfo, attr_id: u32, stride: usize, local_offse
     }
 }
 
+/// Uploads data to a VBO (full buffer replace).
 pub fn fill_buffer(id: u32, data: &[u8]) {
     unsafe {
         GL::bind_buffer(id);
@@ -375,6 +424,7 @@ pub fn fill_buffer(id: u32, data: &[u8]) {
     }
 }
 
+/// Uploads data to a sub-range of a VBO.
 pub fn subfill_buffer(id: u32, offset: usize, data: &[u8]) {
     unsafe {
         GL::bind_buffer(id);
@@ -387,6 +437,7 @@ pub fn subfill_buffer(id: u32, offset: usize, data: &[u8]) {
     }
 }
 
+/// Resizes a VBO without uploading data (contents become undefined).
 pub fn resize_buffer(id: u32, size: usize) {
     unsafe {
         GL::bind_buffer(id);
@@ -399,12 +450,14 @@ pub fn resize_buffer(id: u32, size: usize) {
     }
 }
 
+/// Creates an IBO (element array buffer) and returns its ID.
 pub fn create_index_buffer() -> u32 {
     let mut id = 0u32;
     unsafe { gl::GenBuffers(1, &mut id); }
     id
 }
 
+/// Uploads index data to an IBO.
 pub fn fill_index_buffer(id: u32, data: &[u32]) {
     unsafe {
         GL::bind_ebo(id);
@@ -417,18 +470,33 @@ pub fn fill_index_buffer(id: u32, data: &[u32]) {
     }
 }
 
+/// A GPU-side shader storage buffer (SSBO) for compute or vertex pulling.
+///
+/// Supports dynamic resizing, filling, sub-range updates, and read-back.
+///
+/// # Example
+///
+/// ```ignore
+/// use optic_render::handles::StorageBuffer;
+///
+/// let mut ssbo = StorageBuffer::new(1024);
+/// ssbo.fill(&[1u8; 1024]);
+/// let data = ssbo.fetch();
+/// ```
 pub struct StorageBuffer {
     pub id: u32,
     pub size: usize,
 }
 
 impl StorageBuffer {
+    /// Creates a new SSBO with the given byte size (zero-initialised).
     pub fn new(size: usize) -> Self {
         let id = create_storage_buffer();
         resize_storage_buffer(id, size);
         Self { id, size }
     }
 
+    /// Resizes the buffer (contents become undefined if size changed).
     pub fn resize(&mut self, size: usize) {
         self.bind();
         if size != self.size {
@@ -437,12 +505,14 @@ impl StorageBuffer {
         }
     }
 
+    /// Replaces the full buffer contents.
     pub fn fill(&mut self, data: &[u8]) {
         self.bind();
         self.resize(data.len());
         fill_storage_buffer(self.id, data);
     }
 
+    /// Writes data at a byte offset, growing the buffer if needed.
     pub fn subfill(&mut self, offset: usize, data: &[u8]) {
         self.bind();
         let len = data.len() + offset;
@@ -450,11 +520,13 @@ impl StorageBuffer {
         subfill_storage_buffer(self.id, offset, data);
     }
 
+    /// Reads the entire buffer back to the CPU.
     pub fn fetch(&self) -> Vec<u8> {
         self.bind();
         read_storage_buffer(self.id, self.size)
     }
 
+    /// Deletes the GPU buffer.
     pub fn delete(self) {
         unsafe { gl::DeleteBuffers(1, &self.id); }
     }
@@ -518,6 +590,19 @@ fn read_storage_buffer(id: u32, size: usize) -> Vec<u8> {
         );
     }
     data
+}
+
+fn match_attr_type(attr_type: &ATTRType) -> GLenum {
+    match attr_type {
+        ATTRType::I8 => gl::BYTE,
+        ATTRType::U8 => gl::UNSIGNED_BYTE,
+        ATTRType::I16 => gl::SHORT,
+        ATTRType::U16 => gl::UNSIGNED_SHORT,
+        ATTRType::I32 => gl::INT,
+        ATTRType::U32 => gl::UNSIGNED_INT,
+        ATTRType::F32 => gl::FLOAT,
+        ATTRType::F64 => gl::DOUBLE,
+    }
 }
 
 #[cfg(test)]
@@ -748,18 +833,5 @@ mod tests {
         let sb = StorageBuffer { id: 0, size: 0 };
         assert_eq!(sb.id, 0);
         assert_eq!(sb.size, 0);
-    }
-}
-
-fn match_attr_type(attr_type: &ATTRType) -> GLenum {
-    match attr_type {
-        ATTRType::I8 => gl::BYTE,
-        ATTRType::U8 => gl::UNSIGNED_BYTE,
-        ATTRType::I16 => gl::SHORT,
-        ATTRType::U16 => gl::UNSIGNED_SHORT,
-        ATTRType::I32 => gl::INT,
-        ATTRType::U32 => gl::UNSIGNED_INT,
-        ATTRType::F32 => gl::FLOAT,
-        ATTRType::F64 => gl::DOUBLE,
     }
 }

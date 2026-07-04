@@ -2,6 +2,11 @@ use optic_core::ATTRType;
 
 use crate::asset::attr::DataType;
 
+/// Discriminated name for a vertex or instance attribute.
+///
+/// Built-in names cover the standard attributes used by Optic's mesh and instance
+/// system. The [`Custom`](ATTRName::Custom) variant allows user-defined names for
+/// shader-specific data.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ATTRName {
     Custom(String),
@@ -18,6 +23,7 @@ pub enum ATTRName {
 }
 
 impl ATTRName {
+    /// Returns a human-readable label for this attribute name.
     pub fn as_string(&self) -> String {
         match self {
             ATTRName::Pos2D => "pos2d".into(),
@@ -35,6 +41,10 @@ impl ATTRName {
     }
 }
 
+/// Describes a single vertex or instance attribute: name, GL type, byte size, element count.
+///
+/// Used internally to configure VAO attribute pointers and to validate type matches
+/// at runtime (e.g. in [`MeshHandle::update_vertex`](crate::handles::MeshHandle::update_vertex)).
 #[derive(Clone, Debug)]
 pub struct ATTRInfo {
     pub name: ATTRName,
@@ -44,6 +54,7 @@ pub struct ATTRInfo {
 }
 
 impl ATTRInfo {
+    /// Creates an empty descriptor with default name `Pos3D` and zero sizes.
     pub fn empty() -> Self {
         Self {
             name: ATTRName::Pos3D,
@@ -53,6 +64,7 @@ impl ATTRInfo {
         }
     }
 
+    /// Returns a human-readable type string like `"f32"` or `"[f32;3]"`.
     pub fn fmt_as_string(&self) -> String {
         let typ_str = match self.typ {
             ATTRType::U8 => "u8",
@@ -73,7 +85,8 @@ impl ATTRInfo {
 }
 
 macro_rules! attr {
-    ($attr:ident, $typ:ty, $name:expr) => {
+    ($(#[$meta:meta])* $attr:ident, $typ:ty, $name:expr) => {
+        $(#[$meta])*
         #[derive(Debug, Clone)]
         pub struct $attr {
             pub data: Vec<$typ>,
@@ -113,17 +126,40 @@ macro_rules! attr {
     };
 }
 
+// 3D position attribute (`[f32; 3]` per vertex).
 attr!(Pos3DATTR, [f32; 3], ATTRName::Pos3D);
+// 2D position attribute (`[f32; 2]` per vertex).
 attr!(Pos2DATTR, [f32; 2], ATTRName::Pos2D);
+// RGBA colour attribute (`[f32; 4]` per vertex).
 attr!(ColATTR, [f32; 4], ATTRName::Col);
+// UV / texture coordinate attribute (`[f32; 2]` per vertex).
 attr!(UVMATTR, [f32; 2], ATTRName::UVM);
+// Normal vector attribute (`[f32; 3]` per vertex).
 attr!(NrmATTR, [f32; 3], ATTRName::Nrm);
+// Index attribute (`u32` per element).
 attr!(IndATTR, u32, ATTRName::Ind);
+// 3D rotation as a quaternion (`[f32; 4]` per instance).
 attr!(Rot3DATTR, [f32; 4], ATTRName::Rot3D);
+// 2D rotation as a single angle in degrees (`f32` per instance).
 attr!(Rot2DATTR, f32, ATTRName::Rot2D);
+// 3D scale (`[f32; 3]` per instance).
 attr!(Scale3DATTR, [f32; 3], ATTRName::Scale3D);
+// 2D scale (`[f32; 2]` per instance).
 attr!(Scale2DATTR, [f32; 2], ATTRName::Scale2D);
 
+/// User-defined vertex or instance attribute with arbitrary byte data.
+///
+/// Create via [`CustomATTR::empty`] or [`CustomATTR::from`] parameterised by a
+/// [`DataType`], then push elements with [`CustomATTR::push`].
+///
+/// # Example
+///
+/// ```
+/// use optic_render::asset::attr::CustomATTR;
+/// let mut attr = CustomATTR::empty::<u32>("bone_ids");
+/// attr.push(0u32);
+/// attr.push(1u32);
+/// ```
 #[derive(Debug)]
 pub struct CustomATTR {
     pub data: Vec<u8>,
@@ -131,6 +167,7 @@ pub struct CustomATTR {
 }
 
 impl CustomATTR {
+    /// Creates an empty custom attribute with the given name and data type.
     pub fn empty<D: DataType>(name: &str) -> Self {
         let mut info = ATTRInfo::empty();
         info.typ = D::ATTR_FORMAT;
@@ -140,6 +177,7 @@ impl CustomATTR {
         Self { data: Vec::new(), info }
     }
 
+    /// Creates a custom attribute from a `Vec` of typed elements.
     pub fn from<D: DataType>(name: &str, vec: Vec<D>) -> Self {
         let mut attr = Self::empty::<D>(name);
         for elem in vec {
@@ -149,15 +187,18 @@ impl CustomATTR {
         attr
     }
 
+    /// Creates a custom attribute from a slice of typed elements.
     pub fn from_array<D: DataType + Clone>(name: &str, array: &[D]) -> Self {
         Self::from(name, Vec::from(array))
     }
 
+    /// Appends one typed element (serialised to raw bytes).
     pub fn push<D: DataType>(&mut self, elem: D) {
         let bytes = elem.u8ify();
         self.data.extend_from_slice(&bytes);
     }
 
+    /// Returns `true` when no elements have been pushed.
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }

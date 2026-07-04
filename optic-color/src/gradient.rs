@@ -1,21 +1,100 @@
 use crate::convert::{hsv_to_rgba, rgba_to_hsv};
 use crate::{channel_lerp, HSV, RGBA, ToRgba};
 
+/// A single control point in a gradient.
 #[derive(Copy, Clone, Debug)]
 pub struct GradientStop {
+    /// Position on the 0..1 gradient axis.
     pub position: f32,
+    /// Color at this position.
     pub color: RGBA,
 }
 
+/// Interpolation mode between gradient stops.
 #[derive(Copy, Clone, Debug)]
-pub enum GradientInterp { Linear, Step, SmoothStep }
+pub enum GradientInterp {
+    /// Linear blend between stops (default).
+    Linear,
+    /// No interpolation — output is the color of the nearest stop on the left.
+    Step,
+    /// Smooth Hermite interpolation (`t²(3-2t)`).
+    SmoothStep,
+}
 
+/// Color space used for interpolation between stops.
 #[derive(Copy, Clone, Debug)]
-pub enum GradientColorSpace { Rgb, Hsv }
+pub enum GradientColorSpace {
+    /// Interpolate in RGB space (direct channel lerp).
+    ///
+    /// Fast but can produce muddy intermediate colors.
+    Rgb,
+    /// Interpolate in HSV space with hue-aware shortest-path blending.
+    ///
+    /// Produces rainbow-like transitions. More expensive but visually
+    /// pleasing for color ramps.
+    Hsv,
+}
 
+/// Wrap mode for positions outside 0..1.
 #[derive(Copy, Clone, Debug)]
-pub enum GradientWrap { Clamp, Repeat, PingPong }
+pub enum GradientWrap {
+    /// Clamp to 0..1 (default).
+    Clamp,
+    /// Repeat the gradient (modular).
+    Repeat,
+    /// Mirror back and forth.
+    PingPong,
+}
 
+/// A configurable color gradient evaluator.
+///
+/// `Gradient` maps a normalized position `t` (0..1) to an [`RGBA`] color
+/// by interpolating between control points (stops). It supports multiple
+/// interpolation modes, color spaces, and wrap modes.
+///
+/// # Construction
+///
+/// ```
+/// use optic_color::*;
+///
+/// // Manually
+/// let mut g = Gradient::new();
+/// g.add_stop(0.0, RED);
+/// g.add_stop(1.0, BLUE);
+///
+/// // Convenience
+/// let g = Gradient::two_color(RED, BLUE);
+/// let g = Gradient::rainbow();
+/// ```
+///
+/// # Sampling
+///
+/// ```
+/// use optic_color::*;
+///
+/// let g = Gradient::two_color(BLACK, WHITE);
+/// assert_eq!(g.sample(0.0), BLACK);
+/// assert_eq!(g.sample(1.0), WHITE);
+///
+/// let colors = g.sample_n(5); // 5 evenly-spaced colors
+/// ```
+///
+/// # Configuration
+///
+/// ```
+/// use optic_color::*;
+///
+/// let g = Gradient::two_color(RED, BLUE)
+///     .set_color_space(GradientColorSpace::Hsv)
+///     .set_interp(GradientInterp::SmoothStep)
+///     .set_wrap(GradientWrap::PingPong);
+/// ```
+///
+/// # Presets
+///
+/// * [`fire`](Gradient::fire) — black → red → orange → yellow → white
+/// * [`rainbow`](Gradient::rainbow) — full HSV hue sweep
+/// * [`grayscale`](Gradient::grayscale) — black → white
 pub struct Gradient {
     stops: Vec<GradientStop>,
     interp: GradientInterp,
@@ -24,6 +103,10 @@ pub struct Gradient {
 }
 
 impl Gradient {
+    /// Create an empty gradient.
+    ///
+    /// Defaults: linear RGB interpolation, clamp wrap mode.
+    /// Sampling an empty gradient returns `RGBA(0, 0, 0, 0)`.
     pub fn new() -> Self {
         Gradient {
             stops: Vec::new(),
@@ -33,6 +116,12 @@ impl Gradient {
         }
     }
 
+    /// Add a stop at `position` (0..1) with the given color.
+    ///
+    /// Stops are kept sorted by position. If a stop already exists at the
+    /// same position, the new stop is inserted after it.
+    ///
+    /// Returns `&mut self` for chaining.
     pub fn add_stop(&mut self, position: f32, color: impl ToRgba) -> &mut Self {
         let pos = position.clamp(0.0, 1.0);
         let stop = GradientStop { position: pos, color: color.to_rgba() };
@@ -41,16 +130,29 @@ impl Gradient {
         self
     }
 
+    /// Remove the stop at `index`.
+    ///
+    /// Does nothing if `index` is out of bounds.
     pub fn remove_stop(&mut self, index: usize) {
         if index < self.stops.len() {
             self.stops.remove(index);
         }
     }
 
+    /// Returns all stops as a slice.
     pub fn stops(&self) -> &[GradientStop] { &self.stops }
 
+    /// Remove all stops.
     pub fn clear(&mut self) { self.stops.clear(); }
 
+    /// Sample the gradient at position `t`.
+    ///
+    /// The effective position is determined by the current [`GradientWrap`]
+    /// mode before lookup. Returns the color of the nearest stop if `t`
+    /// falls outside the stop range after wrapping/clamping.
+    ///
+    /// If the gradient has no stops, returns transparent black.
+    /// If the gradient has exactly one stop, returns that color for any `t`.
     pub fn sample(&self, t: f32) -> RGBA {
         if self.stops.is_empty() {
             return RGBA(0.0, 0.0, 0.0, 0.0);
@@ -106,6 +208,10 @@ impl Gradient {
         }
     }
 
+    /// Sample `count` evenly-spaced colors across the 0..1 range.
+    ///
+    /// The first sample is at `t=0`, the last at `t=1`.
+    /// Returns an empty vec if `count == 0`.
     pub fn sample_n(&self, count: usize) -> Vec<RGBA> {
         if count == 0 { return Vec::new(); }
         let mut out = Vec::with_capacity(count);
@@ -116,21 +222,33 @@ impl Gradient {
         out
     }
 
+    /// Set the interpolation mode.
+    ///
+    /// Returns `&mut self` for chaining.
     pub fn set_interp(&mut self, mode: GradientInterp) -> &mut Self {
         self.interp = mode;
         self
     }
 
+    /// Set the color space used for interpolation.
+    ///
+    /// Returns `&mut self` for chaining.
     pub fn set_color_space(&mut self, space: GradientColorSpace) -> &mut Self {
         self.color_space = space;
         self
     }
 
+    /// Set the wrap mode.
+    ///
+    /// Returns `&mut self` for chaining.
     pub fn set_wrap(&mut self, wrap: GradientWrap) -> &mut Self {
         self.wrap = wrap;
         self
     }
 
+    /// Reverse the stop order (mirrors the gradient).
+    ///
+    /// Returns `&mut self` for chaining.
     pub fn reverse(&mut self) -> &mut Self {
         self.stops.reverse();
         for s in &mut self.stops {
@@ -140,6 +258,10 @@ impl Gradient {
         self
     }
 
+    /// Construct a gradient from evenly-spaced colors.
+    ///
+    /// Each color is placed at `i / (len-1)` along the 0..1 axis.
+    /// If the input slice is empty, returns an empty gradient.
     pub fn from_colors(colors: &[impl ToRgba]) -> Self {
         let mut g = Gradient::new();
         let count = colors.len();
@@ -151,6 +273,7 @@ impl Gradient {
         g
     }
 
+    /// Construct a two-stop gradient.
     pub fn two_color(a: impl ToRgba, b: impl ToRgba) -> Self {
         let mut g = Gradient::new();
         g.add_stop(0.0, a);
@@ -158,6 +281,7 @@ impl Gradient {
         g
     }
 
+    /// A full HSV rainbow sweep (red → red via 360°).
     pub fn rainbow() -> Self {
         let mut g = Gradient::new();
         g.set_color_space(GradientColorSpace::Hsv);
@@ -166,6 +290,7 @@ impl Gradient {
         g
     }
 
+    /// A fire color ramp (black → red → orange → yellow → white).
     pub fn fire() -> Self {
         let mut g = Gradient::new();
         g.add_stop(0.0, crate::BLACK);
@@ -176,6 +301,7 @@ impl Gradient {
         g
     }
 
+    /// A greyscale ramp (black → white).
     pub fn grayscale() -> Self {
         let mut g = Gradient::new();
         g.add_stop(0.0, crate::BLACK);
@@ -184,6 +310,10 @@ impl Gradient {
     }
 }
 
+/// Shortest-path hue interpolation on a circle.
+///
+/// Takes the shorter arc between two hue angles (0..360), interpolating
+/// through 0° if necessary.
 fn hue_lerp(a: f32, b: f32, t: f32) -> f32 {
     let mut diff = b - a;
     if diff > 180.0 { diff -= 360.0; }

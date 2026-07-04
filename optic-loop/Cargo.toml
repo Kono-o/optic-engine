@@ -1,7 +1,11 @@
 [package]
 name = "optic-loop"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Game loop, Runtime trait, and Game builder for Optic engine"
 
 [features]
 online = ["optic-online"]
@@ -10,6 +14,6 @@ online = ["optic-online"]
 optic-core = { path = "../optic-core" }
 optic-render = { path = "../optic-render" }
 optic-window = { path = "../optic-window" }
-winit = "0.30.12"
-gilrs = "0.10"
+winit.workspace = true
+gilrs.workspace = true
 optic-online = { path = "../optic-online", optional = true }

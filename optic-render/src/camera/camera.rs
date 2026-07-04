@@ -3,15 +3,71 @@ use cgmath::*;
 
 use crate::util::transform::CamTransform;
 
+/// A 3D camera with perspective or orthographic projection.
+///
+/// Wraps a [`CamTransform`] that holds position, rotation, FOV, clip distances,
+/// and pre-computed view/projection matrices. After mutating any transform
+/// property, call [`pre_update`](Camera::pre_update) to recalculate.
+///
+/// # Conventions
+///
+/// - **Y-up** world coordinate system.
+/// - **-Z forward** — the camera looks down its local -Z axis by default.
+/// - **Euler angles** in degrees, applied in XYZ order.
+///
+/// # Movement methods
+///
+/// | Direction | Method | Axis |
+/// |---|---|---|
+/// | Forward (in look direction) | [`fly_forw`](Camera::fly_forw) | Camera-local -Z |
+/// | Backward | [`fly_back`](Camera::fly_back) | Camera-local +Z |
+/// | Left (strafe) | [`fly_left`](Camera::fly_left) | Camera-local -X |
+/// | Right (strafe) | [`fly_right`](Camera::fly_right) | Camera-local +X |
+/// | Up | [`fly_up`](Camera::fly_up) | World +Y |
+/// | Down | [`fly_down`](Camera::fly_down) | World -Y |
+///
+/// # Rotation methods
+///
+/// | Method | Effect | Common name |
+/// |---|---|---|
+/// | [`spin_x`](Camera::spin_x) | Pitch (look up/down) | Tilt forward/backward |
+/// | [`spin_y`](Camera::spin_y) | Yaw (look left/right) | Turn head side-to-side |
+/// | [`spin_z`](Camera::spin_z) | Roll (rotate view) | Tilt horizon |
+///
+/// # Getters and setters
+///
+/// | Property | Getter | Setter |
+/// |---|---|---|
+/// | Field of view (degrees) | [`fov`](Camera::fov) | [`set_fov`](Camera::set_fov), [`add_fov`](Camera::add_fov) |
+/// | Orthographic scale | [`ortho_scale`](Camera::ortho_scale) | [`set_ortho_scale`](Camera::set_ortho_scale), [`add_ortho_scale`](Camera::add_ortho_scale) |
+/// | Projection mode | [`proj`](Camera::proj) | [`set_proj`](Camera::set_proj) |
+/// | Clip distances | [`clip`](Camera::clip) | [`set_clip`](Camera::set_clip), [`set_clip_near`](Camera::set_clip_near), [`set_clip_far`](Camera::set_clip_far) |
+/// | Viewport size | — | [`set_size`](Camera::set_size) |
+/// | View/proj matrices | — | [`pre_update`](Camera::pre_update) |
+///
+/// # Example
+///
+/// ```ignore
+/// use optic_core::{CamProj, Size2D};
+/// use optic_render::Camera;
+///
+/// let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+/// cam.fly_forw(10.0);       // move in look direction
+/// cam.spin_y(-90.0);        // yaw left 90°
+/// cam.pre_update();          // recalculate matrices
+/// ```
 pub struct Camera {
     pub transform: CamTransform,
 }
 
 impl Camera {
+    /// Creates a camera sized to match the given canvas dimensions.
     pub fn match_canvas_size(canvas: &crate::handles::Canvas, proj: CamProj) -> Self {
         Self::new(canvas.size(), proj)
     }
 
+    /// Creates a camera at `(0, 0, 5)` with 75° FOV, default clip distances,
+    /// and the given projection type.
     pub fn new(size: Size2D, proj: CamProj) -> Self {
         let fov = 75.0;
         let clip = ClipDist::default();
@@ -43,48 +99,117 @@ impl Camera {
         Camera { transform }
     }
 
+    /// Recalculates the view and projection matrices from the current transform state.
+    ///
+    /// Call this once per frame **after** all movement ([`fly_forw`](Camera::fly_forw), etc.)
+    /// and rotation ([`spin_y`](Camera::spin_y), etc.) have been applied.
+    /// The matrices are consumed by the rendering pipeline — without this call
+    /// the camera will continue using stale matrices from the previous frame.
     pub fn pre_update(&mut self) {
         self.transform.calc_matrices();
     }
 
+    /// Returns the vertical field of view in degrees.
     pub fn fov(&self) -> f32 { self.transform.fov }
+    /// Returns the orthographic scale factor.
     pub fn ortho_scale(&self) -> f32 { self.transform.ortho_scale }
+    /// Returns the current projection type.
     pub fn proj(&self) -> CamProj { self.transform.proj }
+    /// Returns the near/far clip distances.
     pub fn clip(&self) -> ClipDist { self.transform.clip }
 
+    /// Sets both near and far clip distances at once.
     pub fn set_clip(&mut self, clip: ClipDist) { self.transform.clip = clip; }
+    /// Sets the near clip plane distance.
     pub fn set_clip_near(&mut self, near: f32) { self.transform.clip.near = near; }
+    /// Sets the far clip plane distance.
     pub fn set_clip_far(&mut self, far: f32) { self.transform.clip.far = far; }
+    /// Sets the canvas/viewport size (used for aspect ratio calculation).
     pub fn set_size(&mut self, size: Size2D) { self.transform.size = size; }
+    /// Switches between perspective and orthographic projection.
     pub fn set_proj(&mut self, proj: CamProj) { self.transform.proj = proj; }
 
+    /// Sets the vertical field of view in degrees (clamped to ≥ 0.01).
     pub fn set_fov(&mut self, fov: f32) {
         self.transform.fov = fov.max(0.01);
     }
+    /// Adds `value` to the FOV (clamped to ≥ 0.01).
     pub fn add_fov(&mut self, value: f32) {
         self.transform.fov = (self.transform.fov + value).max(0.01);
     }
 
+    /// Sets the orthographic scale factor.
     pub fn set_ortho_scale(&mut self, value: f32) { self.transform.ortho_scale = value; }
+    /// Adds `value` to the orthographic scale factor.
     pub fn add_ortho_scale(&mut self, value: f32) { self.transform.ortho_scale += value; }
 
+    /// Moves the camera forward (in the direction it faces).
+    ///
+    /// The forward direction is derived from the camera's current rotation
+    /// (stored as `front` in [`CamTransform`]). For the default orientation this
+    /// moves along world -Z.
+    ///
+    /// # When to use
+    ///
+    /// Call this each frame with `speed * delta_time` for smooth first-person
+    /// movement. Call [`pre_update`](Camera::pre_update) after all movement and
+    /// rotation for the frame.
     pub fn fly_forw(&mut self, speed: f32) {
         self.transform.pos += speed * self.transform.front;
     }
+    /// Moves the camera backward (opposite the direction it faces).
+    ///
+    /// The inverse of [`fly_forw`](Camera::fly_forw). Equivalent to
+    /// `fly_forw(-speed)`.
     pub fn fly_back(&mut self, speed: f32) {
         self.transform.pos -= speed * self.transform.front;
     }
+    /// Moves the camera left (strafe), perpendicular to the forward direction.
+    ///
+    /// The strafe direction is computed as `front × world_up`, producing a
+    /// vector orthogonal to both the look direction and the world Y axis. This
+    /// keeps the horizon level even when pitching up or down.
     pub fn fly_left(&mut self, speed: f32) {
         self.transform.pos -= speed * self.transform.front.cross(Vector3::unit_y()).normalize();
     }
+    /// Moves the camera right (strafe), perpendicular to the forward direction.
+    ///
+    /// The inverse of [`fly_left`](Camera::fly_left). Equivalent to
+    /// `fly_left(-speed)`.
     pub fn fly_right(&mut self, speed: f32) {
         self.transform.pos += speed * self.transform.front.cross(Vector3::unit_y()).normalize();
     }
+    /// Moves the camera straight up (world Y axis).
+    ///
+    /// Unlike [`fly_forw`](Camera::fly_forw) / [`fly_left`](Camera::fly_left),
+    /// this always moves along the **world** Y axis regardless of the camera's
+    /// current pitch or roll.
     pub fn fly_up(&mut self, speed: f32) { self.transform.pos.y += speed; }
+    /// Moves the camera straight down (world Y axis).
+    ///
+    /// The inverse of [`fly_up`](Camera::fly_up). Equivalent to
+    /// `fly_up(-speed)`.
     pub fn fly_down(&mut self, speed: f32) { self.transform.pos.y -= speed; }
 
+    /// Pitches the camera up or down (rotation around the local X axis).
+    ///
+    /// Positive values tilt the view downward (looking toward the ground);
+    /// negative values tilt upward (looking toward the sky).
+    ///
+    /// # When to use
+    ///
+    /// Combine with [`spin_y`](Camera::spin_y) for full free-look control
+    /// (e.g. mouse-look in a first-person game).
     pub fn spin_x(&mut self, speed: f32) { self.transform.rot.x += speed; }
+    /// Yaws the camera left or right (rotation around the local Y axis).
+    ///
+    /// Positive values turn right; negative values turn left. This is the
+    /// primary rotation for first-person horizontal look-around.
     pub fn spin_y(&mut self, speed: f32) { self.transform.rot.y += speed; }
+    /// Rolls the camera (rotation around the local Z axis).
+    ///
+    /// Tilts the horizon. Rarely used in first-person games; useful for
+    /// cinematic cameras or flight simulators.
     pub fn spin_z(&mut self, speed: f32) { self.transform.rot.z += speed; }
 }
 

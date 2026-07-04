@@ -1,8 +1,12 @@
 [package]
 name = "optic-online"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "UDP networking for Optic engine — background tokio thread with connection management"
 
 [dependencies]
 optic-core = { path = "../optic-core" }
-tokio = { version = "1", features = ["rt", "net", "sync", "time", "io-util", "macros"] }
+tokio.workspace = true

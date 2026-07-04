@@ -3,11 +3,22 @@ use optic_core::{OpticError, OpticErrorKind, OpticResult};
 
 use crate::handles::shader::{link_compute_program, link_program, Shader};
 
+/// Whether a shader source is a vertex+fragment pipeline or a compute shader.
 pub enum ShaderType {
+    /// Vertex + fragment shader pair.
     Pipeline,
+    /// Compute shader.
     Compute,
 }
 
+impl ShaderType {
+    /// Returns `true` for the compute variant.
+    pub fn is_compute(&self) -> bool {
+        matches!(self, ShaderType::Compute)
+    }
+}
+
+/// Internal GLSL parsing result.
 enum GLSL {
     ParsedCompute(String),
     ParsedPipeline { v_src: String, f_src: String },
@@ -15,6 +26,13 @@ enum GLSL {
 }
 
 impl GLSL {
+    /// Parses a combined GLSL source into vertex/fragment or compute.
+    ///
+    /// Pipeline shaders use comment markers to delimit sections:
+    /// - `//V`, `//VERT`, `//vertex`, etc. start the vertex section
+    /// - `//F`, `//FRAG`, `//fragment`, etc. start the fragment section
+    ///
+    /// Compute shaders use the entire source as one stage.
     fn parse(src: &str, typ: &ShaderType) -> Self {
         if typ.is_compute() {
             return GLSL::ParsedCompute(src.to_string());
@@ -57,12 +75,32 @@ impl GLSL {
     }
 }
 
-impl ShaderType {
-    pub fn is_compute(&self) -> bool {
-        matches!(self, ShaderType::Compute)
-    }
-}
-
+/// A shader loaded from disk (or cache), ready to compile.
+///
+/// # Loading
+///
+/// ```ignore
+/// use optic_render::asset::{ShaderFile, ShaderType};
+///
+/// let sf = ShaderFile::from_disk("shaders/example.glsl", ShaderType::Pipeline)?;
+/// let shader = sf.compile()?; // returns a Shader handle
+/// ```
+///
+/// # Shader format
+///
+/// Pipeline shaders use comment markers to separate vertex and fragment stages
+/// within a single `.glsl` file:
+///
+/// ```glsl
+/// // V
+/// void main() {
+///     gl_Position = vec4(0.0);
+/// }
+/// // F
+/// void main() {
+///     outColor = vec4(1.0);
+/// }
+/// ```
 pub struct ShaderFile {
     pub v_src: String,
     pub f_src: String,
@@ -70,6 +108,7 @@ pub struct ShaderFile {
 }
 
 impl ShaderFile {
+    /// Creates a `ShaderFile` by parsing a combined GLSL source string.
     pub fn from_src(src: &str, typ: ShaderType) -> OpticResult<Self> {
         match GLSL::parse(src, &typ) {
             GLSL::ParsedCompute(src) => Ok(Self {
@@ -92,6 +131,7 @@ impl ShaderFile {
         }
     }
 
+    /// Creates a pipeline shader from separate vertex and fragment source strings.
     pub fn from_vert_frag(v_src: &str, f_src: &str) -> Self {
         Self {
             v_src: v_src.to_string(),
@@ -100,6 +140,7 @@ impl ShaderFile {
         }
     }
 
+    /// Compiles this shader and returns a [`Shader`](crate::handles::Shader) handle.
     pub fn compile(&self) -> OpticResult<Shader> {
         if self.is_compute {
             let id = link_compute_program(&self.v_src)?;
@@ -114,6 +155,7 @@ impl ShaderFile {
 // --- from_disk: debug loads source + overwrites cache; release loads cache only ---
 #[cfg(debug_assertions)]
 impl ShaderFile {
+    /// Loads a shader from disk, caching it for release builds.
     pub fn from_disk(path: &str, typ: ShaderType) -> OpticResult<Self> {
         let src = optic_file::read_string(path)?;
         let shader = Self::from_src(&src, typ)?;
@@ -125,6 +167,7 @@ impl ShaderFile {
 
 #[cfg(not(debug_assertions))]
 impl ShaderFile {
+    /// Loads a shader from the binary cache (release only).
     pub fn from_disk(path: &str, _typ: ShaderType) -> OpticResult<Self> {
         let cache = optic_file::cached_path(path, "oshdr");
         Self::from_cached(&cache)
@@ -133,6 +176,7 @@ impl ShaderFile {
 
 // --- binary cache read/write (internal) ---
 impl ShaderFile {
+    /// Saves this shader to a binary cache file.
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
         let typ_byte = if self.is_compute { SHADER_COMPUTE } else { SHADER_PIPELINE };
         let v_bytes = self.v_src.as_bytes();
@@ -148,6 +192,7 @@ impl ShaderFile {
         optic_file::write_bytes(path, &data)
     }
 
+    /// Loads a shader from a binary cache file.
     #[cfg_attr(debug_assertions, allow(dead_code))]
     fn from_cached(path: &str) -> OpticResult<Self> {
         let data = optic_file::read_bytes(path)?;
@@ -195,10 +240,12 @@ impl ShaderFile {
 }
 
 impl ShaderFile {
+    /// Loads the default 3D pipeline shader from `optic/assets/shdr/fallback3d.glsl`.
     pub fn default_3d() -> OpticResult<Self> {
         Self::from_disk("optic/assets/shdr/fallback3d.glsl", ShaderType::Pipeline)
     }
 
+    /// Loads the default 2D pipeline shader from `optic/assets/shdr/fallback2d.glsl`.
     pub fn default_2d() -> OpticResult<Self> {
         Self::from_disk("optic/assets/shdr/fallback2d.glsl", ShaderType::Pipeline)
     }

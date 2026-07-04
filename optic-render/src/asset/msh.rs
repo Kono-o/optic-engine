@@ -1,3 +1,33 @@
+//! Mesh asset types — CPU-side geometry descriptions that can be shipped to the GPU.
+//!
+//! This module provides two mesh families:
+//!
+//! - [`Mesh3DFile`] — 3D geometry with positions, normals, UVs, colours, and indices.
+//! - [`Mesh2DFile`] — 2D geometry with positions, UVs, colours, indices, and a layer.
+//!
+//! Both support loading from standard file formats (OBJ, STL), procedural
+//! generation (cubes, spheres, cylinders, etc.), and binary caching.
+//!
+//! # Architecture
+//!
+//! `Mesh3DFile` / `Mesh2DFile` are *asset* types — pure data on the CPU.
+//! They are converted into GPU resources by calling [`ship`](Mesh3DFile::ship),
+//! which returns a [`MeshHandle`] owned by the GPU.
+//!
+//! ```ignore
+//! // On the CPU (asset phase)
+//! let file = Mesh3DFile::cube(2.0);
+//!
+//! // On the GPU (render phase)
+//! let mesh: Mesh3D = gpu.ship_mesh3d(&file);
+//! ```
+//!
+//! # Caching
+//!
+//! In debug builds, [`Mesh3DFile::from_disk`] always re-parses the source file
+//! and overwrites the cached `.omesh` binary. In release builds it loads from
+//! the cache directly for faster startup.
+
 use optic_core::consts::{OPTIC_CACHE_VERSION, OPTIC_MAGIC};
 use optic_core::{DrawMode, OpticError, OpticErrorKind, OpticResult};
 use cgmath::Vector2;
@@ -10,6 +40,10 @@ use crate::handles::mesh::{
     MeshHandle,
 };
 
+/// Internal OBJ parser state.
+///
+/// Distinguishes successfully-parsed triangle meshes from faces that could not
+/// be triangulated.
 enum OBJ {
     Parsed {
         pos_attr: Pos3DATTR,
@@ -22,6 +56,10 @@ enum OBJ {
 }
 
 impl OBJ {
+    /// Parses a Wavefront OBJ source string.
+    ///
+    /// Supports `v`, `vt`, `vn`, and `f` with 3 vertices per face. Non-triangle
+    /// faces return [`OBJ::NonTriangle`] with the offending source line.
     fn parse(src: &str) -> Self {
         let mut pos_attr = Pos3DATTR::empty();
         let mut col_attr = ColATTR::empty();
@@ -93,12 +131,15 @@ impl OBJ {
         OBJ::Parsed { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr }
     }
 
+    /// Parses two float values from a space-separated word list (e.g. `vt 0.5 0.5`).
+    /// The Y coordinate is flipped (`1.0 - y`) to account for OpenGL's texture origin.
     fn parse_2(words: &[&str]) -> [f32; 2] {
         let x = words.get(1).and_then(|w| w.parse().ok()).unwrap_or(0.0);
         let y = words.get(2).and_then(|w| w.parse().ok()).unwrap_or(0.0);
         [x, 1.0 - y]
     }
 
+    /// Parses three float values from a space-separated word list (e.g. `v 1.0 2.0 3.0`).
     fn parse_3(words: &[&str]) -> [f32; 3] {
         let x = words.get(1).and_then(|w| w.parse().ok()).unwrap_or(0.0);
         let y = words.get(2).and_then(|w| w.parse().ok()).unwrap_or(0.0);
@@ -107,6 +148,76 @@ impl OBJ {
     }
 }
 
+// ── Mesh3DFile ───────────────────────────────────────────────────────────
+
+/// CPU-side 3D mesh geometry — positions, normals, UVs, colours, and indices.
+///
+/// `Mesh3DFile` is the primary asset type for 3D geometry. It stores vertex
+/// and index data in separate typed attribute arrays, ready for interleaving
+/// and GPU upload via [`ship`](Mesh3DFile::ship).
+///
+/// # Loading
+///
+/// | Method | Source |
+/// |---|---|
+/// | [`from_obj_src`](Mesh3DFile::from_obj_src) | Wavefront OBJ string (triangles only) |
+/// | [`from_stl_src`](Mesh3DFile::from_stl_src) | STL bytes (ASCII or binary) |
+/// | [`from_disk`](Mesh3DFile::from_disk) | Auto-detected via file extension (debug caches, release loads cache) |
+/// | [`cube`](Mesh3DFile::cube), [`cuboid`](Mesh3DFile::cuboid), etc. | Procedural generation |
+///
+/// # Generated primitives
+///
+/// | Function | Description |
+/// |---|---|
+/// | [`cube`](Mesh3DFile::cube) | Unit cube centred at origin |
+/// | [`cuboid`](Mesh3DFile::cuboid) | Box with per-axis extents |
+/// | [`sphere`](Mesh3DFile::sphere) | UV sphere with configurable stacks/sectors |
+/// | [`cylinder`](Mesh3DFile::cylinder) | Cylinder with optional end caps |
+/// | [`cone`](Mesh3DFile::cone) | Cone with optional base cap |
+/// | [`torus`](Mesh3DFile::torus) | Torus with configurable ring counts |
+/// | [`plane`](Mesh3DFile::plane) | Flat XZ quad |
+///
+/// # Custom attributes
+///
+/// Use [`attach_custom_attr`](Mesh3DFile::attach_custom_attr) to add
+/// per-vertex data beyond the built-in set (e.g. bone weights, AO values).
+///
+/// # Binary cache format
+///
+/// The `.omesh` cache uses a simple binary layout:
+///
+/// | Offset | Size | Field |
+/// |---|---|---|
+/// | 0 | 8 | Magic (`OPTIC_MAGIC`) |
+/// | 8 | 2 | Version (`OPTIC_CACHE_VERSION`) |
+/// | 10 | 1 | Flags (bit 0 = has normals, bit 1 = has UVs) |
+/// | 11 | 4 | Position data size (bytes) |
+/// | 15 | N | Position data (`f32 × 3` per vertex) |
+/// | ... | 4 | Normal data size (0 if absent) |
+/// | ... | N | Normal data (optional) |
+/// | ... | 4 | UV data size (0 if absent) |
+/// | ... | N | UV data (optional) |
+/// | ... | 4 | Colour data size |
+/// | ... | N | Colour data (`f32 × 4` per vertex) |
+/// | ... | 4 | Index data size |
+/// | ... | N | Index data (`u32` per index) |
+///
+/// # Example
+///
+/// ```ignore
+/// use optic_render::asset::Mesh3DFile;
+///
+/// // Load from OBJ
+/// let obj = "\
+///     v 0.0 0.0 0.0\n\
+///     v 1.0 0.0 0.0\n\
+///     v 0.0 1.0 0.0\n\
+///     f 1 2 3";
+/// let file = Mesh3DFile::from_obj_src(obj)?;
+///
+/// // Or generate procedurally
+/// let cube = Mesh3DFile::cube(2.0);
+/// ```
 pub struct Mesh3DFile {
     pub pos_attr: Pos3DATTR,
     pub col_attr: ColATTR,
@@ -117,6 +228,7 @@ pub struct Mesh3DFile {
 }
 
 impl Mesh3DFile {
+    /// Creates an empty mesh with no vertices or indices.
     pub fn empty() -> Self {
         Self {
             pos_attr: Pos3DATTR::empty(),
@@ -128,6 +240,15 @@ impl Mesh3DFile {
         }
     }
 
+    /// Parses a Wavefront OBJ source string into a triangle mesh.
+    ///
+    /// Supports `v`, `vt`, `vn`, and triangular `f` records. Non-triangle
+    /// faces produce an [`OpticError`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the OBJ contains a face with more than 3 vertices
+    /// (non-triangulated).
     pub fn from_obj_src(src: &str) -> OpticResult<Self> {
         match OBJ::parse(src) {
             OBJ::NonTriangle(line) => Err(OpticError::new(
@@ -140,6 +261,14 @@ impl Mesh3DFile {
         }
     }
 
+    /// Parses an STL file (ASCII or binary) into a triangle mesh.
+    ///
+    /// Vertices are deduplicated by position + normal. UVs are left empty and
+    /// colours default to white.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data is truncated or not valid UTF-8 (for ASCII STL).
     pub fn from_stl_src(data: &[u8]) -> OpticResult<Self> {
         let mut pos_attr = Pos3DATTR::empty();
         let mut col_attr = ColATTR::empty();
@@ -151,7 +280,6 @@ impl Mesh3DFile {
         let def_uvm = [0.0, 0.0];
         let mut unique_verts: HashMap<(u32, u32, u32, u32, u32, u32), u32> = HashMap::new();
 
-        // Closure to deduplicate and push a vertex
         let push_vert = |pos: [f32; 3], nrm: [f32; 3], unique: &mut HashMap<(u32, u32, u32, u32, u32, u32), u32>,
                               pos_attr: &mut Pos3DATTR, nrm_attr: &mut NrmATTR,
                               col_attr: &mut ColATTR, uvm_attr: &mut UVMATTR| -> u32 {
@@ -170,7 +298,6 @@ impl Mesh3DFile {
             }
         };
 
-        // Detect ASCII vs binary: binary STL never starts with "solid " (it's 80-byte header)
         let is_ascii = data.len() >= 6 && &data[0..6] == b"solid ";
 
         if is_ascii {
@@ -243,7 +370,13 @@ impl Mesh3DFile {
         Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, cus_attrs: Vec::new() })
     }
 
-    // --- from_disk: debug loads source + overwrites cache; release loads cache only ---
+    /// Loads a mesh from disk, detecting format by extension.
+    ///
+    /// In **debug** builds: parses the source file and overwrites the cache.
+    /// In **release** builds: loads from the cached `.omesh` file directly for
+    /// faster startup.
+    ///
+    /// Supported formats: `.obj`, `.stl`.
     #[cfg(debug_assertions)]
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         let ext = optic_file::extension(path).unwrap_or_default();
@@ -269,6 +402,7 @@ impl Mesh3DFile {
         Self::from_cached(&cache)
     }
 
+    /// Saves the mesh to a binary cache file (`.omesh` format).
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
         let has_normals = !self.nrm_attr.data.is_empty();
         let has_uvs = !self.uvm_attr.data.is_empty();
@@ -286,7 +420,6 @@ impl Mesh3DFile {
         data.extend_from_slice(&OPTIC_CACHE_VERSION.to_le_bytes());
         data.push(flags);
 
-        // Position (required)
         data.extend_from_slice(&(pos_bytes as u32).to_le_bytes());
         for v in &self.pos_attr.data {
             data.extend_from_slice(&v[0].to_le_bytes());
@@ -294,7 +427,6 @@ impl Mesh3DFile {
             data.extend_from_slice(&v[2].to_le_bytes());
         }
 
-        // Normals (optional)
         data.extend_from_slice(&(nrm_bytes as u32).to_le_bytes());
         for v in &self.nrm_attr.data {
             data.extend_from_slice(&v[0].to_le_bytes());
@@ -302,14 +434,12 @@ impl Mesh3DFile {
             data.extend_from_slice(&v[2].to_le_bytes());
         }
 
-        // UVs (optional)
         data.extend_from_slice(&(uvm_bytes as u32).to_le_bytes());
         for v in &self.uvm_attr.data {
             data.extend_from_slice(&v[0].to_le_bytes());
             data.extend_from_slice(&v[1].to_le_bytes());
         }
 
-        // Colors (always present)
         data.extend_from_slice(&(col_bytes as u32).to_le_bytes());
         for v in &self.col_attr.data {
             data.extend_from_slice(&v[0].to_le_bytes());
@@ -318,7 +448,6 @@ impl Mesh3DFile {
             data.extend_from_slice(&v[3].to_le_bytes());
         }
 
-        // Indices (always present)
         data.extend_from_slice(&(ind_bytes as u32).to_le_bytes());
         for v in &self.ind_attr.data {
             data.extend_from_slice(&v.to_le_bytes());
@@ -366,7 +495,6 @@ impl Mesh3DFile {
             [x, y, z, w]
         };
 
-        // Position
         let pos_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
         off += 4;
         if off + pos_size > data.len() {
@@ -378,7 +506,6 @@ impl Mesh3DFile {
             pos_attr.push(read_f32x3(&mut off, &data));
         }
 
-        // Normals
         let nrm_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
         off += 4;
         let mut nrm_attr = NrmATTR::empty();
@@ -392,7 +519,6 @@ impl Mesh3DFile {
             }
         }
 
-        // UVs
         let uvm_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
         off += 4;
         let mut uvm_attr = UVMATTR::empty();
@@ -406,7 +532,6 @@ impl Mesh3DFile {
             }
         }
 
-        // Colors
         let col_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
         off += 4;
         if off + col_size > data.len() {
@@ -418,7 +543,6 @@ impl Mesh3DFile {
             col_attr.push(read_f32x4(&mut off, &data));
         }
 
-        // Indices
         let ind_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
         off += 4;
         if off + ind_size > data.len() {
@@ -435,10 +559,34 @@ impl Mesh3DFile {
         Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, cus_attrs: Vec::new() })
     }
 
+    /// Generates a unit cube centred at the origin with all six faces.
+    /// Generates a cube centred at the origin with equal side lengths.
+    ///
+    /// This is a convenient shorthand for [`cuboid(side, side, side)`](Self::cuboid).
+    /// Each face is a quad (2 triangles, 4 vertices) with correct normals and
+    /// per-face UVs covering `[0,1]²`.
+    ///
+    /// # Conventions
+    ///
+    /// - **Y-up** — the top face points toward +Y.
+    /// - **UVs** — each face covers the full `[0,1]²` texture atlas.
+    /// - **Normals** — per-face (flat, not smooth).
+    /// - **Colour** — all vertices white.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let cube = Mesh3DFile::cube(2.0);
+    /// let box_ = Mesh3DFile::cuboid(1.0, 2.0, 3.0);
+    /// ```
     pub fn cube(side: f32) -> Self {
         Self::cuboid(side, side, side)
     }
 
+    /// Generates a rectangular box centred at the origin.
+    ///
+    /// Each face remains a quad with flat normals, full-cover UVs, and white
+    /// colour. Use [`cube`](Self::cube) for equal-sided boxes.
     pub fn cuboid(w: f32, h: f32, d: f32) -> Self {
         let mut mesh = Self::empty();
         let hw = w * 0.5;
@@ -476,6 +624,24 @@ impl Mesh3DFile {
         mesh
     }
 
+    /// Generates a UV sphere centred at the origin.
+    ///
+    /// The sphere is constructed with a latitude/longitude grid and normals
+    /// that are exact for perfect shading. Positions and normals use the same
+    /// unit direction vector, so the sphere works correctly with dynamic
+    /// lighting.
+    ///
+    /// # Conventions
+    ///
+    /// - **Y-up** — the north pole is at `(0, radius, 0)`.
+    /// - **UVs** — `u` wraps around the equator, `v` goes from pole to pole.
+    /// - **Normals** — per-vertex smooth (interpolated across triangles).
+    ///
+    /// # Resolution
+    ///
+    /// `stacks` controls the number of latitude subdivisions, `sectors` controls
+    /// the number of longitude subdivisions. A sphere with `stacks = 16` and
+    /// `sectors = 32` is a good balance between quality and vertex count.
     pub fn sphere(radius: f32, stacks: u32, sectors: u32) -> Self {
         let mut mesh = Self::empty();
         let pi = std::f32::consts::PI;
@@ -507,6 +673,23 @@ impl Mesh3DFile {
         mesh
     }
 
+    /// Generates a cylinder centred at the origin, oriented along Y.
+    ///
+    /// The cylinder body consists of a single quad strip around the circumference
+    /// with `segments` subdivisions. Optionally closes the top and bottom caps
+    /// with triangular fans.
+    ///
+    /// # Conventions
+    ///
+    /// - **Y-up** — the top face at `+height / 2`, bottom at `-height / 2`.
+    /// - **Normals** — per-vertex on the cylinder body (exact radial normal);
+    ///   flat for caps (pointing straight up/down).
+    /// - **UVs** — wraps around the body; caps cover a radial fan.
+    ///
+    /// # When to cap
+    ///
+    /// Set `cap = true` for a solid cylinder (e.g. a column). Set `cap = false`
+    /// for an open tube (e.g. a pipe segment).
     pub fn cylinder(radius: f32, height: f32, segments: u32, cap: bool) -> Self {
         let mut mesh = Self::empty();
         let hh = height * 0.5;
@@ -562,6 +745,23 @@ impl Mesh3DFile {
         mesh
     }
 
+    /// Generates a cone centred at the origin, oriented along Y, with the apex
+    /// at +Y.
+    ///
+    /// The cone body is a single strip of triangles from apex to base ring.
+    /// Optionally closes the base with a triangular fan.
+    ///
+    /// # Conventions
+    ///
+    /// - **Apex** at `(0, +height / 2, 0)`, base at `(0, -height / 2, 0)`.
+    /// - **Normals** — per-vertex smooth normals that account for the cone's
+    ///   slope (the normal leans outward from the apex).
+    /// - **UVs** — the body maps the apex to the top of the UV range.
+    ///
+    /// # When to cap
+    ///
+    /// Set `cap = true` for a solid cone. Set `cap = false` for a cone-shaped
+    /// surface (e.g. a speaker horn).
     pub fn cone(radius: f32, height: f32, segments: u32, cap: bool) -> Self {
         let mut mesh = Self::empty();
         let hh = height * 0.5;
@@ -601,6 +801,23 @@ impl Mesh3DFile {
         mesh
     }
 
+    /// Generates a torus (donut shape) lying in the XZ plane.
+    ///
+    /// The torus is a ring swept around the Y axis. `major_radius` controls the
+    /// overall size of the ring and `minor_radius` controls the thickness of the
+    /// tube.
+    ///
+    /// # Conventions
+    ///
+    /// - **Y-up** — the torus lies flat in the XZ plane.
+    /// - **Normals** — per-vertex smooth (exact radial normal from the tube centre).
+    /// - **UVs** — `u` wraps around the major ring, `v` wraps around the minor ring.
+    /// - **Resolution** — `major_segments` around the ring, `minor_segments`
+    ///   around the tube. 32 × 16 gives a smooth result.
+    ///
+    /// # Use cases
+    ///
+    /// - Donuts, rings, tyres, rope coils, particle accelerator visualisations.
     pub fn torus(major_radius: f32, minor_radius: f32, major_segments: u32, minor_segments: u32) -> Self {
         let mut mesh = Self::empty();
         for i in 0..=major_segments {
@@ -638,6 +855,20 @@ impl Mesh3DFile {
         mesh
     }
 
+    /// Generates a flat quad in the XZ plane (Y-up), centred at the origin.
+    ///
+    /// The plane has a normal of `(0, 1, 0)` and covers `width × depth` units.
+    /// UVs span `[0,1]²` across the full surface.
+    ///
+    /// # Use cases
+    ///
+    /// - Ground planes, floors, table-tops, decals.
+    /// - Combine with a translucent shader for shadow receivers.
+    ///
+    /// # Conventions
+    ///
+    /// - **Orientation** — faces +Y (up).
+    /// - **Windings** — counter-clockwise when viewed from above.
     pub fn plane(width: f32, depth: f32) -> Self {
         let mut mesh = Self::empty();
         let hw = width * 0.5;
@@ -663,24 +894,55 @@ impl Mesh3DFile {
         mesh
     }
 
+    /// Attaches a custom per-vertex attribute (e.g. bone weights, AO).
+    ///
+    /// The custom attribute must have the same number of elements as the
+    /// mesh's vertex count.
     pub fn attach_custom_attr(&mut self, attr: CustomATTR) {
         self.cus_attrs.push(attr);
     }
 
+    /// Returns `true` if no built-in attributes are populated and no custom
+    /// attributes are attached.
     pub fn has_no_attr(&self) -> bool {
         self.starts_with_custom() && self.cus_attrs.is_empty()
     }
 
+    /// Returns `true` if no built-in vertex attributes are populated.
+    ///
+    /// This does not check custom attributes — use [`has_no_attr`](Self::has_no_attr)
+    /// for a complete emptiness check.
     pub fn starts_with_custom(&self) -> bool {
         self.pos_attr.is_empty() && self.col_attr.is_empty()
             && self.uvm_attr.is_empty() && self.nrm_attr.is_empty()
     }
 
+    /// Interleaves vertex attributes and uploads to the GPU.
+    ///
+    /// Returns a [`MeshHandle`] ready for instanced or direct drawing.
+    /// This is the final step of the asset-to-GPU pipeline for 3D meshes.
     pub fn ship(&self) -> MeshHandle {
         create_mesh3d_handle(self)
     }
 }
 
+/// CPU-side 2D mesh geometry — positions, UVs, colours, indices, layer, and centre.
+///
+/// `Mesh2DFile` is the 2D counterpart of [`Mesh3DFile`]. It adds:
+///
+/// - A `layer` field for draw-order sorting.
+/// - An `aspect` ratio and [`Center`] enumeration for positioning.
+///
+/// # Generated primitives
+///
+/// | Function | Description |
+/// |---|---|
+/// | [`quad`](Mesh2DFile::quad) | Textured quad sized to a canvas pixel area |
+/// | [`fullscreen_quad`](Mesh2DFile::fullscreen_quad) | NDC-space quad (-1..1) |
+/// | [`rect`](Mesh2DFile::rect) | Rectangle centred at origin |
+/// | [`circle`](Mesh2DFile::circle) | Approximated by a regular polygon |
+/// | [`polygon`](Mesh2DFile::polygon) | Regular polygon (same as circle) |
+/// | [`ring`](Mesh2DFile::ring) | Annulus (donut) shape |
 pub struct Mesh2DFile {
     pub pos_attr: Pos2DATTR,
     pub layer: u8,
@@ -691,6 +953,10 @@ pub struct Mesh2DFile {
     pub cus_attrs: Vec<CustomATTR>,
 }
 
+/// Controls how 2D mesh positions are offset relative to their centre.
+///
+/// Used when calling [`Mesh2DFile::set_center`] or when constructing
+/// primitive meshes.
 pub enum Center {
     TopLeft, TopRight, BottomLeft, BottomRight, Middle, Custom(f32, f32),
 }
@@ -709,6 +975,7 @@ impl Center {
 }
 
 impl Mesh2DFile {
+    /// Creates an empty 2D mesh.
     pub fn empty() -> Self {
         Self {
             pos_attr: Pos2DATTR::empty(),
@@ -729,13 +996,35 @@ impl Mesh2DFile {
         }
     }
 
+    /// Replaces the position attribute.
     pub fn set_pos_attr(&mut self, attr: Pos2DATTR) { self.pos_attr = attr; }
+
+    /// Sets the draw layer (higher values render on top).
     pub fn set_layer(&mut self, layer: u8) { self.layer = layer; }
+
+    /// Offsets all vertex positions by the centre vector.
     pub fn set_center(&mut self, center: Center) { self.offset_pos_by_center(&center); }
+
+    /// Replaces the colour attribute.
     pub fn set_col_attr(&mut self, attr: ColATTR) { self.col_attr = attr; }
+
+    /// Replaces the UV attribute.
     pub fn set_uvm_attr(&mut self, attr: UVMATTR) { self.uvm_attr = attr; }
+
+    /// Replaces the index attribute.
     pub fn set_ind_attr(&mut self, attr: IndATTR) { self.ind_attr = attr; }
 
+    /// Creates a textured quad sized to fill the given canvas area.
+    ///
+    /// The quad's aspect ratio matches the canvas, and it is centred by default.
+    /// Used for rendering sprites or UI elements where the quad should preserve
+    /// the canvas's proportions in NDC space.
+    ///
+    /// # Conventions
+    ///
+    /// - **Position** — 2D in NDC-like space (aspect-ratio aware).
+    /// - **UVs** — full `[0,1]²` coverage.
+    /// - **Topology** — 2 triangles, 4 vertices.
     pub fn quad(size: &optic_core::Size2D) -> Self {
         let mut mesh = Self::empty();
         mesh.aspect = size.aspect_ratio();
@@ -749,6 +1038,9 @@ impl Mesh2DFile {
         mesh
     }
 
+    /// Creates a quad covering the entire NDC space (-1 to +1 on both axes).
+    ///
+    /// Useful for full-screen post-processing effects.
     pub fn fullscreen_quad() -> Self {
         let mut mesh = Self::empty();
         mesh.aspect = 1.0;
@@ -763,10 +1055,14 @@ impl Mesh2DFile {
         mesh
     }
 
+    /// Attaches a custom per-vertex attribute.
     pub fn attach_custom_attr(&mut self, attr: CustomATTR) {
         self.cus_attrs.push(attr);
     }
 
+    /// Creates a circle approximated by a regular polygon.
+    ///
+    /// The first vertex is at the centre, creating a fan topology.
     pub fn circle(radius: f32, segments: u32) -> Self {
         let mut mesh = Self::empty();
         let mut pos = vec![[0.0f32, 0.0f32]];
@@ -790,10 +1086,12 @@ impl Mesh2DFile {
         mesh
     }
 
+    /// Creates a regular polygon (alias for [`circle`](Mesh2DFile::circle)).
     pub fn polygon(radius: f32, sides: u32) -> Self {
         Self::circle(radius, sides)
     }
 
+    /// Creates an annular (ring) shape with inner and outer radii.
     pub fn ring(inner_radius: f32, outer_radius: f32, segments: u32) -> Self {
         let mut mesh = Self::empty();
         let mut pos = Vec::new();
@@ -832,6 +1130,16 @@ impl Mesh2DFile {
         mesh
     }
 
+    /// Creates a rectangle centred at the origin with the given dimensions.
+    ///
+    /// This is a 2D quad in world-space units (not NDC). Use for billboards,
+    /// 2D physics bodies, or UI elements that need precise world-space sizing.
+    ///
+    /// # Conventions
+    ///
+    /// - **Position** — 2D world-space, centred.
+    /// - **UVs** — full `[0,1]²` coverage.
+    /// - **Topology** — 2 triangles, 4 vertices.
     pub fn rect(width: f32, height: f32) -> Self {
         let mut mesh = Self::empty();
         let x = width * 0.5;
@@ -843,11 +1151,13 @@ impl Mesh2DFile {
         mesh
     }
 
+    /// Returns `true` if no built-in vertex attributes are populated.
     pub fn starts_with_custom(&self) -> bool {
         self.pos_attr.is_empty() && self.col_attr.is_empty()
             && self.uvm_attr.is_empty()
     }
 
+    /// Interleaves vertex attributes and uploads to the GPU.
     pub fn ship(&self) -> MeshHandle {
         create_mesh2d_handle(self)
     }
@@ -1169,7 +1479,6 @@ mod tests {
         let mut m = Mesh2DFile::empty();
         m.set_pos_attr(Pos2DATTR::from_array(&[[0.0, 0.0]]));
         m.set_center(Center::TopLeft);
-        // TopLeft offset is (1.0, -1.0)
         assert!((m.pos_attr.data[0][0] - 1.0).abs() < f32::EPSILON);
         assert!((m.pos_attr.data[0][1] - (-1.0)).abs() < f32::EPSILON);
     }

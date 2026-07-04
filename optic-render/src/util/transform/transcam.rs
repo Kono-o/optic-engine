@@ -1,6 +1,12 @@
 use optic_core::{CamProj, ClipDist, Size2D};
 use cgmath::*;
 
+/// Camera transform state with pre-computed view and projection matrices.
+///
+/// Holds position, Euler rotation, FOV, clip distances, viewport size, and
+/// projection type. Call [`calc_matrices`](CamTransform::calc_matrices) to
+/// recompute the view, perspective, and orthographic matrices after mutating
+/// any field.
 #[derive(Clone, Debug)]
 pub struct CamTransform {
     pub pos: Vector3<f32>,
@@ -17,6 +23,9 @@ pub struct CamTransform {
 }
 
 impl CamTransform {
+    /// Recalculates view, perspective, and orthographic matrices.
+    ///
+    /// Also updates the `front` direction vector used for fly-through movement.
     pub fn calc_matrices(&mut self) {
         let aspect = self.size.aspect_ratio();
 
@@ -46,10 +55,12 @@ impl CamTransform {
         );
     }
 
+    /// Returns the view matrix (world-to-camera).
     pub fn view_matrix(&self) -> Matrix4<f32> {
         self.view_matrix
     }
 
+    /// Returns the active projection matrix based on [`proj`](CamTransform::proj).
     pub fn proj_matrix(&self) -> Matrix4<f32> {
         match self.proj {
             CamProj::Persp => self.persp_matrix,

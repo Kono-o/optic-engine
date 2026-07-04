@@ -4,11 +4,32 @@ use winit::window::{CursorGrabMode, Fullscreen, Window as WinitWindow};
 
 use crate::ScreenInfo;
 
+/// A winit window wrapper with frame-tracking and cursor management.
+///
+/// Owns an optional [`Arc<WinitWindow>`]. When closed, the inner handle is
+/// set to `None` and all methods become no-ops returning default values.
+///
+/// # Frame tracking
+///
+/// Call [`update_frame`](Window::update_frame) once per frame after
+/// processing events. This computes:
+/// - Cursor delta (movement since last frame)
+/// - Window position delta
+/// - Cursor loopback wrapping
+///
+/// # Cursor modes
+///
+/// The window supports three cursor modes:
+/// - **Grab** — cursor is locked to the window (hidden, infinite movement)
+/// - **Confine** — cursor is confined to the window area (visible, clamped)
+/// - **Loopback** — cursor position wraps at window edges (software, for raw
+///   input in first-person controls)
+///
+/// Grab and confine are winit-level operations; loopback is implemented by
+/// [`update_frame`](Window::update_frame) warping the cursor.
 #[derive(Debug)]
 pub struct Window {
     inner: Option<std::sync::Arc<WinitWindow>>,
-
-    // ── Frame-tracking (computed each frame) ─────────────────────────────
     prev_cursor_pos: Coord2D,
     cursor_delta: CoordOffset,
     prev_position: Coord2D,
@@ -16,8 +37,6 @@ pub struct Window {
     prev_size: Size2D,
     cursor_inside: bool,
     tracking_started: bool,
-
-    // ── Cached state (no live winit query available) ──────────────────────
     cursor_pos: Coord2D,
     cursor_visible: bool,
     cursor_grabbed: bool,
@@ -28,7 +47,10 @@ pub struct Window {
 }
 
 impl Window {
-    // ── Construction ──────────────────────────────────────────────────────
+    /// Create a new window.
+    ///
+    /// The window starts hidden — call [`set_visible`](Window::set_visible)`(true)`
+    /// when ready, or let the game loop manage visibility.
     #[allow(deprecated)]
     pub fn new(el: &winit::event_loop::EventLoop<()>, title: &str, size: Size2D) -> Self {
         let attrs = WinitWindow::default_attributes()
@@ -57,6 +79,9 @@ impl Window {
         window
     }
 
+    /// Create a new transparent window (requires a compositor that supports transparency).
+    ///
+    /// Same as [`new`](Window::new) but sets `with_transparent(true)` on the winit window.
     #[allow(deprecated)]
     pub fn new_transparent(el: &winit::event_loop::EventLoop<()>, title: &str, size: Size2D) -> Self {
         let attrs = WinitWindow::default_attributes()
@@ -86,35 +111,43 @@ impl Window {
         window
     }
 
+    /// Close the window. The inner winit handle is dropped.
     pub fn close(&mut self) {
         self.inner = None;
     }
 
+    /// True if the window has been closed.
     pub fn is_closed(&self) -> bool {
         self.inner.is_none()
     }
 
+    /// True if the window is still open.
     pub fn is_running(&self) -> bool {
         self.inner.is_some()
     }
 
     // ── Identity ──────────────────────────────────────────────────────────
+
+    /// Raw window handle for EGL surface creation.
     pub fn raw_handle(&self) -> Option<raw_window_handle::RawWindowHandle> {
         use raw_window_handle::HasWindowHandle;
         self.inner.as_ref().map(|w| w.window_handle().unwrap().as_raw())
     }
 
+    /// Raw display handle for EGL display connection.
     pub fn raw_display_handle(&self) -> Option<raw_window_handle::RawDisplayHandle> {
         use raw_window_handle::HasDisplayHandle;
         self.inner.as_ref().map(|w| w.display_handle().unwrap().as_raw())
     }
 
+    /// The winit window ID.
     pub fn id(&self) -> Option<winit::window::WindowId> {
         self.inner.as_ref().map(|w| w.id())
     }
 
     // ── Sizing ────────────────────────────────────────────────────────────
-    /// Live query via winit `inner_size()`.
+
+    /// Current inner size (live winit query).
     pub fn size(&self) -> Size2D {
         self.inner.as_ref().map_or(self.prev_size, |w| {
             let s = w.inner_size();
@@ -122,21 +155,26 @@ impl Window {
         })
     }
 
+    /// Request a new inner size.
+    ///
+    /// The OS may not honor the exact request — check [`size()`](Window::size) later.
     pub fn set_size(&self, size: Size2D) {
         if let Some(ref w) = self.inner {
             let _ = w.request_inner_size(PhysicalSize::new(size.w, size.h));
         }
     }
 
+    /// The size cached at the last [`update_frame`](Window::update_frame) call.
     pub fn prev_size(&self) -> Size2D {
         self.prev_size
     }
 
-    /// Cached from the last `set_min_size` call (no live winit query).
+    /// Minimum window size (cached value, not a live winit query).
     pub fn min_size(&self) -> Option<Size2D> {
         self.min_size
     }
 
+    /// Set the minimum window size.
     pub fn set_min_size(&mut self, size: Option<Size2D>) {
         self.min_size = size;
         if let Some(ref w) = self.inner {
@@ -144,11 +182,12 @@ impl Window {
         }
     }
 
-    /// Cached from the last `set_max_size` call (no live winit query).
+    /// Maximum window size (cached value, not a live winit query).
     pub fn max_size(&self) -> Option<Size2D> {
         self.max_size
     }
 
+    /// Set the maximum window size.
     pub fn set_max_size(&mut self, size: Option<Size2D>) {
         self.max_size = size;
         if let Some(ref w) = self.inner {
@@ -156,11 +195,12 @@ impl Window {
         }
     }
 
-    /// Live query via winit `is_resizable()`.
+    /// True if the window is resizable (live winit query).
     pub fn resizable(&self) -> bool {
         self.inner.as_ref().map_or(true, |w| w.is_resizable())
     }
 
+    /// Enable or disable resizing.
     pub fn set_resizable(&self, enable: bool) {
         if let Some(ref w) = self.inner {
             w.set_resizable(enable);
@@ -168,19 +208,22 @@ impl Window {
     }
 
     // ── Desktop Position ──────────────────────────────────────────────────
-    /// Live query via winit `outer_position()`.
+
+    /// Desktop position of the window (live winit query via `outer_position`).
     pub fn position(&self) -> Coord2D {
         self.inner.as_ref().and_then(|w| {
             w.outer_position().ok().map(|p| Coord2D::from(p.x as f64, p.y as f64))
         }).unwrap_or(self.prev_position)
     }
 
+    /// Set the desktop position.
     pub fn set_position(&self, pos: Coord2D) {
         if let Some(ref w) = self.inner {
             let _ = w.set_outer_position(PhysicalPosition::new(pos.x as i32, pos.y as i32));
         }
     }
 
+    /// Center the window on the current monitor.
     pub fn center_on_screen(&self) {
         if let Some(ref w) = self.inner {
             if let Some(monitor) = w.current_monitor() {
@@ -193,11 +236,12 @@ impl Window {
         }
     }
 
+    /// Desktop position cached at the last [`update_frame`](Window::update_frame) call.
     pub fn prev_position(&self) -> Coord2D {
         self.prev_position
     }
 
-    /// Movement of the window on screen since last polled. Resets to zero on read.
+    /// Cumulative window position delta since the last call to this method (reset on read).
     pub fn position_delta(&mut self) -> CoordOffset {
         let d = self.position_delta;
         self.position_delta = CoordOffset::empty();
@@ -205,11 +249,13 @@ impl Window {
     }
 
     // ── Title ─────────────────────────────────────────────────────────────
-    /// Live query via winit `title()`.
+
+    /// Current window title (live winit query).
     pub fn title(&self) -> String {
         self.inner.as_ref().map_or(String::new(), |w| w.title())
     }
 
+    /// Set the window title.
     pub fn set_title(&self, title: &str) {
         if let Some(ref w) = self.inner {
             w.set_title(title);
@@ -217,11 +263,13 @@ impl Window {
     }
 
     // ── Fullscreen ────────────────────────────────────────────────────────
-    /// Live query via winit `fullscreen()`.
+
+    /// True if the window is currently fullscreen (live winit query).
     pub fn is_fullscreen(&self) -> bool {
         self.inner.as_ref().and_then(|w| w.fullscreen()).is_some()
     }
 
+    /// Enter or exit borderless fullscreen.
     pub fn set_fullscreen(&self, enable: bool) {
         if let Some(ref w) = self.inner {
             if enable {
@@ -232,61 +280,69 @@ impl Window {
         }
     }
 
+    /// Toggle fullscreen.
     pub fn toggle_fullscreen(&self) {
         self.set_fullscreen(!self.is_fullscreen());
     }
 
     // ── Window State ──────────────────────────────────────────────────────
-    /// Live query via winit `is_visible()`.
+
+    /// True if the window is visible (live winit query).
     pub fn is_visible(&self) -> bool {
         self.inner.as_ref().and_then(|w| w.is_visible()).unwrap_or(false)
     }
 
+    /// Show or hide the window.
     pub fn set_visible(&self, visible: bool) {
         if let Some(ref w) = self.inner {
             w.set_visible(visible);
         }
     }
 
-    /// Live query via winit `is_minimized()`.
+    /// True if the window is minimized (live winit query).
     pub fn is_minimized(&self) -> bool {
         self.inner.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false)
     }
 
+    /// Minimize the window.
     pub fn minimize(&self) {
         if let Some(ref w) = self.inner {
             w.set_minimized(true);
         }
     }
 
+    /// Restore from minimized.
     pub fn restore(&self) {
         if let Some(ref w) = self.inner {
             w.set_minimized(false);
         }
     }
 
-    /// Live query via winit `is_maximized()`.
+    /// True if the window is maximized (live winit query).
     pub fn is_maximized(&self) -> bool {
         self.inner.as_ref().map_or(false, |w| w.is_maximized())
     }
 
+    /// Maximize the window.
     pub fn maximize(&self) {
         if let Some(ref w) = self.inner {
             w.set_maximized(true);
         }
     }
 
+    /// Unmaximize the window (restore).
     pub fn unmaximize(&self) {
         if let Some(ref w) = self.inner {
             w.set_maximized(false);
         }
     }
 
-    /// Live query via winit `has_focus()`.
+    /// True if the window has focus (live winit query).
     pub fn has_focus(&self) -> bool {
         self.inner.as_ref().map_or(false, |w| w.has_focus())
     }
 
+    /// Request focus.
     pub fn focus(&self) {
         if let Some(ref w) = self.inner {
             w.focus_window();
@@ -294,6 +350,8 @@ impl Window {
     }
 
     // ── Frame Control ─────────────────────────────────────────────────────
+
+    /// Request a redraw from winit.
     pub fn request_redraw(&self) {
         if let Some(ref w) = self.inner {
             w.request_redraw();
@@ -301,6 +359,8 @@ impl Window {
     }
 
     // ── Screen ────────────────────────────────────────────────────────
+
+    /// Information about the monitor this window is on.
     pub fn screen_info(&self) -> Option<ScreenInfo> {
         self.inner.as_ref().and_then(|w| {
             w.current_monitor().map(|m| ScreenInfo::from_handle(&m))
@@ -308,12 +368,13 @@ impl Window {
     }
 
     // ── Cursor ────────────────────────────────────────────────────────────
-    /// Returns the last-known cursor position (updated via events or `set_cursor_pos`).
+
+    /// Cached cursor position (updated via events or `set_cursor_pos`).
     pub fn cursor_pos(&self) -> Coord2D {
         self.cursor_pos
     }
 
-    /// Moves the OS cursor and updates the cached position.
+    /// Move the OS cursor and update the cached position.
     pub fn set_cursor_pos(&mut self, pos: Coord2D) {
         self.cursor_pos = pos;
         if let Some(ref w) = self.inner {
@@ -321,10 +382,14 @@ impl Window {
         }
     }
 
+    /// Cursor delta since the last frame (computed by [`update_frame`](Window::update_frame)).
+    ///
+    /// Y is inverted (positive = up) to match screen coordinates.
     pub fn cursor_delta(&self) -> CoordOffset {
         self.cursor_delta
     }
 
+    /// Cursor position normalized to 0..1 where (0,0) = bottom-left, (1,1) = top-right.
     pub fn cursor_pos_normalized(&self) -> Coord2D {
         let sz = self.size();
         if sz.w == 0 || sz.h == 0 {
@@ -333,15 +398,17 @@ impl Window {
         Coord2D::from(self.cursor_pos.x / sz.w as f64, 1.0 - self.cursor_pos.y / sz.h as f64)
     }
 
-    /// Updated via `CursorEntered`/`CursorLeft` events.
+    /// True if the cursor is inside the window client area (updated via events).
     pub fn is_cursor_inside(&self) -> bool {
         self.cursor_inside
     }
 
+    /// True if the cursor is visible (cached, not a live winit query).
     pub fn is_cursor_visible(&self) -> bool {
         self.cursor_visible
     }
 
+    /// Show or hide the cursor.
     pub fn set_cursor_visible(&mut self, visible: bool) {
         self.cursor_visible = visible;
         if let Some(ref w) = self.inner {
@@ -349,14 +416,18 @@ impl Window {
         }
     }
 
+    /// Toggle cursor visibility.
     pub fn toggle_cursor_visible(&mut self) {
         self.set_cursor_visible(!self.cursor_visible);
     }
 
+    /// True if the cursor is grabbed (locked + hidden, for raw input).
     pub fn is_cursor_grabbed(&self) -> bool {
         self.cursor_grabbed
     }
 
+    /// Lock or release the cursor (grab mode). Returns `Err(())` if the platform
+    /// does not support cursor locking.
     pub fn set_cursor_grab(&mut self, grab: bool) -> Result<(), ()> {
         let result = match self.inner.as_ref() {
             Some(w) => w.set_cursor_grab(if grab { CursorGrabMode::Locked } else { CursorGrabMode::None })
@@ -369,14 +440,17 @@ impl Window {
         result
     }
 
+    /// Toggle cursor grab.
     pub fn toggle_cursor_grab(&mut self) {
         let _ = self.set_cursor_grab(!self.cursor_grabbed);
     }
 
+    /// True if the cursor is confined (clamped to window, visible).
     pub fn is_cursor_confined(&self) -> bool {
         self.cursor_confined
     }
 
+    /// Confine or release the cursor. Returns `Err(())` if unsupported.
     pub fn set_cursor_confine(&mut self, confine: bool) -> Result<(), ()> {
         let result = match self.inner.as_ref() {
             Some(w) => w.set_cursor_grab(if confine { CursorGrabMode::Confined } else { CursorGrabMode::None })
@@ -389,21 +463,28 @@ impl Window {
         result
     }
 
+    /// Toggle cursor confine.
     pub fn toggle_cursor_confine(&mut self) {
         let _ = self.set_cursor_confine(!self.cursor_confined);
     }
 
+    /// True if cursor loopback (software edge-wrapping) is enabled.
     pub fn is_cursor_loopback(&self) -> bool {
         self.cursor_loopback
     }
 
+    /// Enable or disable loopback mode. When enabled, [`update_frame`](Window::update_frame)
+    /// will wrap the cursor position at window edges, useful for first-person camera control.
     pub fn set_cursor_loopback(&mut self, loopback: bool) {
         self.cursor_loopback = loopback;
     }
 
     // ── Frame Update ──────────────────────────────────────────────────────
+
     /// Call once per frame after processing events.
-    /// Snapshots live/tracked state and computes cursor delta.
+    ///
+    /// Snapshots cursor position, computes cursor/window deltas, and applies
+    /// loopback wrapping if enabled.
     pub fn update_frame(&mut self) {
         let new_pos = self.position();
         if !self.tracking_started {
@@ -439,7 +520,8 @@ impl Window {
         }
     }
 
-    // ── Internal (called by optic-loop event handlers) ───────────────────
+    // ── Internal ──────────────────────────────────────────────────────────
+
     #[doc(hidden)]
     pub fn notify_cursor_moved(&mut self, pos: Coord2D) {
         self.cursor_pos = pos;

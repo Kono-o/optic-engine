@@ -1,14 +1,18 @@
 [package]
 name = "optic-render"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "OpenGL 4.6 renderer for Optic engine — EGL context, shaders, meshes, textures, cameras, canvas"
 
 [dependencies]
 optic-core = { path = "../optic-core" }
 optic-file = { path = "../optic-file" }
-cgmath = "0.18.0"
-khronos-egl = { version = "6.0", features = ["static"] }
-gl = "0.14.0"
-image = "0.25.8"
-flate2 = "1.1.2"
-raw-window-handle = "0.6"
+cgmath.workspace = true
+khronos-egl.workspace = true
+gl.workspace = true
+image.workspace = true
+flate2.workspace = true
+raw-window-handle.workspace = true

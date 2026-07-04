@@ -1,6 +1,8 @@
 [package]
 name = "optic-color"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Zero-dependency color library for Optic engine — RGBA, HSV, HSL, gradients, named constants"

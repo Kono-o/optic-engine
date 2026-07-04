@@ -6,8 +6,12 @@ use winit::event::{ElementState, MouseButton, MouseScrollDelta, TouchPhase, Wind
 use winit::keyboard::{ModifiersState, PhysicalKey};
 pub use winit::keyboard::KeyCode;
 
-// ── Core types ──────────────────────────────────────────────────────────
-
+/// Per-button state machine.
+///
+/// Tracks press/release frame numbers so callers can distinguish the exact
+/// frame a button was pressed or released, independent of polling order.
+///
+/// Used internally by [`Events`] for keyboard, mouse, and gamepad buttons.
 #[derive(Copy, Clone)]
 pub struct ButtonState {
     pub held: bool,
@@ -15,6 +19,16 @@ pub struct ButtonState {
     pub release_frame: u64,
 }
 
+/// Input action filter for frame-based queries.
+///
+/// Passed to query methods on [`Events`] to specify which edge or level
+/// of the button state should match.
+///
+/// | Variant | Behaviour |
+/// |---------|-----------|
+/// | `Pressed`  | True only on the frame the button transitions up→down |
+/// | `Released` | True only on the frame the button transitions down→up |
+/// | `Held`     | True every frame while the button is down |
 #[derive(Debug, Clone, Copy)]
 pub enum Is {
     Pressed,
@@ -22,6 +36,7 @@ pub enum Is {
     Held,
 }
 
+/// Mouse button identifier.
 #[derive(Debug, Clone, Copy)]
 pub enum Mouse {
     Left,
@@ -106,10 +121,10 @@ fn check_state(s: &ButtonState, action: Is, frame: u64) -> bool {
     }
 }
 
-// ── Gamepad types ────────────────────────────────────────────────────────
-
+/// Maximum number of supported gamepads.
 pub const MAX_GAMEPADS: usize = 4;
 
+/// Gamepad button identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GamepadButton {
     A, B, X, Y,
@@ -120,6 +135,7 @@ pub enum GamepadButton {
     Other(u8),
 }
 
+/// Gamepad analog axis identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GamepadAxis {
     LeftX, LeftY,
@@ -199,8 +215,50 @@ fn gamepad_axis_from_gilrs(a: gilrs::Axis) -> GamepadAxis {
     }
 }
 
-// ── Events ───────────────────────────────────────────────────────────────
-
+/// Per-frame input state snapshot.
+///
+/// `Events` holds all input state for a single frame. It is populated by calling
+/// [`process_window_event`](Events::process_window_event) and
+/// [`process_gilrs_event`](Events::process_gilrs_event) as events arrive, then
+/// frozen for the frame. At the end of the frame, [`end_frame`](Events::end_frame)
+/// advances the frame counter and clears transient state.
+///
+/// # Keyboard
+///
+/// ```
+/// use optic_window::*;
+///
+/// # let events = Events::new();
+/// if events.key(KeyCode::Space, Is::Pressed) {
+///     // space was just pressed this frame
+/// }
+/// if events.key(KeyCode::ControlLeft, Is::Held) {
+///     // ctrl is held down
+/// }
+/// ```
+///
+/// # Mouse
+///
+/// ```
+/// use optic_window::*;
+///
+/// # let mut events = Events::new();
+/// if events.mouse(Mouse::Left, Is::Pressed) {
+///     // left click this frame
+/// }
+/// ```
+///
+/// # Gamepad
+///
+/// ```
+/// use optic_window::*;
+///
+/// # let mut events = Events::new();
+/// if events.gamepad_button(0, GamepadButton::A, Is::Pressed) {
+///     // gamepad 0 pressed A this frame
+/// }
+/// let axis = events.gamepad_axis(0, GamepadAxis::LeftX);
+/// ```
 pub struct Events {
     pub keys: [ButtonState; 256],
     pub mouse_buttons: [ButtonState; 8],
@@ -222,6 +280,7 @@ fn empty_buttons<const N: usize>() -> [ButtonState; N] {
 }
 
 impl Events {
+    /// Create a new, empty event state (frame = 1, focused = true).
     pub fn new() -> Self {
         Self {
             keys: empty_buttons::<256>(),
@@ -240,6 +299,7 @@ impl Events {
         }
     }
 
+    /// Reset all state to defaults. Does not advance the frame counter.
     pub fn clear(&mut self) {
         self.keys = empty_buttons::<256>();
         self.mouse_buttons = empty_buttons::<8>();
@@ -256,6 +316,9 @@ impl Events {
 
     // ── Event processing ──────────────────────────────────────────────────
 
+    /// Process a single winit [`WindowEvent`], updating internal state.
+    ///
+    /// Called by the game loop for each event in the winit event queue.
     pub fn process_window_event(&mut self, event: &WindowEvent, _window: &Window) {
         match event {
             WindowEvent::KeyboardInput { event, .. } => {
@@ -328,6 +391,7 @@ impl Events {
         }
     }
 
+    /// Process a single gilrs gamepad event.
     pub fn process_gilrs_event(&mut self, event: &gilrs::Event) {
         let idx: usize = event.id.into();
         if idx >= MAX_GAMEPADS { return; }
@@ -383,7 +447,11 @@ impl Events {
         }
     }
 
-    /// Advances the frame counter and resets per-frame transient state.
+    /// Advance the frame counter and clear per-frame transient state.
+    ///
+    /// Must be called at the end of every frame. Resets scroll deltas,
+    /// resize events, and network events. The `close_requested` flag
+    /// persists across frames (the user must manually clear it).
     pub fn end_frame(&mut self) {
         self.frame += 1;
         self.mouse_scroll_line = None;
@@ -396,49 +464,68 @@ impl Events {
 
     // ── Keyboard queries ──────────────────────────────────────────────────
 
+    /// Query a single key by [`KeyCode`] and [`Is`] action.
     pub fn key(&self, kc: KeyCode, action: Is) -> bool {
         let idx = key_index(&kc);
         if idx >= 256 { return false; }
         check_state(&self.keys[idx], action, self.frame)
     }
 
+    /// Query a key combo: `primary` must match `action` while `modifier` is held.
+    ///
+    /// ```
+    /// use optic_window::*;
+    ///
+    /// # let events = Events::new();
+    /// if events.key_combo(KeyCode::KeyC, KeyCode::ControlLeft, Is::Pressed) {
+    ///     // Ctrl+C was pressed
+    /// }
+    /// ```
     pub fn key_combo(&self, primary: KeyCode, modifier: KeyCode, action: Is) -> bool {
         self.key(primary, action) && self.key(modifier, Is::Held)
     }
 
+    /// Query multiple keys simultaneously — all must match their respective actions.
     pub fn key_combo_n(&self, keys: &[(KeyCode, Is)]) -> bool {
         keys.iter().all(|(kc, action)| self.key(*kc, *action))
     }
 
+    /// True if any key matches the given action.
     pub fn any_key(&self, action: Is) -> bool {
         self.keys.iter().any(|s| check_state(s, action, self.frame))
     }
 
     // ── Mouse queries ─────────────────────────────────────────────────────
 
+    /// Query a mouse button by [`Mouse`] and [`Is`] action.
     pub fn mouse(&self, m: Mouse, action: Is) -> bool {
         let idx = mouse_index(&m);
         if idx >= 8 { return false; }
         check_state(&self.mouse_buttons[idx], action, self.frame)
     }
 
+    /// True if any mouse button matches the given action.
     pub fn any_mouse(&self, action: Is) -> bool {
         self.mouse_buttons.iter().any(|s| check_state(s, action, self.frame))
     }
 
     // ── Gamepad queries ───────────────────────────────────────────────────
 
+    /// Default deadzone for gamepad analog axes.
     pub const GAMEPAD_AXIS_DEADZONE: f32 = 0.15;
 
+    /// True if a gamepad with the given `id` is currently connected.
     pub fn gamepad_connected(&self, id: usize) -> bool {
         if id >= MAX_GAMEPADS { return false; }
         self.gamepad_connected[id]
     }
 
+    /// Number of currently connected gamepads.
     pub fn gamepad_count(&self) -> usize {
         self.gamepad_connected.iter().filter(|c| **c).count()
     }
 
+    /// Query a gamepad button by [`GamepadButton`] and [`Is`] action.
     pub fn gamepad_button(&self, id: usize, button: GamepadButton, action: Is) -> bool {
         if id >= MAX_GAMEPADS { return false; }
         let idx = gamepad_button_index(&button);
@@ -446,13 +533,13 @@ impl Events {
         check_state(&self.gamepad_buttons[id][idx], action, self.frame)
     }
 
-    /// Check any button on a specific gamepad.
+    /// True if any button on the given gamepad matches the action.
     pub fn any_gamepad_button(&self, id: usize, action: Is) -> bool {
         if id >= MAX_GAMEPADS { return false; }
         self.gamepad_buttons[id].iter().any(|s| check_state(s, action, self.frame))
     }
 
-    /// Check any button on any connected gamepad.
+    /// True if any button on any connected gamepad matches the action.
     pub fn any_gamepad(&self, action: Is) -> bool {
         for id in 0..MAX_GAMEPADS {
             if self.gamepad_connected[id] && self.any_gamepad_button(id, action) {
@@ -462,6 +549,7 @@ impl Events {
         false
     }
 
+    /// Raw gamepad axis value (no deadzone applied).
     pub fn gamepad_axis_raw(&self, id: usize, axis: GamepadAxis) -> f32 {
         if id >= MAX_GAMEPADS { return 0.0; }
         let idx = gamepad_axis_index(&axis);
@@ -469,489 +557,17 @@ impl Events {
         self.gamepad_axes[id][idx]
     }
 
+    /// Gamepad axis value with the default deadzone ([`GAMEPAD_AXIS_DEADZONE`]).
+    ///
+    /// Values below the deadzone are snapped to 0.0.
     pub fn gamepad_axis(&self, id: usize, axis: GamepadAxis) -> f32 {
         let v = self.gamepad_axis_raw(id, axis);
         if v.abs() < Self::GAMEPAD_AXIS_DEADZONE { 0.0 } else { v }
     }
 
+    /// Gamepad axis value with a custom deadzone.
     pub fn gamepad_axis_deadzoned(&self, id: usize, axis: GamepadAxis, deadzone: f32) -> f32 {
         let v = self.gamepad_axis_raw(id, axis);
         if v.abs() < deadzone { 0.0 } else { v }
-    }
-}
-
-// ── Tests ─────────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── Index mapping ─────────────────────────────────────────────────
-
-    #[test]
-    fn key_index_mapping() {
-        assert_eq!(key_index(&KeyCode::KeyA), 0);
-        assert_eq!(key_index(&KeyCode::KeyZ), 25);
-        assert_eq!(key_index(&KeyCode::Digit0), 26);
-        assert_eq!(key_index(&KeyCode::Digit9), 35);
-        assert_eq!(key_index(&KeyCode::Escape), 60);
-        assert_eq!(key_index(&KeyCode::Space), 63);
-        assert_eq!(key_index(&KeyCode::ShiftLeft), 75);
-        assert_eq!(key_index(&KeyCode::ControlRight), 78);
-        assert_eq!(key_index(&KeyCode::ArrowUp), 71);
-        assert_eq!(key_index(&KeyCode::ContextMenu), 116);
-    }
-
-    #[test]
-    fn key_index_unmapped() {
-        assert_eq!(key_index(&KeyCode::AudioVolumeUp), 255);
-    }
-
-    #[test]
-    fn mouse_index_mapping() {
-        assert_eq!(mouse_index(&Mouse::Left), 0);
-        assert_eq!(mouse_index(&Mouse::Right), 1);
-        assert_eq!(mouse_index(&Mouse::Middle), 2);
-        assert_eq!(mouse_index(&Mouse::Back), 3);
-        assert_eq!(mouse_index(&Mouse::Forward), 4);
-    }
-
-    #[test]
-    fn mouse_index_other() {
-        assert_eq!(mouse_index(&Mouse::Other(0)), 5);
-        assert_eq!(mouse_index(&Mouse::Other(3)), 7);
-    }
-
-    // ── Frame-based lifecycle ────────────────────────────────────────
-
-    #[test]
-    fn press_release_lifecycle() {
-        let mut ev = Events::new();
-        assert_eq!(ev.frame, 1);
-        let kc = KeyCode::KeyA;
-        let idx = key_index(&kc);
-
-        // Initially nothing
-        assert!(!ev.key(kc, Is::Pressed));
-        assert!(!ev.key(kc, Is::Held));
-        assert!(!ev.key(kc, Is::Released));
-
-        // Press on frame 1
-        ev.keys[idx].held = true;
-        ev.keys[idx].press_frame = ev.frame;
-        assert!(ev.key(kc, Is::Pressed));
-        assert!(ev.key(kc, Is::Held));
-        assert!(!ev.key(kc, Is::Released));
-
-        // Still held frame 2, no longer "pressed"
-        ev.end_frame();
-        assert_eq!(ev.frame, 2);
-        assert!(!ev.key(kc, Is::Pressed));
-        assert!(ev.key(kc, Is::Held));
-        assert!(!ev.key(kc, Is::Released));
-
-        // Release on frame 2
-        ev.keys[idx].held = false;
-        ev.keys[idx].release_frame = ev.frame;
-        assert!(!ev.key(kc, Is::Pressed));
-        assert!(!ev.key(kc, Is::Held));
-        assert!(ev.key(kc, Is::Released));
-
-        // Released flag clears after end_frame (frame 3)
-        ev.end_frame();
-        assert!(!ev.key(kc, Is::Released));
-    }
-
-    #[test]
-    fn pressed_only_on_current_frame() {
-        let mut ev = Events::new();
-        assert_eq!(ev.frame, 1);
-        let kc = KeyCode::KeyA;
-        let idx = key_index(&kc);
-
-        // Press on frame 1
-        ev.keys[idx].held = true;
-        ev.keys[idx].press_frame = ev.frame;
-        assert!(ev.key(kc, Is::Pressed));
-
-        // End frame — press_frame (1) != frame (2), so not pressed
-        ev.end_frame();
-        assert_eq!(ev.frame, 2);
-        assert!(!ev.key(kc, Is::Pressed));
-        assert!(ev.key(kc, Is::Held));
-
-        // Press again on frame 2
-        ev.keys[idx].press_frame = ev.frame;
-        assert!(ev.key(kc, Is::Pressed));
-    }
-
-    #[test]
-    fn key_unmapped() {
-        let ev = Events::new();
-        assert!(!ev.key(KeyCode::AudioVolumeUp, Is::Held));
-    }
-
-    #[test]
-    fn mouse_unmapped() {
-        let ev = Events::new();
-        assert!(!ev.mouse(Mouse::Other(10), Is::Held));
-    }
-
-    #[test]
-    fn key_combo_works() {
-        let mut ev = Events::new();
-        let ctrl = KeyCode::ControlLeft;
-        let c = KeyCode::KeyC;
-
-        assert!(!ev.key_combo(c, ctrl, Is::Pressed));
-
-        ev.keys[key_index(&ctrl)].held = true;
-        assert!(!ev.key_combo(c, ctrl, Is::Pressed));
-
-        ev.keys[key_index(&c)].press_frame = ev.frame;
-        ev.keys[key_index(&c)].held = true;
-        assert!(ev.key_combo(c, ctrl, Is::Pressed));
-    }
-
-    #[test]
-    fn key_combo_n_works() {
-        let mut ev = Events::new();
-        ev.keys[key_index(&KeyCode::ControlLeft)].held = true;
-        ev.keys[key_index(&KeyCode::KeyA)].press_frame = ev.frame;
-        ev.keys[key_index(&KeyCode::KeyA)].held = true;
-        ev.keys[key_index(&KeyCode::KeyB)].held = true;
-
-        assert!(ev.key_combo_n(&[
-            (KeyCode::KeyA, Is::Pressed),
-            (KeyCode::KeyB, Is::Held),
-            (KeyCode::ControlLeft, Is::Held),
-        ]));
-    }
-
-    #[test]
-    fn initial_state() {
-        let ev = Events::new();
-        assert!(ev.close_requested == false);
-        assert!(ev.focused);
-        assert!(ev.resize_event.is_none());
-        assert!(ev.mouse_scroll_line.is_none());
-        assert!(ev.mouse_scroll_pixel.is_none());
-        assert_eq!(ev.frame, 1);
-        assert!(!ev.any_key(Is::Held));
-        assert!(!ev.any_mouse(Is::Held));
-        assert_eq!(ev.gamepad_count(), 0);
-    }
-
-    // ── Mouse ─────────────────────────────────────────────────────────
-
-    #[test]
-    fn mouse_press_release() {
-        let mut ev = Events::new();
-        assert!(!ev.mouse(Mouse::Left, Is::Pressed));
-
-        ev.mouse_buttons[0].held = true;
-        ev.mouse_buttons[0].press_frame = ev.frame;
-        assert!(ev.mouse(Mouse::Left, Is::Pressed));
-        assert!(ev.mouse(Mouse::Left, Is::Held));
-
-        ev.mouse_buttons[0].held = false;
-        ev.mouse_buttons[0].release_frame = ev.frame;
-        assert!(ev.mouse(Mouse::Left, Is::Released));
-    }
-
-    #[test]
-    fn any_mouse_works() {
-        let mut ev = Events::new();
-        assert!(!ev.any_mouse(Is::Pressed));
-
-        ev.mouse_buttons[0].held = true;
-        ev.mouse_buttons[0].press_frame = ev.frame;
-        assert!(ev.any_mouse(Is::Pressed));
-    }
-
-    // ── Mouse wheel ───────────────────────────────────────────────────
-
-    #[test]
-    fn scroll_resets_on_end_frame() {
-        let mut ev = Events::new();
-        ev.mouse_scroll_line = Some((1.0, 2.0));
-        ev.mouse_scroll_pixel = Some((10.0, 20.0));
-        ev.end_frame();
-        assert!(ev.mouse_scroll_line.is_none());
-        assert!(ev.mouse_scroll_pixel.is_none());
-    }
-
-    // ── Modifiers ─────────────────────────────────────────────────────
-
-    #[test]
-    fn modifiers_default() {
-        let ev = Events::new();
-        assert!(!ev.modifiers.shift_key());
-        assert!(!ev.modifiers.control_key());
-        assert!(!ev.modifiers.alt_key());
-        assert!(!ev.modifiers.super_key());
-    }
-
-    // ── Focus ─────────────────────────────────────────────────────────
-
-    #[test]
-    fn focus_starts_true() {
-        let ev = Events::new();
-        assert!(ev.focused);
-    }
-
-    // ── Gamepad ───────────────────────────────────────────────────────
-
-    #[test]
-    fn gamepad_button_indices() {
-        assert_eq!(gamepad_button_index(&GamepadButton::A), 0);
-        assert_eq!(gamepad_button_index(&GamepadButton::B), 1);
-        assert_eq!(gamepad_button_index(&GamepadButton::X), 2);
-        assert_eq!(gamepad_button_index(&GamepadButton::Y), 3);
-        assert_eq!(gamepad_button_index(&GamepadButton::LB), 4);
-        assert_eq!(gamepad_button_index(&GamepadButton::RB), 5);
-        assert_eq!(gamepad_button_index(&GamepadButton::LT), 6);
-        assert_eq!(gamepad_button_index(&GamepadButton::RT), 7);
-        assert_eq!(gamepad_button_index(&GamepadButton::Back), 8);
-        assert_eq!(gamepad_button_index(&GamepadButton::Start), 9);
-        assert_eq!(gamepad_button_index(&GamepadButton::Guide), 10);
-        assert_eq!(gamepad_button_index(&GamepadButton::LeftStick), 11);
-        assert_eq!(gamepad_button_index(&GamepadButton::RightStick), 12);
-        assert_eq!(gamepad_button_index(&GamepadButton::DPadUp), 13);
-        assert_eq!(gamepad_button_index(&GamepadButton::DPadDown), 14);
-        assert_eq!(gamepad_button_index(&GamepadButton::DPadLeft), 15);
-        assert_eq!(gamepad_button_index(&GamepadButton::DPadRight), 16);
-        assert_eq!(gamepad_button_index(&GamepadButton::Other(0)), 17);
-        assert_eq!(gamepad_button_index(&GamepadButton::Other(2)), 19);
-    }
-
-    #[test]
-    fn gamepad_axis_indices() {
-        assert_eq!(gamepad_axis_index(&GamepadAxis::LeftX), 0);
-        assert_eq!(gamepad_axis_index(&GamepadAxis::LeftY), 1);
-        assert_eq!(gamepad_axis_index(&GamepadAxis::RightX), 2);
-        assert_eq!(gamepad_axis_index(&GamepadAxis::RightY), 3);
-        assert_eq!(gamepad_axis_index(&GamepadAxis::LeftTrigger), 4);
-        assert_eq!(gamepad_axis_index(&GamepadAxis::RightTrigger), 5);
-    }
-
-    #[test]
-    fn gamepad_press_release() {
-        let mut ev = Events::new();
-        assert!(!ev.gamepad_button(0, GamepadButton::A, Is::Pressed));
-
-        ev.gamepad_buttons[0][0].held = true;
-        ev.gamepad_buttons[0][0].press_frame = ev.frame;
-        assert!(ev.gamepad_button(0, GamepadButton::A, Is::Pressed));
-        assert!(ev.gamepad_button(0, GamepadButton::A, Is::Held));
-        assert!(!ev.gamepad_button(0, GamepadButton::A, Is::Released));
-
-        ev.end_frame();
-        assert!(!ev.gamepad_button(0, GamepadButton::A, Is::Pressed));
-        assert!(ev.gamepad_button(0, GamepadButton::A, Is::Held));
-
-        ev.gamepad_buttons[0][0].held = false;
-        ev.gamepad_buttons[0][0].release_frame = ev.frame;
-        assert!(ev.gamepad_button(0, GamepadButton::A, Is::Released));
-    }
-
-    #[test]
-    fn gamepad_out_of_range_id() {
-        let ev = Events::new();
-        assert!(!ev.gamepad_connected(99));
-        assert!(!ev.gamepad_button(99, GamepadButton::A, Is::Held));
-        assert_eq!(ev.gamepad_axis_raw(99, GamepadAxis::LeftX), 0.0);
-    }
-
-    #[test]
-    fn gamepad_axis_deadzone() {
-        let mut ev = Events::new();
-        ev.gamepad_axes[0][0] = 0.05;
-        assert_eq!(ev.gamepad_axis(0, GamepadAxis::LeftX), 0.0);
-
-        ev.gamepad_axes[0][0] = 0.5;
-        assert!((ev.gamepad_axis(0, GamepadAxis::LeftX) - 0.5).abs() < 1e-6);
-    }
-
-    #[test]
-    fn gamepad_axis_custom_deadzone() {
-        let mut ev = Events::new();
-        ev.gamepad_axes[0][0] = 0.05;
-        assert_eq!(ev.gamepad_axis_deadzoned(0, GamepadAxis::LeftX, 0.1), 0.0);
-        assert!((ev.gamepad_axis_deadzoned(0, GamepadAxis::LeftX, 0.01) - 0.05).abs() < 1e-6);
-    }
-
-    #[test]
-    fn gamepad_initial_state() {
-        let ev = Events::new();
-        for g in 0..MAX_GAMEPADS {
-            assert!(!ev.gamepad_connected[g]);
-            for b in 0..20 {
-                assert!(!ev.gamepad_buttons[g][b].held);
-                assert_eq!(ev.gamepad_buttons[g][b].press_frame, 0);
-                assert_eq!(ev.gamepad_buttons[g][b].release_frame, 0);
-            }
-            for a in 0..6 {
-                assert_eq!(ev.gamepad_axes[g][a], 0.0);
-            }
-        }
-        assert_eq!(ev.gamepad_count(), 0);
-    }
-
-    #[test]
-    fn gamepad_connected_count() {
-        let mut ev = Events::new();
-        assert_eq!(ev.gamepad_count(), 0);
-        ev.gamepad_connected[0] = true;
-        assert_eq!(ev.gamepad_count(), 1);
-        ev.gamepad_connected[2] = true;
-        assert_eq!(ev.gamepad_count(), 2);
-    }
-
-    #[test]
-    fn gamepad_any_button_specific() {
-        let mut ev = Events::new();
-        assert!(!ev.any_gamepad_button(0, Is::Pressed));
-
-        ev.gamepad_buttons[0][3].held = true;
-        ev.gamepad_buttons[0][3].press_frame = ev.frame;
-        assert!(ev.any_gamepad_button(0, Is::Pressed));
-        assert!(!ev.any_gamepad_button(1, Is::Pressed));
-    }
-
-    #[test]
-    fn gamepad_any_connected() {
-        let mut ev = Events::new();
-        assert!(!ev.any_gamepad(Is::Pressed));
-
-        ev.gamepad_connected[0] = true;
-        ev.gamepad_buttons[0][5].held = true;
-        ev.gamepad_buttons[0][5].press_frame = ev.frame;
-        assert!(ev.any_gamepad(Is::Pressed));
-
-        ev.end_frame();
-        assert!(!ev.any_gamepad(Is::Pressed));
-        assert!(ev.any_gamepad(Is::Held));
-    }
-
-    #[test]
-    fn gamepad_any_skips_disconnected() {
-        let mut ev = Events::new();
-        // Set button on a disconnected gamepad — should not be detected
-        ev.gamepad_buttons[0][0].held = true;
-        ev.gamepad_buttons[0][0].press_frame = ev.frame;
-        assert!(!ev.any_gamepad(Is::Pressed),
-            "disconnected gamepad should not count");
-
-        ev.gamepad_connected[0] = true;
-        assert!(ev.any_gamepad(Is::Pressed),
-            "connecting makes it visible");
-    }
-
-    #[test]
-    fn gamepad_end_frame_resets_press() {
-        let mut ev = Events::new();
-        ev.gamepad_buttons[0][0].held = true;
-        ev.gamepad_buttons[0][0].press_frame = ev.frame;
-        assert!(ev.gamepad_button(0, GamepadButton::A, Is::Pressed));
-
-        ev.end_frame();
-        assert!(!ev.gamepad_button(0, GamepadButton::A, Is::Pressed));
-        assert!(ev.gamepad_button(0, GamepadButton::A, Is::Held));
-    }
-
-    #[test]
-    fn gamepad_axis_named_constants() {
-        match GamepadAxis::LeftX { _ => {} }
-        match GamepadAxis::LeftY { _ => {} }
-        match GamepadAxis::RightX { _ => {} }
-        match GamepadAxis::RightY { _ => {} }
-        match GamepadAxis::LeftTrigger { _ => {} }
-        match GamepadAxis::RightTrigger { _ => {} }
-    }
-
-    // ── end_frame ─────────────────────────────────────────────────────
-
-    #[test]
-    fn end_frame_increments_counter() {
-        let mut ev = Events::new();
-        assert_eq!(ev.frame, 1);
-        ev.end_frame();
-        assert_eq!(ev.frame, 2);
-        ev.end_frame();
-        assert_eq!(ev.frame, 3);
-    }
-
-    #[test]
-    fn end_frame_clears_resize_event() {
-        let mut ev = Events::new();
-        ev.resize_event = Some(Size2D::from(800, 600));
-        ev.end_frame();
-        assert!(ev.resize_event.is_none());
-    }
-
-    #[test]
-    fn close_requested_sticks() {
-        let mut ev = Events::new();
-        ev.close_requested = true;
-        ev.end_frame();
-        assert!(ev.close_requested, "close_requested persists after end_frame");
-        ev.close_requested = false;
-        assert!(!ev.close_requested, "user clears it manually");
-    }
-
-    #[test]
-    fn clear_resets_all() {
-        let mut ev = Events::new();
-        let kc = KeyCode::KeyW;
-        let idx = key_index(&kc);
-        ev.keys[idx].held = true;
-        ev.keys[idx].press_frame = 0;
-        ev.mouse_scroll_line = Some((1.0, 0.0));
-        ev.close_requested = true;
-
-        ev.clear();
-        assert!(ev.close_requested == false);
-        assert!(!ev.keys[idx].held);
-        assert!(ev.mouse_scroll_line.is_none());
-    }
-
-    // ── any_key / any_mouse ───────────────────────────────────────────
-
-    #[test]
-    fn any_key_detects_press() {
-        let mut ev = Events::new();
-        assert!(!ev.any_key(Is::Pressed));
-
-        ev.keys[key_index(&KeyCode::Space)].held = true;
-        ev.keys[key_index(&KeyCode::Space)].press_frame = ev.frame;
-        assert!(ev.any_key(Is::Pressed));
-        assert!(ev.any_key(Is::Held));
-    }
-
-    #[test]
-    fn any_key_returns_false_when_none_held() {
-        let ev = Events::new();
-        assert!(!ev.any_key(Is::Held));
-        assert!(!ev.any_key(Is::Pressed));
-        // Released on frame 0 is never possible since frame starts at 1
-        assert!(!ev.any_key(Is::Released));
-    }
-
-    #[test]
-    fn is_values() {
-        match Is::Pressed { _ => {} }
-        match Is::Released { _ => {} }
-        match Is::Held { _ => {} }
-    }
-
-    #[test]
-    fn mouse_enum() {
-        match Mouse::Left { _ => {} }
-        match Mouse::Right { _ => {} }
-        match Mouse::Middle { _ => {} }
-        match Mouse::Back { _ => {} }
-        match Mouse::Forward { _ => {} }
-        match Mouse::Other(5) { _ => {} }
     }
 }

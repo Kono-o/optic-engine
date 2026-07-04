@@ -1,3 +1,49 @@
+//! The game loop and runtime — drives the winit event loop and owns the GPU,
+//! camera, windows, and timing.
+//!
+//! This crate provides two ergonomic levels for running an Optic application:
+//!
+//! # High-level API: [`Game`] + [`Runtime`]
+//!
+//! The [`Game`] struct owns all engine subsystems (GPU, camera, window, events,
+//! time, gamepad). You implement the [`Runtime`] trait and pass it to
+//! [`Game::run`]:
+//!
+//! ```ignore
+//! use optic_loop::{Game, Runtime};
+//!
+//! struct App;
+//! impl Runtime for App {
+//!     fn start(&mut self, _game: &mut Game) {}
+//!     fn update(&mut self, game: &mut Game) {
+//!         game.renderer.clear();
+//!         // render things...
+//!     }
+//!     fn end(&mut self, _game: &mut Game) {}
+//! }
+//!
+//! Game::run(App);
+//! ```
+//!
+//! # Low-level API: [`GameLoop`] + closure
+//!
+//! [`GameLoop`] takes a `FnMut(&mut FrameState)` closure and gives you more
+//! control over setup. Use [`run`] for a quick single-window start:
+//!
+//! ```ignore
+//! use optic_loop::run;
+//!
+//! run("My Window", (800, 600).into(), |frame| {
+//!     frame.gpu.clear();
+//!     // render things...
+//! });
+//! ```
+//!
+//! # Frame timing
+//!
+//! Both APIs update [`Time`] automatically each frame. Access delta time and
+//! FPS through the [`FrameState`] (low-level) or `game.time` (high-level).
+
 mod game;
 mod runtime;
 mod time;
@@ -15,6 +61,17 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::WindowId;
 
+/// A single window and its associated event sink and GPU surface index.
+///
+/// Used by [`GameLoop`] to manage multiple windows. Each `WindowState`
+/// owns a [`Window`], an [`Events`] collector, and the index of its
+/// surface within the GPU's context.
+///
+/// # Example
+///
+/// ```ignore
+/// let ws = WindowState::new(&event_loop, "My Window", (800, 600).into());
+/// ```
 pub struct WindowState {
     pub window: Window,
     pub events: Events,
@@ -22,6 +79,7 @@ pub struct WindowState {
 }
 
 impl WindowState {
+    /// Creates a new window and registers it with the event loop.
     pub fn new(el: &EventLoop<()>, title: &str, size: Size2D) -> Self {
         Self {
             window: Window::new(el, title, size),
@@ -30,19 +88,26 @@ impl WindowState {
         }
     }
 
+    /// Closes the underlying window.
     pub fn close(&mut self) {
         self.window.close();
     }
 
+    /// Returns `true` if the window has been closed.
     pub fn is_closed(&self) -> bool {
         self.window.is_closed()
     }
 
+    /// Returns the GPU surface index for this window.
     pub fn surface_index(&self) -> usize {
         self.surface_index
     }
 }
 
+/// A snapshot of per-frame mutable state, passed to the user's closure.
+///
+/// Contains borrows of the engine subsystems that the user may access
+/// during a frame callback in the [`GameLoop`] API.
 pub struct FrameState<'a> {
     pub time: &'a Time,
     pub windows: &'a mut [WindowState],
@@ -50,6 +115,31 @@ pub struct FrameState<'a> {
     pub camera: &'a mut Camera,
 }
 
+/// A low-level game loop that drives a closure once per frame.
+///
+/// Owns the event loop, one or more windows, the GPU, a camera, timing,
+/// and gamepad state. The user provides a `FnMut(&mut FrameState)` closure
+/// that is invoked every frame.
+///
+/// This is the lower-level alternative to [`Game`] + [`Runtime`]. Use it
+/// when you want more control over the setup process or need multiple
+/// windows.
+///
+/// # Example
+///
+/// ```ignore
+/// use optic_loop::{GameLoop, WindowState};
+///
+/// let el = EventLoop::new().unwrap();
+/// let ws = WindowState::new(&el, "App", (800, 600).into());
+/// let gpu = GPU::new_headless()?;
+/// let camera = Camera::new((800, 600).into(), CamProj::Persp);
+///
+/// let game = GameLoop::new(el, gpu, camera, vec![ws], |frame| {
+///     frame.gpu.clear();
+/// })?;
+/// game.run();
+/// ```
 pub struct GameLoop<F: FnMut(&mut FrameState)> {
     event_loop: Option<EventLoop<()>>,
     windows: Vec<WindowState>,
@@ -61,6 +151,15 @@ pub struct GameLoop<F: FnMut(&mut FrameState)> {
 }
 
 impl<F: FnMut(&mut FrameState)> GameLoop<F> {
+    /// Constructs a new game loop.
+    ///
+    /// Attaches each window's raw handle to the GPU context and initialises
+    /// gamepad support via `gilrs`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if window attachment to the GPU surface or gamepad
+    /// initialisation fails.
     pub fn new(
         el: EventLoop<()>,
         mut gpu: GPU,
@@ -91,6 +190,10 @@ impl<F: FnMut(&mut FrameState)> GameLoop<F> {
         })
     }
 
+    /// Starts the event loop, consuming `self`.
+    ///
+    /// This call blocks until all windows are closed or the application
+    /// exits.
     pub fn run(mut self) {
         let el = self.event_loop.take().unwrap();
         let _ = el.run_app(&mut self);
@@ -147,14 +250,12 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
             None => return,
         };
 
-        // Remove closed windows
         self.windows.retain(|ws| !ws.window.is_closed());
 
         if self.windows.is_empty() {
             return;
         }
 
-        // Poll gamepad events
         while let Some(gilrs_event) = self.gilrs.next_event() {
             for ws in &mut self.windows {
                 ws.events.process_gilrs_event(&gilrs_event);
@@ -183,7 +284,20 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
     }
 }
 
-/// Simple single-window entry point
+/// Runs a single-window application with a per-frame closure.
+///
+/// This is the simplest way to get a window on screen. On error, the
+/// error is logged and the process exits with `ERROR`.
+///
+/// # Example
+///
+/// ```ignore
+/// use optic_loop::run;
+///
+/// run("Hello", (800, 600).into(), |frame| {
+///     frame.gpu.clear();
+/// });
+/// ```
 pub fn run<F>(title: &str, size: Size2D, frame_fn: F)
 where
     F: FnMut(&mut FrameState) + 'static,

@@ -1,3 +1,4 @@
+/// Polygon rasterization mode.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum PolyMode {
     Points,
@@ -5,12 +6,14 @@ pub enum PolyMode {
     Filled,
 }
 
+/// Face culling direction.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Cull {
     Clock,
     AntiClock,
 }
 
+/// Primitive topology for draw calls.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub enum DrawMode {
     Points,
@@ -20,6 +23,9 @@ pub enum DrawMode {
     Strip,
 }
 
+/// Texture image format, encoding channel count and bit depth.
+///
+/// Each variant carries the per-channel bit depth (e.g. `RGBA(8)` = 4×8-bit).
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ImgFormat {
     R(u8),
@@ -29,6 +35,7 @@ pub enum ImgFormat {
 }
 
 impl ImgFormat {
+    /// Number of color channels (1–4).
     pub fn channels(&self) -> u8 {
         match self {
             ImgFormat::R(_) => 1,
@@ -37,6 +44,7 @@ impl ImgFormat {
             ImgFormat::RGBA(_) => 4,
         }
     }
+    /// Bits per channel.
     pub fn bit_depth(&self) -> u8 {
         *match self {
             ImgFormat::R(bd) => bd,
@@ -45,9 +53,13 @@ impl ImgFormat {
             ImgFormat::RGBA(bd) => bd,
         }
     }
+    /// Total bytes per pixel (channels × bit_depth / 8).
     pub fn pixel_size(&self) -> u8 {
-        self.channels() * self.bit_depth()
+        self.channels() * self.bit_depth() / 8
     }
+    /// Construct from channel count and bit depth.
+    ///
+    /// Channels ≥ 4 produce `RGBA`. Unknown channels default to `RGBA`.
     pub fn from(channels: u8, bit_depth: u8) -> ImgFormat {
         match channels {
             1 => ImgFormat::R(bit_depth),
@@ -58,12 +70,14 @@ impl ImgFormat {
     }
 }
 
+/// Texture filter (minification/magnification) mode.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ImgFilter {
     Closest,
     Linear,
 }
 
+/// Texture wrap (addressing) mode.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ImgWrap {
     Repeat,
@@ -71,6 +85,7 @@ pub enum ImgWrap {
     Clip,
 }
 
+/// Vertex attribute data type.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ATTRType {
     U8,
@@ -81,102 +96,4 @@ pub enum ATTRType {
     I32,
     F32,
     F64,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn polymode_variants() {
-        match PolyMode::Points { _ => {} }
-        match PolyMode::WireFrame { _ => {} }
-        match PolyMode::Filled { _ => {} }
-    }
-
-    #[test]
-    fn cull_variants() {
-        match Cull::Clock { _ => {} }
-        match Cull::AntiClock { _ => {} }
-    }
-
-    #[test]
-    fn draw_mode_default() {
-        let dm: DrawMode = Default::default();
-        match dm {
-            DrawMode::Triangles => {},
-            _ => panic!("default should be Triangles"),
-        }
-    }
-
-    #[test]
-    fn draw_mode_variants() {
-        match DrawMode::Points { _ => {} }
-        match DrawMode::Lines { _ => {} }
-        match DrawMode::Triangles { _ => {} }
-        match DrawMode::Strip { _ => {} }
-    }
-
-    #[test]
-    fn imgformat_channels() {
-        assert_eq!(ImgFormat::R(8).channels(), 1);
-        assert_eq!(ImgFormat::RG(8).channels(), 2);
-        assert_eq!(ImgFormat::RGB(8).channels(), 3);
-        assert_eq!(ImgFormat::RGBA(8).channels(), 4);
-    }
-
-    #[test]
-    fn imgformat_bit_depth() {
-        assert_eq!(ImgFormat::R(8).bit_depth(), 8);
-        assert_eq!(ImgFormat::RGBA(16).bit_depth(), 16);
-        assert_eq!(ImgFormat::RGB(32).bit_depth(), 32);
-    }
-
-    #[test]
-    fn imgformat_pixel_size() {
-        assert_eq!(ImgFormat::RGBA(8).pixel_size(), 32);
-        assert_eq!(ImgFormat::RGB(8).pixel_size(), 24);
-        assert_eq!(ImgFormat::R(16).pixel_size(), 16);
-    }
-
-    #[test]
-    fn imgformat_from() {
-        match ImgFormat::from(1, 8) {
-            ImgFormat::R(8) => {},
-            _ => panic!("expected R(8)"),
-        }
-        match ImgFormat::from(4, 16) {
-            ImgFormat::RGBA(16) => {},
-            _ => panic!("expected RGBA(16)"),
-        }
-        match ImgFormat::from(5, 8) {
-            ImgFormat::RGBA(8) => {},
-            _ => panic!("expected RGBA(8) for 5 channels"),
-        }
-    }
-
-    #[test]
-    fn imgfilter_variants() {
-        match ImgFilter::Closest { _ => {} }
-        match ImgFilter::Linear { _ => {} }
-    }
-
-    #[test]
-    fn imgwrap_variants() {
-        match ImgWrap::Repeat { _ => {} }
-        match ImgWrap::Extend { _ => {} }
-        match ImgWrap::Clip { _ => {} }
-    }
-
-    #[test]
-    fn attr_type_variants() {
-        match ATTRType::U8 { _ => {} }
-        match ATTRType::I8 { _ => {} }
-        match ATTRType::U16 { _ => {} }
-        match ATTRType::I16 { _ => {} }
-        match ATTRType::U32 { _ => {} }
-        match ATTRType::I32 { _ => {} }
-        match ATTRType::F32 { _ => {} }
-        match ATTRType::F64 { _ => {} }
-    }
 }

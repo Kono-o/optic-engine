@@ -1,5 +1,6 @@
 use optic_core::{Coord2D, Size2D};
 
+/// Information about a connected monitor/screen.
 #[derive(Debug, Clone)]
 pub struct ScreenInfo {
     pub name: String,
@@ -10,6 +11,7 @@ pub struct ScreenInfo {
 }
 
 impl ScreenInfo {
+    /// Construct from a winit [`MonitorHandle`](winit::monitor::MonitorHandle).
     pub fn from_handle(handle: &winit::monitor::MonitorHandle) -> Self {
         let sz = handle.size();
         let pos = handle.position();

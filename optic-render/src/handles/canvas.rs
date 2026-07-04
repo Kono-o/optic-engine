@@ -2,6 +2,9 @@ use optic_core::{ImgFilter, ImgFormat, ImgWrap, OpticError, OpticErrorKind, Opti
 
 use crate::handles::texture::{Texture2D, delete_texture};
 
+/// Describes the format and structure of an off-screen framebuffer (canvas).
+///
+/// Pass to [`Canvas::new`] to create the GPU framebuffer.
 #[derive(Clone, Debug)]
 pub struct CanvasDesc {
     pub size: Size2D,
@@ -31,6 +34,18 @@ impl Default for CanvasDesc {
     }
 }
 
+/// An off-screen render target (framebuffer object) with optional MSAA.
+///
+/// Supports multiple colour attachments, depth/stencil, and MSAA resolve.
+/// Created via [`Canvas::new`] or [`GPU::ship_canvas`](crate::GPU::ship_canvas).
+///
+/// # Example
+///
+/// ```ignore
+/// use optic_render::handles::{Canvas, CanvasDesc};
+///
+/// let canvas = Canvas::new(&CanvasDesc::default())?;
+/// ```
 pub struct Canvas {
     pub(crate) fbo_id: u32,
     pub(crate) resolve_fbo_id: u32,
@@ -49,6 +64,12 @@ pub struct Canvas {
 }
 
 impl Canvas {
+    /// Creates a new framebuffer from a descriptor.
+    ///
+    /// Validates constraints:
+    /// - At least one colour format or depth must be specified
+    /// - Stencil requires depth
+    /// - `depth_compare` requires `depth_as_texture`
     pub fn new(desc: &CanvasDesc) -> OpticResult<Self> {
         if desc.color_formats.is_empty() && !desc.depth {
             return Err(OpticError::new(
@@ -250,10 +271,12 @@ impl Canvas {
         })
     }
 
+    /// Returns the canvas size.
     pub fn size(&self) -> Size2D {
         self.size
     }
 
+    /// Returns a reference to the colour texture at the given attachment index.
     pub fn color_tex(&self, index: usize) -> OpticResult<&Texture2D> {
         self.color_texs.get(index).ok_or_else(|| {
             OpticError::new(
@@ -263,10 +286,12 @@ impl Canvas {
         })
     }
 
+    /// Returns a reference to the depth texture, if present.
     pub fn depth_tex(&self) -> Option<&Texture2D> {
         self.depth_tex.as_ref()
     }
 
+    /// Resizes the canvas by recreating the framebuffer with a new size.
     pub fn set_size(&mut self, new_size: Size2D) -> OpticResult<()> {
         let mut new_desc = self.desc.clone();
         new_desc.size = new_size;
@@ -275,6 +300,9 @@ impl Canvas {
         Ok(())
     }
 
+    /// Resolves MSAA colour/depth/stencil into the resolve framebuffer.
+    ///
+    /// No-op if the canvas does not use MSAA.
     pub fn resolve(&self) {
         if self.resolve_fbo_id == 0 {
             return;
@@ -299,6 +327,7 @@ impl Canvas {
         }
     }
 
+    /// Blits this canvas into the default framebuffer (screen), scaling to fit.
     pub fn blit_to_screen(&self, window_size: Size2D) {
         self.resolve_if_needed();
         let src = if self.resolve_fbo_id != 0 {
@@ -318,6 +347,9 @@ impl Canvas {
         }
     }
 
+    /// Sets the viewport scissor within this canvas.
+    ///
+    /// The rectangle must be within the canvas bounds.
     pub fn set_renderable_area(&self, x: i32, y: i32, size: Size2D) -> OpticResult<()> {
         if x < 0
             || y < 0
@@ -340,6 +372,7 @@ impl Canvas {
         Ok(())
     }
 
+    /// Reads pixel data from a colour attachment back to the CPU.
     pub fn read_pixels(&self, index: usize) -> OpticResult<Vec<u8>> {
         self.resolve_if_needed();
         let tex = self.color_tex(index)?;
@@ -366,6 +399,10 @@ impl Canvas {
         Ok(pixels)
     }
 
+    /// Saves a colour attachment to an image file on disk.
+    ///
+    /// Supported formats depend on the colour attachment format (8/16/32 bpc,
+    /// 1–4 channels).
     pub fn save_to_disk(&self, index: usize, path: &str) -> OpticResult<()> {
         let data = self.read_pixels(index)?;
         let tex = self.color_tex(index)?;
@@ -394,6 +431,7 @@ impl Canvas {
         })
     }
 
+    /// Deletes all GL resources (FBOs, RBOs, textures).
     pub fn delete(&mut self) {
         unsafe {
             gl::DeleteFramebuffers(1, &self.fbo_id);
@@ -546,6 +584,7 @@ fn fmt_gl_params(fmt: &ImgFormat) -> (u32, u32, usize) {
     (base, pix_type, channels * bytes_per_channel)
 }
 
+/// Either the screen (default framebuffer) or a canvas (FBO).
 pub enum RenderTarget<'a> {
     Screen,
     Canvas(&'a Canvas),

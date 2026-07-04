@@ -4,11 +4,35 @@ use raw_window_handle::RawWindowHandle;
 use std::ffi::c_void;
 use std::ptr;
 
+/// An EGL window surface and its dimensions.
+///
+/// Created by [`RenderContext::new_windowed`] or [`RenderContext::attach_window`].
+/// Each surface corresponds to one native window.
 pub struct WindowSurface {
     pub surface: egl::Surface,
     pub size: Size2D,
 }
 
+/// EGL + OpenGL 4.6 context with support for multiple window surfaces.
+///
+/// # Initialisation
+///
+/// Create a headless context for off-screen rendering:
+///
+/// ```ignore
+/// let ctx = RenderContext::new_headless()?;
+/// ```
+///
+/// Or create a windowed context from a raw window handle:
+///
+/// ```ignore
+/// let ctx = RenderContext::new_windowed(raw_handle, display_handle, size)?;
+/// ```
+///
+/// # Multi-window
+///
+/// Additional windows can be attached with [`attach_window`](RenderContext::attach_window)
+/// and made current with [`make_current`](RenderContext::make_current).
 pub struct RenderContext {
     pub display: egl::Display,
     pub context: egl::Context,
@@ -122,6 +146,10 @@ fn raw_handle_to_native(handle: RawWindowHandle) -> OpticResult<*mut c_void> {
 }
 
 impl RenderContext {
+    /// Creates a headless EGL context with a 1×1 pbuffer surface.
+    ///
+    /// This is useful for off-screen rendering or when no window is available.
+    /// Loads OpenGL function pointers via EGL and queries driver info.
     pub fn new_headless() -> OpticResult<Self> {
         let (egl_instance, display, context, config) = create_display_and_context()?;
 
@@ -152,6 +180,11 @@ impl RenderContext {
         })
     }
 
+    /// Creates a windowed EGL context from raw window and display handles.
+    ///
+    /// Supports X11 (with optional visual ID matching), Wayland, and Win32
+    /// platforms. Falls back to the default EGL display if platform-specific
+    /// display creation fails.
     pub fn new_windowed(
         raw_handle: RawWindowHandle,
         display_handle: raw_window_handle::RawDisplayHandle,
@@ -287,6 +320,10 @@ impl RenderContext {
         })
     }
 
+    /// Attaches a new window surface to this context.
+    ///
+    /// Returns the index of the new surface, which can be used with
+    /// [`make_current`](RenderContext::make_current).
     pub fn attach_window(
         &mut self,
         raw_handle: RawWindowHandle,
@@ -310,12 +347,18 @@ impl RenderContext {
         Ok(index)
     }
 
+    /// Resizes the tracked size for a window surface.
+    ///
+    /// Does **not** call EGL surface resize — just updates the stored
+    /// dimensions used by [`make_current`](RenderContext::make_current)
+    /// for the viewport call.
     pub fn resize_window(&mut self, index: usize, size: Size2D) {
         if let Some(ws) = self.surfaces.get_mut(index) {
             ws.size = size;
         }
     }
 
+    /// Makes the given surface current and sets the viewport.
     pub fn make_current(&self, index: usize) -> OpticResult<()> {
         let egl_instance = egl::Instance::new(egl::Static);
         let ws = self.surfaces.get(index).ok_or_else(|| {
@@ -329,6 +372,7 @@ impl RenderContext {
         Ok(())
     }
 
+    /// Swaps front and back buffers for the given surface (double-buffering).
     pub fn swap_buffers(&self, index: usize) -> OpticResult<()> {
         let egl_instance = egl::Instance::new(egl::Static);
         let ws = self.surfaces.get(index).ok_or_else(|| {
@@ -339,16 +383,19 @@ impl RenderContext {
             .map_err(|e| OpticError::new(OpticErrorKind::OpenGL, &format!("swap buffers failed: {e}")))
     }
 
+    /// Clears the colour and depth buffers of the currently bound framebuffer.
     pub fn clear(&self) {
         unsafe { gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT); }
     }
 
+    /// Enables or disables vertical sync (swap interval).
     pub fn set_vsync(&self, enable: bool) {
         let egl_instance = egl::Instance::new(egl::Static);
         let interval = if enable { 1 } else { 0 };
         let _ = egl_instance.swap_interval(self.display, interval);
     }
 
+    /// Sets the clear colour used by [`clear`](RenderContext::clear).
     pub fn set_clear_color(&self, color: optic_core::RGBA) {
         unsafe { gl::ClearColor(color.0, color.1, color.2, color.3); }
     }

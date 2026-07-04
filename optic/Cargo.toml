@@ -1,20 +1,24 @@
 [package]
 name = "optic"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Optic game engine — facade crate with feature-gated re-exports"
 
 [features]
 default = ["full"]
-full = ["core", "file", "render", "window", "minimal"]
 core = ["optic-core"]
 file = ["core", "optic-file"]
 render = ["core", "file", "optic-render"]
 window = ["core", "optic-window"]
 minimal = ["render", "window", "optic-loop"]
+full = ["core", "file", "render", "window", "optic-loop"]
 online = ["optic-online"]
 
 [dependencies]
-cgmath = "0.18.0"
+cgmath.workspace = true
 optic-core = { path = "../optic-core", optional = true }
 optic-file = { path = "../optic-file", optional = true }
 optic-render = { path = "../optic-render", optional = true }

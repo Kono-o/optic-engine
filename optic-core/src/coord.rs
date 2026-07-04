@@ -2,8 +2,21 @@ use std::ops::{Add, Mul, Neg, Sub};
 
 use crate::{componentwise_min, componentwise_max, Components, Size2D};
 
-// ── Coord2D (point) ─────────────────────────────────────────────────────────
-
+/// A 2D point in continuous space.
+///
+/// `Coord2D` represents a position. Subtracting two points yields a
+/// [`CoordOffset`] (vector). Adding a vector to a point yields a new point.
+///
+/// ```
+/// use optic_core::*;
+///
+/// let a = Coord2D::from(100.0, 200.0);
+/// let b = Coord2D::from(150.0, 180.0);
+/// let d: CoordOffset = b - a;
+/// let mid = a.lerp(b, 0.5);
+/// ```
+///
+/// Implements [`Components<f64, 2>`].
 #[derive(Copy, Clone, Debug)]
 pub struct Coord2D {
     pub x: f64,
@@ -42,38 +55,50 @@ impl Sub<CoordOffset> for Coord2D {
 }
 
 impl Coord2D {
+    /// The origin point (0, 0).
     pub fn empty() -> Coord2D {
         Coord2D { x: 0.0, y: 0.0 }
     }
+    /// Construct from x, y coordinates.
     pub fn from(x: f64, y: f64) -> Self {
         Self { x, y }
     }
+    /// Construct from a tuple.
     pub fn from_tup((x, y): (f64, f64)) -> Self {
         Self { x, y }
     }
+    /// True if the point lies within the rectangle `(0, 0)` to `(size.w, size.h)`.
     pub fn is_inside(&self, size: Size2D) -> bool {
         let [w, h] = size.to_array();
         self.x >= 0.0 && self.y >= 0.0 && self.x <= w as f64 && self.y <= h as f64
     }
+    /// Euclidean distance to another point.
     pub fn distance_to(&self, other: Coord2D) -> f64 {
         (*self - other).length()
     }
+    /// Midpoint between two points.
     pub fn midpoint(&self, other: Coord2D) -> Coord2D {
         Coord2D { x: (self.x + other.x) * 0.5, y: (self.y + other.y) * 0.5 }
     }
+    /// Linearly interpolate toward `other` by factor `t` (clamped 0..1).
     pub fn lerp(&self, other: Coord2D, t: f64) -> Coord2D {
         *self + (other - *self) * t.clamp(0.0, 1.0)
     }
+    /// Componentwise minimum.
     pub fn min(&self, other: Coord2D) -> Coord2D {
         componentwise_min(*self, other)
     }
+    /// Componentwise maximum.
     pub fn max(&self, other: Coord2D) -> Coord2D {
         componentwise_max(*self, other)
     }
 }
 
-// ── CoordOffset (vector/displacement) ───────────────────────────────────────
-
+/// A 2D vector/displacement.
+///
+/// `CoordOffset` represents the difference between two [`Coord2D`] points.
+/// It supports vector arithmetic: addition, subtraction, scalar multiplication,
+/// negation, normalization, and dot products.
 #[derive(Copy, Clone, Debug)]
 pub struct CoordOffset {
     pub x: f64,
@@ -89,7 +114,6 @@ impl From<[f64; 2]> for CoordOffset { fn from(a: [f64; 2]) -> Self { CoordOffset
 impl From<CoordOffset> for [f64; 2] { fn from(v: CoordOffset) -> Self { v.to_array() } }
 impl From<(f64, f64)> for CoordOffset { fn from(t: (f64, f64)) -> Self { CoordOffset { x: t.0, y: t.1 } } }
 
-// Vector + Vector = Vector, Vector - Vector = Vector
 impl Add for CoordOffset {
     type Output = CoordOffset;
     fn add(self, rhs: CoordOffset) -> CoordOffset {
@@ -116,38 +140,49 @@ impl Neg for CoordOffset {
 }
 
 impl CoordOffset {
+    /// Zero vector (0, 0).
     pub fn empty() -> CoordOffset {
         CoordOffset { x: 0.0, y: 0.0 }
     }
+    /// Construct from x, y components.
     pub fn from(x: f64, y: f64) -> Self {
         Self { x, y }
     }
+    /// Construct from a tuple.
     pub fn from_tup((x, y): (f64, f64)) -> Self {
         Self { x, y }
     }
+    /// True if both components are exactly zero.
     pub fn is_zero(&self) -> bool {
         self.x == 0.0 && self.y == 0.0
     }
+    /// Euclidean length.
     pub fn length(&self) -> f64 {
         (self.x * self.x + self.y * self.y).sqrt()
     }
+    /// Squared length (avoids the sqrt).
     pub fn length_squared(&self) -> f64 {
         self.x * self.x + self.y * self.y
     }
+    /// Unit vector in the same direction. Returns zero if length is near-zero.
     pub fn normalize(&self) -> CoordOffset {
         let len = self.length();
         if len < f64::EPSILON { return CoordOffset { x: 0.0, y: 0.0 }; }
         CoordOffset { x: self.x / len, y: self.y / len }
     }
+    /// Dot product with another vector.
     pub fn dot(&self, other: CoordOffset) -> f64 {
         self.x * other.x + self.y * other.y
     }
+    /// Linearly interpolate toward `other` by factor `t` (clamped 0..1).
     pub fn lerp(&self, other: CoordOffset, t: f64) -> CoordOffset {
         *self + (other - *self) * t.clamp(0.0, 1.0)
     }
+    /// Componentwise minimum.
     pub fn min(&self, other: CoordOffset) -> CoordOffset {
         componentwise_min(*self, other)
     }
+    /// Componentwise maximum.
     pub fn max(&self, other: CoordOffset) -> CoordOffset {
         componentwise_max(*self, other)
     }
