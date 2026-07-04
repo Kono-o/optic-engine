@@ -12,7 +12,7 @@
 //! | [`coord`] | [`Coord2D`] (point), [`CoordOffset`] (vector/displacement) |
 //! | [`enums`] | [`PolyMode`], [`Cull`], [`DrawMode`], [`ImgFormat`], [`ImgFilter`], [`ImgWrap`], [`ATTRType`] |
 //! | [`error`] | [`OpticError`], [`OpticErrorKind`], [`OpticResult`] |
-//! | [`ansi`] | [`ANSI`] color codes for terminal output |
+//! | [`ansi`] | [`ansi::ANSI`] color codes for terminal output |
 //! | [`consts`] | Asset paths, cache magic, version constants |
 //! | [`network`] | [`PeerId`], [`NetworkMode`], [`NetworkConfig`], [`NetworkEvents`] |
 //! | [`proc`] | [`end`], [`end_success`], [`end_error`] process helpers |
@@ -31,15 +31,15 @@
 //! ```
 
 pub mod ansi;
-mod color;
+pub mod color;
 pub mod consts;
-mod coord;
-mod enums;
-mod error;
-mod geometry;
+pub mod coord;
+pub mod enums;
+pub mod error;
+pub mod geometry;
 mod log;
 pub mod network;
-mod proc;
+pub mod proc;
 
 pub use color::*;
 pub use coord::*;

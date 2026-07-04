@@ -1,6 +1,6 @@
 //! Constants for asset paths, cache magic, shader/mesh metadata.
 //!
-//! These are used by [`optic_file`] and [`optic_render`] to resolve
+//! These are used by `optic_file` and `optic_render` to resolve
 //! asset locations and validate cache files.
 
 /// Root asset directory.

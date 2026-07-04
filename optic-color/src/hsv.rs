@@ -10,7 +10,7 @@ use crate::{RGBA, ToRgba};
 ///
 /// # Why no arithmetic?
 ///
-/// `HSV` does not implement [`ChannelArray`], [`Add`], [`Sub`], [`Mul`],
+/// `HSV` does not implement [`ChannelArray`], `Add`, `Sub`, `Mul`,
 /// or `lerp`. Hue is an angle on a circle — componentwise interpolation
 /// between 350° and 10° would pass through 180° instead of the short arc
 /// through 0°. This produces incorrect visual results.
@@ -27,10 +27,11 @@ use crate::{RGBA, ToRgba};
 /// ```
 ///
 /// For hue-aware interpolation between two colors, use [`Gradient`] with
-/// [`GradientColorSpace::Hsv`].
+/// [`GradientColorSpace::Hsv`](crate::GradientColorSpace::Hsv).
 ///
 /// [`ChannelArray`]: crate::ChannelArray
 /// [`Gradient`]: crate::Gradient
+/// [`GradientColorSpace`]: crate::GradientColorSpace
 #[derive(Copy, Clone, Debug)]
 pub struct HSV {
     pub h: f32,

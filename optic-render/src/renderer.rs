@@ -82,7 +82,7 @@ impl GPU {
     /// Creates a GPU context backed by an on-screen window.
     ///
     /// `raw_handle` and `display_handle` come from the windowing system
-    /// (e.g. `winit`). See [`optic_window`] for how to acquire them.
+    /// (e.g. `winit`). See the `optic_window` crate for how to acquire them.
     ///
     /// # Errors
     ///
@@ -316,7 +316,7 @@ impl GPU {
     /// Sets the MSAA sample count for newly created canvases.
     ///
     /// Existing canvases are not affected. The driver's maximum sample count
-    /// is available at [`GPU::max_samples`] at runtime.
+    /// is available at runtime via the driver's `GL_MAX_SAMPLES` query.
     pub fn set_msaa_samples(&mut self, samples: u32) { self.msaa_samples = samples; }
 
     // ── Culling ──────────────────────────────────────────────────────────
@@ -525,7 +525,7 @@ impl GPU {
     /// Binds a render target (screen or canvas) for subsequent draw calls.
     ///
     /// Updates the viewport to match the target's size and records the size
-    /// in [`current_target_size`](Self::current_target_size).
+    /// in [`current_render_target_size`](Self::current_render_target_size).
     ///
     /// ```ignore
     /// // Render to a canvas

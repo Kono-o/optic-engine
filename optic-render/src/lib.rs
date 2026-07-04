@@ -33,7 +33,7 @@
 mod camera;
 mod context;
 mod glraw;
-mod handles;
+pub mod handles;
 mod renderer;
 mod util;
 

@@ -21,7 +21,7 @@ pub enum NetworkMode {
 
 /// Configuration for the networking subsystem.
 ///
-/// Used with [`GameBuilder::with_network`].
+/// Used with `GameBuilder::with_network` (see [`optic_loop`](https://docs.rs/optic-loop)).
 #[derive(Clone, Debug)]
 pub struct NetworkConfig {
     pub mode: NetworkMode,
@@ -51,7 +51,7 @@ impl NetworkConfig {
 
 /// Per-frame network events, drained from the background network thread.
 ///
-/// These vectors are populated once per frame by [`NetworkHandle::poll()`]
+/// These vectors are populated once per frame by `NetworkHandle::poll()`
 /// and auto-cleared at the start of the next poll cycle. This mirrors the
 /// one-frame lifecycle of button press/release events.
 #[derive(Clone, Debug, Default)]

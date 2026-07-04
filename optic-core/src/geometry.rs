@@ -6,7 +6,7 @@ use std::ops::{Add, Mul, Sub};
 /// enables generic componentwise operations (`min`, `max`) across different
 /// geometric types.
 ///
-/// Implemented for [`Size2D`], [`Size3D`], [`Coord2D`], [`CoordOffset`].
+/// Implemented for [`Size2D`], [`Size3D`], [`crate::Coord2D`], [`crate::CoordOffset`].
 ///
 /// [`ChannelArray`]: optic_color::ChannelArray
 pub trait Components<T, const N: usize>: Copy {

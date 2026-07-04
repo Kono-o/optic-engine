@@ -557,7 +557,7 @@ impl Events {
         self.gamepad_axes[id][idx]
     }
 
-    /// Gamepad axis value with the default deadzone ([`GAMEPAD_AXIS_DEADZONE`]).
+    /// Gamepad axis value with the default deadzone (`GAMEPAD_AXIS_DEADZONE`).
     ///
     /// Values below the deadzone are snapped to 0.0.
     pub fn gamepad_axis(&self, id: usize, axis: GamepadAxis) -> f32 {

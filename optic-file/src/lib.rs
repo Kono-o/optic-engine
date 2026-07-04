@@ -7,7 +7,7 @@
 //!
 //! Assets are cached alongside the source file in an `optc/` subdirectory:
 //!
-//! ```ignore
+//! ```text
 //! assets/tex/foo.png     → assets/tex/optc/foo.otxtr
 //! models/cube.obj        → models/optc/cube.omesh
 //! shaders/main.glsl      → shaders/optc/main.oshdr

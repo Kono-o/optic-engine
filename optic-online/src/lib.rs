@@ -24,7 +24,7 @@
 //! optic = { git = "..", features = ["online"] }
 //! ```
 //!
-//! Then configure in your [`GameBuilder`](optic_loop::GameBuilder):
+//! Then configure in your `GameBuilder`:
 //!
 //! ```ignore
 //! use optic_engine::*;

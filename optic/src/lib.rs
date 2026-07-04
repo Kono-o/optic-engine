@@ -20,7 +20,7 @@
 //! | `render` | [`optic_render`] | OpenGL rendering pipeline |
 //! | `window` | [`optic_window`] | Windowing, input, events |
 //! | `minimal` | [`optic_loop`] | Game loop and runtime |
-//! | `online` | [`optic_online`] | Networking |
+//! | `online` | `optic_online` | Networking |
 //!
 //! # Architecture
 //!

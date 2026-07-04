@@ -12,8 +12,8 @@ use crate::RGBA;
 ///
 /// # Arithmetic
 ///
-/// `RGB` implements [`Add`], [`Sub`], [`Mul`] (componentwise), [`Mul<f32>`],
-/// and [`Div<f32>`] via the [`ChannelArray<3>`] impl. These operate on all
+/// `RGB` implements `Add`, `Sub`, `Mul` (componentwise), `Mul<f32>`,
+/// and `Div<f32>` via the [`ChannelArray`] impl. These operate on all
 /// three channels independently.
 ///
 /// # Conversions
@@ -27,7 +27,9 @@ use crate::RGBA;
 /// let arr: [f32; 3] = rgb.into();     // flatten
 /// ```
 ///
-/// See also [`RGBA`], [`HSV`], [`HSL`].
+/// See also [`RGBA`], [`crate::HSV`], [`crate::HSL`].
+///
+/// [`ChannelArray`]: crate::ChannelArray
 #[derive(Copy, Clone, Debug)]
 pub struct RGB(pub f32, pub f32, pub f32);
 

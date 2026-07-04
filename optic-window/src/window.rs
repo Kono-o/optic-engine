@@ -6,7 +6,7 @@ use crate::ScreenInfo;
 
 /// A winit window wrapper with frame-tracking and cursor management.
 ///
-/// Owns an optional [`Arc<WinitWindow>`]. When closed, the inner handle is
+/// Owns an optional `Arc<WinitWindow>`. When closed, the inner handle is
 /// set to `None` and all methods become no-ops returning default values.
 ///
 /// # Frame tracking

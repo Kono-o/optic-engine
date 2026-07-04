@@ -57,9 +57,9 @@ pub trait Runtime {
     ///
     /// Use this for one-time initialisation:
     ///
-    /// - Load meshes, textures, and shaders via [`GPU::ship_*`]
+    /// - Load meshes, textures, and shaders via `GPU::ship_*` methods
     /// - Set up initial game state
-    /// - Connect to a server (see [`Game::enable_networking`])
+    /// - Connect to a server (see `Game::enable_networking`, requires `online` feature)
     ///
     /// The window is not yet visible when `start` runs. The engine calls
     /// `start`, makes the window visible, then immediately enters the

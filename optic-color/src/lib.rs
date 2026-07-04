@@ -51,11 +51,11 @@
 //!
 //! # Named colors
 //!
-//! The crate exports ~90 named [`RGBA`] constants (see [`optic_color::constants`]).
+//! The crate exports ~90 named [`RGBA`] constants (see [`constants`]).
 //! Examples: [`RED`], [`MIDNIGHT`], [`GOLD`], [`LAVENDER`], [`OBSIDIAN`].
 
 mod channels;
-mod constants;
+pub mod constants;
 mod convert;
 mod gradient;
 mod hsl;

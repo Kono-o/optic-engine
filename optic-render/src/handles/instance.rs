@@ -586,12 +586,12 @@ impl InstanceDesc2D {
 ///
 /// | Read method | Source | Latency |
 /// |---|---|---|
-/// | [`get_position`], [`get_color`], [`get_instance`] | CPU mirror | Instant |
+/// | [`get_position`](Self::get_position), [`get_color`](Self::get_color), [`get_instance`](Self::get_instance) | CPU mirror | Instant |
 /// | _Read from GPU_ | Not supported | — |
 ///
 /// # Growth
 ///
-/// The buffer grows or shrinks in place via [`set_instance_count`]. New slots
+/// The buffer grows or shrinks in place via [`set_instance_count`](Self::set_instance_count). New slots
 /// are filled with defaults:
 ///
 /// | Attribute | Default |
@@ -605,11 +605,11 @@ impl InstanceDesc2D {
 ///
 /// | You want to… | Use |
 /// |---|---|
-/// | Move an instance | [`set_position`] |
-/// | Rotate an instance | [`set_rotation`] |
-/// | Scale an instance | [`set_scale`] |
-/// | Recolour an instance | [`set_color`] |
-/// | Write raw bytes | [`update_instance`] |
+/// | Move an instance | [`set_position`](Self::set_position) |
+/// | Rotate an instance | [`set_rotation`](Self::set_rotation) |
+/// | Scale an instance | [`set_scale`](Self::set_scale) |
+/// | Recolour an instance | [`set_color`](Self::set_color) |
+/// | Write raw bytes | [`update_instance`](Self::update_instance) |
 ///
 /// # Example
 ///
@@ -864,7 +864,7 @@ impl InstanceBuffer {
     ///
     /// The method skips past the position attribute if present:
     ///
-    /// | Layout | attr_index passed to [`update_instance`] |
+    /// | Layout | attr_index passed to [`update_instance`](Self::update_instance) |
     /// |---|---|
     /// | Position + Rotation | 1 |
     /// | Rotation only | 0 |
