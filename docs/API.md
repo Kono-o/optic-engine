@@ -5,6 +5,10 @@
 > **Note:** Import everything via `use optic::*;` — the `optic` crate re-exports all sub-crates
 > unmodified. Each crate below curates its own public surface; sub-module items use qualified
 > paths (e.g. `optic::asset::ShaderFile`, `optic::cgmath::Vector3`).
+>
+> **Features:** `optic` has feature flags for each sub-crate. Enable `online` to activate
+> networking: `optic = { features = ["online"] }`. The `NetworkEvents` field on `Events` is
+> always compiled (zero-cost empty vectors when the feature is off).
 
 ---
 
@@ -72,6 +76,17 @@
    - [GameLoop](#gameloop)
    - [Standalone `run()`](#standalone-run)
 7. [File Utilities (`optic_file`)](#7-file-utilities-optic_file)
+8. [Networking (`optic_online`)](#8-networking-optic_online)
+   - [NetworkConfig](#networkconfig)
+   - [NetworkMode](#networkmode)
+   - [PeerId](#peerid)
+   - [NetworkEvents](#networkevents)
+   - [NetworkHandle](#networkhandle)
+    - [NetworkConfig](#networkconfig)
+    - [NetworkMode](#networkmode)
+    - [PeerId](#peerid)
+    - [NetworkEvents](#networkevents)
+    - [NetworkHandle](#networkhandle)
 
 ---
 
@@ -622,6 +637,7 @@ pub struct Events {
     pub close_requested: bool,
     pub focused: bool,
     pub frame: u64,
+    pub network: NetworkEvents,
 }
 
 pub struct ButtonState {
@@ -661,7 +677,7 @@ pub const MAX_GAMEPADS: usize = 4;
 |-----------|-------------|
 | `fn new() -> Self` | Create new input state |
 | `fn clear(&mut self)` | Reset everything to defaults |
-| `fn end_frame(&mut self)` | Call at end of frame (increments `frame`, clears scroll/resize) |
+| `fn end_frame(&mut self)` | Call at end of frame (increments `frame`, clears scroll/resize/network events) |
 | `fn process_window_event(&mut self, event: &WindowEvent, _window: &Window)` | Process a winit event |
 | `fn process_gilrs_event(&mut self, event: &gilrs::Event)` | Process a gilrs gamepad event |
 | `fn key(&self, kc: KeyCode, action: Is) -> bool` | Check key state |
@@ -972,12 +988,90 @@ pub struct MeshHandle {
     pub vao_id: u32,
     pub buf_id: u32,
     pub ind_id: u32,
+    pub vert_stride: u32,
+    pub instance_buf_id: u32,
+    pub instance_count: u32,
 }
 ```
 
 | Signature | Description |
 |-----------|-------------|
-| `fn draw(&self)` | Issue the draw call |
+| `fn draw(&self)` | Issue the draw call (respects instancing when `instance_count > 0`) |
+| `fn set_instances(&mut self, buffer: &InstanceBuffer)` | Bind an instance buffer for instanced rendering |
+| `fn update_vertex<D: DataType>(&self, index: u32, attr_index: usize, value: D) -> OpticResult<()>` | Update a single vertex attribute |
+| `fn get_vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D>` | Read back a single vertex attribute |
+| `fn write_range(&self, start_vertex: u32, data: &[u8]) -> OpticResult<()>` | Write raw bytes starting at a vertex offset |
+| `fn delete(self)` | Free GPU resources |
+
+### InstanceDesc3D
+
+```rust
+pub struct InstanceDesc3D {
+    pub pos_attr: Pos3DATTR,
+    pub rot_attr: Rot3DATTR,
+    pub scale_attr: Scale3DATTR,
+    pub col_attr: ColATTR,
+    pub cus_attrs: Vec<CustomATTR>,
+}
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `fn empty() -> Self` | Empty descriptor |
+| `fn from_positions(positions: &[Vector3<f32>]) -> Self` | Initialize from position vectors |
+| `fn from_transforms(transforms: &[Matrix4<f32>]) -> Self` | Extract pos/rot/scale from 4×4 matrices |
+| `fn attach_custom_attr(&mut self, attr: CustomATTR) -> &mut Self` | Add a custom per-instance attribute |
+| `fn ship(&self) -> OpticResult<InstanceBuffer>` | Upload to GPU |
+
+### InstanceDesc2D
+
+```rust
+pub struct InstanceDesc2D {
+    pub pos_attr: Pos2DATTR,
+    pub col_attr: ColATTR,
+    pub cus_attrs: Vec<CustomATTR>,
+}
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `fn empty() -> Self` | Empty descriptor |
+| `fn attach_custom_attr(&mut self, attr: CustomATTR) -> &mut Self` | Add a custom per-instance attribute |
+| `fn ship(&self) -> OpticResult<InstanceBuffer>` | Upload to GPU |
+
+### InstanceBuffer
+
+```rust
+pub struct InstanceBuffer {
+    pub stride: u32,
+    pub attr_info: Vec<ATTRInfo>,
+}
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `fn count(&self) -> u32` | Number of instances currently stored |
+| `fn capacity(&self) -> u32` | Allocated capacity (instances) |
+| `fn update_instance<D: DataType>(&mut self, index: u32, attr_index: usize, value: D) -> OpticResult<()>` | Update a single attribute on one instance |
+| `fn get_instance<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D>` | Read a single attribute from one instance |
+| `fn update_custom<D: DataType>(&mut self, index: u32, name: &str, value: D) -> OpticResult<()>` | Update a custom attribute by name |
+| `fn get_custom<D: DataType>(&self, index: u32, name: &str) -> OpticResult<D>` | Read a custom attribute by name |
+| `fn set_position(&mut self, index: u32, pos: Vector3<f32>) -> OpticResult<()>` | Set instance position (3D) |
+| `fn get_position(&self, index: u32) -> OpticResult<Vector3<f32>>` | Get instance position (3D) |
+| `fn set_rotation(&mut self, index: u32, rot: Vector4<f32>) -> OpticResult<()>` | Set instance rotation as quaternion |
+| `fn get_rotation(&self, index: u32) -> OpticResult<Vector4<f32>>` | Get instance rotation as quaternion |
+| `fn set_scale(&mut self, index: u32, scale: Vector3<f32>) -> OpticResult<()>` | Set instance scale (3D) |
+| `fn get_scale(&self, index: u32) -> OpticResult<Vector3<f32>>` | Get instance scale (3D) |
+| `fn set_color(&mut self, index: u32, color: RGBA) -> OpticResult<()>` | Set instance color |
+| `fn get_color(&self, index: u32) -> OpticResult<RGBA>` | Get instance color |
+| `fn set_instance_count(&mut self, new_count: u32)` | Update visible instance count (truncates or extends) |
+| `fn reserve(&mut self, additional: u32)` | Pre-allocate capacity |
+| `fn shrink_to_fit(&mut self)` | Shrink capacity to match count |
+| `fn push_raw(&mut self, bytes: &[u8]) -> OpticResult<u32>` | Append raw bytes as a new instance; returns index |
+| `fn remove_instance(&mut self, index: u32) -> OpticResult<()>` | Remove instance (swap-remove — last moves into slot) |
+| `fn remove_instance_ordered(&mut self, index: u32) -> OpticResult<()>` | Remove instance (shift elements, preserves order) |
+| `fn write_all(&mut self, desc: &InstanceDesc3D) -> OpticResult<()>` | Bulk-write all instances from a descriptor |
+| `fn write_range(&mut self, start: u32, bytes: &[u8]) -> OpticResult<()>` | Write raw bytes starting at a given instance index |
 | `fn delete(self)` | Free GPU resources |
 
 ### Shader
@@ -1370,12 +1464,14 @@ pub struct TextureFile {
 ### Attribute Types
 
 ```rust
-pub struct Pos3DATTR { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
-pub struct Pos2DATTR { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
-pub struct ColATTR   { pub data: Vec<[f32; 4]>, pub info: ATTRInfo }
-pub struct UVMATTR   { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
-pub struct NrmATTR   { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
-pub struct IndATTR   { pub data: Vec<u32>,      pub info: ATTRInfo }
+pub struct Pos3DATTR   { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
+pub struct Pos2DATTR   { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
+pub struct ColATTR     { pub data: Vec<[f32; 4]>, pub info: ATTRInfo }
+pub struct UVMATTR     { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
+pub struct NrmATTR     { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
+pub struct Rot3DATTR   { pub data: Vec<[f32; 4]>, pub info: ATTRInfo }
+pub struct Scale3DATTR { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
+pub struct IndATTR     { pub data: Vec<u32>,      pub info: ATTRInfo }
 pub struct CustomATTR {
     pub data: Vec<u8>,
     pub info: ATTRInfo,
@@ -1423,6 +1519,7 @@ pub struct ATTRInfo {
 pub enum ATTRName {
     Custom(String),
     Pos2D, Pos3D, Col, UVM, Nrm, Ind,
+    Rot3D, Scale3D,
 }
 ```
 
@@ -1481,6 +1578,8 @@ pub struct Game {
     pub events: Events,
     pub time: Time,
     pub window: Window,
+    #[cfg(feature = "online")]
+    pub(crate) network: Option<NetworkHandle>,
 }
 ```
 
@@ -1489,6 +1588,9 @@ pub struct Game {
 | `fn new<R: Runtime + 'static>(runtime: R) -> OpticResult<Game>` | Initialize everything |
 | `fn run(mut self)` | Start the main event loop (blocking) |
 | `fn exit(&mut self)` | Request exit on next frame |
+| `#[cfg(feature = "online")] fn network(&self) -> Option<&NetworkHandle>` | Get network handle (if enabled) |
+| `#[cfg(feature = "online")] fn network_mut(&mut self) -> Option<&mut NetworkHandle>` | Get mutable network handle |
+| `#[cfg(feature = "online")] fn enable_networking(&mut self, config: NetworkConfig) -> OpticResult<()>` | Start networking with the given config |
 
 ### Time
 
@@ -1585,3 +1687,113 @@ All functions are free functions in the `optic_file` crate:
 | `fn write_string(path: &str, data: &str) -> OpticResult<()>` | Write string |
 | `fn cached_path(source: &str, ext: &str) -> String` | Generate cache path: `{dir}/optc/{stem}.{ext}` |
 | `fn create_dir(path: &str) -> OpticResult<()>` | Create directory recursively |
+
+---
+
+## 8. Networking (`optic_online`)
+
+Enables optional dedicated-server-style UDP multiplayer via the `online` feature on the `optic`
+facade crate (`optic = { features = ["online"] }`). The `NetworkEvents` field on `Events` is always
+present (zero cost — always-empty vectors when networking is off).
+
+Usage from a `Runtime` implementation:
+
+```rust
+use optic::*;
+
+// At some point before the first frame:
+game.enable_networking(NetworkConfig {
+    mode: NetworkMode::Host { port: 7777 },
+    max_peers: 16,
+})?;
+
+// Each frame, game.events.network contains:
+for (peer_id, data) in &game.events.network.packets {
+    // handle incoming data
+}
+for peer_id in &game.events.network.peers_connected { /* ... */ }
+for peer_id in &game.events.network.peers_disconnected { /* ... */ }
+
+// Send data:
+game.network().unwrap().send_all(b"hello");
+```
+
+### NetworkConfig
+
+```rust
+pub struct NetworkConfig {
+    pub mode: NetworkMode,
+    pub max_peers: u32,
+}
+```
+
+### NetworkMode
+
+```rust
+pub enum NetworkMode {
+    Host { port: u16 },
+    Client { addr: String },
+}
+```
+
+- `Host` — binds a UDP socket on all interfaces at the given port. Use `0` for OS-assigned port.
+- `Client` — connects to the host at `IP:port`. UDP is connectionless, so the client is immediately
+  usable (receives `Connected` event right away).
+
+### PeerId
+
+```rust
+pub struct PeerId(pub u64);
+```
+
+| Constant | Description |
+|----------|-------------|
+| `PeerId::SERVER` | `PeerId(0)` — sentinel for server in client mode |
+
+### NetworkEvents
+
+```rust
+pub struct NetworkEvents {
+    pub packets: Vec<(PeerId, Vec<u8>)>,
+    pub peers_connected: Vec<PeerId>,
+    pub peers_disconnected: Vec<PeerId>,
+}
+```
+
+Cleared at the end of each frame in `Events::end_frame()`. Poll the `NetworkHandle` once per frame
+to populate this struct — the game loop does this automatically when networking is enabled.
+
+### NetworkHandle
+
+```rust
+pub struct NetworkHandle { /* fields private */ }
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `fn new(config: NetworkConfig) -> OpticResult<Self>` | Spawn network thread and bind socket (blocks until bound) |
+| `fn poll(&mut self, out: &mut NetworkEvents)` | Drain all queued events (non-blocking — call once per frame) |
+| `fn send(&self, peer: PeerId, bytes: &[u8]) -> OpticResult<()>` | Send to a specific peer |
+| `fn send_all(&self, bytes: &[u8]) -> OpticResult<()>` | Broadcast to all connected peers |
+| `fn send_all_except(&self, exclude: PeerId, bytes: &[u8]) -> OpticResult<()>` | Broadcast to all except one |
+| `fn disconnect(&self, peer: PeerId)` | Kick a peer (host) or disconnect from server (client) |
+| `fn peers(&self) -> Vec<PeerId>` | Snapshot of known peer IDs (best-effort) |
+| `fn local_addr(&self) -> Option<SocketAddr>` | Bound local socket address |
+| `fn shutdown(&mut self)` | Graceful shutdown (waits for network thread) |
+| `fn is_shutdown(&self) -> bool` | Has the network thread exited? |
+
+**Notes:**
+- All send methods are non-blocking (`try_send` on unbounded channel). If the outbound channel is
+  closed (thread exited), an error is returned.
+- `poll()` uses `try_recv` loops — never blocks, returns in microseconds.
+- Host mode sends 0-byte heartbeats every 2 seconds; peers are considered stale after 10 seconds
+  of silence.
+- Client mode has a 5-second connection timeout for the first packet; if no data arrives from the
+  server in that window, a `Disconnected(PeerId::SERVER)` lifecycle event fires. Once connected,
+  the client stays connected until explicitly disconnected or the socket errors.
+- Reachability (`IP:port` being reachable) is entirely the operator's responsibility — no STUN,
+  UPnP, or NAT traversal is attempted. Use direct connections, port forwarding, VPS, or
+   ZeroTier/Tailscale.
+
+
+
