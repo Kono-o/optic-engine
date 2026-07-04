@@ -11,9 +11,9 @@ description = "Game loop, Runtime trait, and Game builder for Optic engine"
 online = ["optic-online"]
 
 [dependencies]
-optic-core = { path = "../optic-core" }
-optic-render = { path = "../optic-render" }
-optic-window = { path = "../optic-window" }
+optic-core = { path = "../optic-core", version = "0.0.1" }
+optic-render = { path = "../optic-render", version = "0.0.1" }
+optic-window = { path = "../optic-window", version = "0.0.1" }
 winit.workspace = true
 gilrs.workspace = true
-optic-online = { path = "../optic-online", optional = true }
+optic-online = { path = "../optic-online", version = "0.0.1", optional = true }

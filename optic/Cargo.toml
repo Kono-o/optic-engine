@@ -19,9 +19,9 @@ online = ["optic-online"]
 
 [dependencies]
 cgmath.workspace = true
-optic-core = { path = "../optic-core", optional = true }
-optic-file = { path = "../optic-file", optional = true }
-optic-render = { path = "../optic-render", optional = true }
-optic-window = { path = "../optic-window", optional = true }
-optic-loop = { path = "../optic-loop", optional = true }
-optic-online = { path = "../optic-online", optional = true }
+optic-core = { path = "../optic-core", version = "0.0.1", optional = true }
+optic-file = { path = "../optic-file", version = "0.0.1", optional = true }
+optic-render = { path = "../optic-render", version = "0.0.1", optional = true }
+optic-window = { path = "../optic-window", version = "0.0.1", optional = true }
+optic-loop = { path = "../optic-loop", version = "0.0.1", optional = true }
+optic-online = { path = "../optic-online", version = "0.0.1", optional = true }

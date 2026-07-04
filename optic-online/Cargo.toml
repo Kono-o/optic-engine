@@ -8,5 +8,5 @@ repository.workspace = true
 description = "UDP networking for Optic engine — background tokio thread with connection management"
 
 [dependencies]
-optic-core = { path = "../optic-core" }
+optic-core = { path = "../optic-core", version = "0.0.1" }
 tokio.workspace = true
