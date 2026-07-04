@@ -2,7 +2,7 @@ use optic_core::ATTRType;
 
 use crate::asset::attr::DataType;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ATTRName {
     Custom(String),
     Pos2D,
@@ -11,6 +11,10 @@ pub enum ATTRName {
     UVM,
     Nrm,
     Ind,
+    Rot3D,
+    Rot2D,
+    Scale3D,
+    Scale2D,
 }
 
 impl ATTRName {
@@ -22,6 +26,10 @@ impl ATTRName {
             ATTRName::UVM => "uv map".into(),
             ATTRName::Nrm => "normals".into(),
             ATTRName::Ind => "indices".into(),
+            ATTRName::Rot3D => "rotation 3d".into(),
+            ATTRName::Rot2D => "rotation 2d".into(),
+            ATTRName::Scale3D => "scale 3d".into(),
+            ATTRName::Scale2D => "scale 2d".into(),
             ATTRName::Custom(n) => format!("{n}(custom)"),
         }
     }
@@ -111,6 +119,10 @@ attr!(ColATTR, [f32; 4], ATTRName::Col);
 attr!(UVMATTR, [f32; 2], ATTRName::UVM);
 attr!(NrmATTR, [f32; 3], ATTRName::Nrm);
 attr!(IndATTR, u32, ATTRName::Ind);
+attr!(Rot3DATTR, [f32; 4], ATTRName::Rot3D);
+attr!(Rot2DATTR, f32, ATTRName::Rot2D);
+attr!(Scale3DATTR, [f32; 3], ATTRName::Scale3D);
+attr!(Scale2DATTR, [f32; 2], ATTRName::Scale2D);
 
 #[derive(Debug)]
 pub struct CustomATTR {
@@ -180,6 +192,10 @@ mod tests {
         assert_eq!(ATTRName::UVM.as_string(), "uv map");
         assert_eq!(ATTRName::Nrm.as_string(), "normals");
         assert_eq!(ATTRName::Ind.as_string(), "indices");
+        assert_eq!(ATTRName::Rot3D.as_string(), "rotation 3d");
+        assert_eq!(ATTRName::Rot2D.as_string(), "rotation 2d");
+        assert_eq!(ATTRName::Scale3D.as_string(), "scale 3d");
+        assert_eq!(ATTRName::Scale2D.as_string(), "scale 2d");
         let custom = ATTRName::Custom("user_data".into());
         assert_eq!(custom.as_string(), "user_data(custom)");
     }
@@ -234,6 +250,30 @@ mod tests {
         attr.push(1);
         attr.push(2);
         assert_eq!(attr.data, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn rot3d_attr() {
+        let mut attr = Rot3DATTR::empty();
+        attr.push([0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(attr.data[0], [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(attr.info.elem_count, 4);
+        assert_eq!(attr.info.byte_count, 4);
+    }
+
+    #[test]
+    fn rot2d_attr() {
+        let mut attr = Rot2DATTR::empty();
+        attr.push(1.5708);
+        assert!((attr.data[0] - 1.5708).abs() < 0.001);
+        assert_eq!(attr.info.elem_count, 1);
+    }
+
+    #[test]
+    fn scale3d_attr() {
+        let attr = Scale3DATTR::from_array(&[[1.0, 1.0, 1.0], [2.0, 2.0, 2.0]]);
+        assert_eq!(attr.data.len(), 2);
+        assert_eq!(attr.info.name.as_string(), "scale 3d");
     }
 
     #[test]

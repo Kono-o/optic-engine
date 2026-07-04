@@ -1,5 +1,5 @@
 use cgmath;
-use optic_core::{ATTRType, DrawMode};
+use optic_core::{ATTRType, DrawMode, OpticError, OpticErrorKind, OpticResult};
 
 use crate::GL;
 
@@ -8,6 +8,8 @@ use std::ffi::c_void;
 use std::ptr;
 
 use crate::asset::attr::ATTRInfo;
+use crate::asset::attr::DataType;
+use crate::handles::instance::InstanceBuffer;
 use crate::handles::Shader;
 
 #[derive(Clone, Debug)]
@@ -20,16 +22,29 @@ pub struct MeshHandle {
     pub vao_id: u32,
     pub buf_id: u32,
     pub ind_id: u32,
+    pub vert_stride: u32,
+    pub instance_buf_id: u32,
+    pub instance_count: u32,
 }
 
 impl MeshHandle {
     pub fn draw(&self) {
         GL::bind_vao(self.vao_id);
-        match self.has_indices {
-            false => self.draw_array(),
-            true => {
-                GL::bind_ebo(self.ind_id);
-                self.draw_indexed();
+        if self.instance_buf_id != 0 && self.instance_count > 0 {
+            match self.has_indices {
+                false => self.draw_array_instanced(),
+                true => {
+                    GL::bind_ebo(self.ind_id);
+                    self.draw_indexed_instanced();
+                }
+            }
+        } else {
+            match self.has_indices {
+                false => self.draw_array(),
+                true => {
+                    GL::bind_ebo(self.ind_id);
+                    self.draw_indexed();
+                }
             }
         }
     }
@@ -49,6 +64,157 @@ impl MeshHandle {
         unsafe {
             gl::DrawArrays(match_draw_mode(&self.draw_mode), 0, self.vert_count as GLsizei);
         }
+    }
+
+    fn draw_indexed_instanced(&self) {
+        unsafe {
+            gl::DrawElementsInstanced(
+                match_draw_mode(&self.draw_mode),
+                self.ind_count as GLsizei,
+                gl::UNSIGNED_INT,
+                ptr::null(),
+                self.instance_count as GLsizei,
+            );
+        }
+    }
+
+    fn draw_array_instanced(&self) {
+        unsafe {
+            gl::DrawArraysInstanced(
+                match_draw_mode(&self.draw_mode),
+                0,
+                self.vert_count as GLsizei,
+                self.instance_count as GLsizei,
+            );
+        }
+    }
+
+    pub fn set_instances(&mut self, buffer: &InstanceBuffer) {
+        if buffer.count() == 0 {
+            self.instance_buf_id = 0;
+            self.instance_count = 0;
+            return;
+        }
+
+        GL::bind_vao(self.vao_id);
+        GL::bind_buffer(buffer.buf_id);
+
+        let base_attr = self.layouts.len() as u32;
+        let mut offset = 0usize;
+        for (i, (info, _)) in buffer.layouts.iter().enumerate() {
+            let location = base_attr + i as u32;
+            let attr_size = info.elem_count * info.byte_count;
+            set_attr_layout(info, location, buffer.stride as usize, offset);
+            unsafe { gl::VertexAttribDivisor(location, 1); }
+            offset += attr_size;
+        }
+
+        self.instance_buf_id = buffer.buf_id;
+        self.instance_count = buffer.count();
+    }
+
+    pub fn update_vertex<D: DataType>(&self, index: u32, attr_index: usize, value: D) -> OpticResult<()> {
+        if index >= self.vert_count {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                &format!("vertex index {index} out of bounds (count: {})", self.vert_count),
+            ));
+        }
+        if attr_index >= self.layouts.len() {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                &format!("attr index {attr_index} out of bounds (layout count: {})", self.layouts.len()),
+            ));
+        }
+        let slot_info = &self.layouts[attr_index].0;
+        if slot_info.byte_count != D::BYTE_COUNT || slot_info.elem_count != D::ELEM_COUNT || slot_info.typ != D::ATTR_FORMAT {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                &format!(
+                    "type mismatch: attribute {} expects {:?}[{}], got {:?}[{}]",
+                    slot_info.name.as_string(),
+                    slot_info.typ,
+                    slot_info.elem_count,
+                    D::ATTR_FORMAT,
+                    D::ELEM_COUNT,
+                ),
+            ));
+        }
+        let bytes = value.u8ify();
+        let off = self.compute_vert_attr_offset(attr_index, index);
+        subfill_buffer(self.buf_id, off, &bytes);
+        Ok(())
+    }
+
+    pub fn get_vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D> {
+        if index >= self.vert_count {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                &format!("vertex index {index} out of bounds (count: {})", self.vert_count),
+            ));
+        }
+        if attr_index >= self.layouts.len() {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                &format!("attr index {attr_index} out of bounds (layout count: {})", self.layouts.len()),
+            ));
+        }
+        let slot_info = &self.layouts[attr_index].0;
+        if slot_info.byte_count != D::BYTE_COUNT || slot_info.elem_count != D::ELEM_COUNT || slot_info.typ != D::ATTR_FORMAT {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                &format!(
+                    "type mismatch: attribute {} expects {:?}[{}], got {:?}[{}]",
+                    slot_info.name.as_string(),
+                    slot_info.typ,
+                    slot_info.elem_count,
+                    D::ATTR_FORMAT,
+                    D::ELEM_COUNT,
+                ),
+            ));
+        }
+        let off = self.compute_vert_attr_offset(attr_index, index);
+        let size = slot_info.elem_count * slot_info.byte_count;
+        let mut data = vec![0u8; size];
+        unsafe {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.buf_id);
+            gl::GetBufferSubData(
+                gl::ARRAY_BUFFER,
+                off as isize,
+                size as isize,
+                data.as_mut_ptr() as *mut c_void,
+            );
+        }
+        Ok(unsafe { std::ptr::read_unaligned(data.as_ptr() as *const D) })
+    }
+
+    pub fn write_range(&self, start_vertex: u32, data: &[u8]) -> OpticResult<()> {
+        let stride = self.vert_stride as usize;
+        if data.len() % stride != 0 {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                "write_range data length must be a multiple of vertex stride",
+            ));
+        }
+        let vertex_count = data.len() / stride;
+        if start_vertex + vertex_count as u32 > self.vert_count {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                "write_range extends past the vertex count",
+            ));
+        }
+        let start_off = start_vertex as usize * stride;
+        subfill_buffer(self.buf_id, start_off, data);
+        Ok(())
+    }
+
+    fn compute_vert_attr_offset(&self, attr_index: usize, vertex_index: u32) -> usize {
+        let mut offset = vertex_index as usize * self.vert_stride as usize;
+        for i in 0..attr_index {
+            let si = &self.layouts[i].0;
+            offset += si.elem_count * si.byte_count;
+        }
+        offset
     }
 
     pub fn delete(self) {
@@ -369,6 +535,9 @@ mod tests {
             vao_id: 0,
             buf_id: 0,
             ind_id: 0,
+            vert_stride: 0,
+            instance_buf_id: 0,
+            instance_count: 0,
         };
         assert_eq!(mh.vert_count, 42);
         assert!(!mh.has_indices);
@@ -385,6 +554,9 @@ mod tests {
             vao_id: 0,
             buf_id: 0,
             ind_id: 0,
+            vert_stride: 0,
+            instance_buf_id: 0,
+            instance_count: 0,
         };
         let m3d = Mesh3D {
             visibility: true,
@@ -413,6 +585,9 @@ mod tests {
             vao_id: 0,
             buf_id: 0,
             ind_id: 0,
+            vert_stride: 0,
+            instance_buf_id: 0,
+            instance_count: 0,
         };
         let mut m3d = Mesh3D {
             visibility: true,
@@ -439,6 +614,9 @@ mod tests {
             vao_id: 0,
             buf_id: 0,
             ind_id: 0,
+            vert_stride: 0,
+            instance_buf_id: 0,
+            instance_count: 0,
         };
         let mut m3d = Mesh3D {
             visibility: true,
@@ -462,6 +640,9 @@ mod tests {
             vao_id: 0,
             buf_id: 0,
             ind_id: 0,
+            vert_stride: 0,
+            instance_buf_id: 0,
+            instance_count: 0,
         };
         let mut m3d = Mesh3D {
             visibility: true,
@@ -490,6 +671,9 @@ mod tests {
             vao_id: 0,
             buf_id: 0,
             ind_id: 0,
+            vert_stride: 0,
+            instance_buf_id: 0,
+            instance_count: 0,
         };
         let mut m3d = Mesh3D {
             visibility: true,
@@ -516,6 +700,9 @@ mod tests {
             vao_id: 0,
             buf_id: 0,
             ind_id: 0,
+            vert_stride: 0,
+            instance_buf_id: 0,
+            instance_count: 0,
         };
         let m3d = Mesh3D {
             visibility: true,
@@ -539,6 +726,9 @@ mod tests {
             vao_id: 0,
             buf_id: 0,
             ind_id: 0,
+            vert_stride: 0,
+            instance_buf_id: 0,
+            instance_count: 0,
         };
         let m2d = Mesh2D {
             visibility: true,

@@ -953,6 +953,9 @@ fn create_mesh3d_handle(mesh: &Mesh3DFile) -> MeshHandle {
         vao_id,
         buf_id,
         ind_id,
+        vert_stride: stride as u32,
+        instance_buf_id: 0,
+        instance_count: 0,
     }
 }
 
@@ -1038,6 +1041,9 @@ fn create_mesh2d_handle(mesh: &Mesh2DFile) -> MeshHandle {
         vao_id,
         buf_id,
         ind_id,
+        vert_stride: stride as u32,
+        instance_buf_id: 0,
+        instance_count: 0,
     }
 }
 
