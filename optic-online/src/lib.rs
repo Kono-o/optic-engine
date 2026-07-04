@@ -27,7 +27,7 @@
 //! Then configure in your [`GameBuilder`](optic_loop::GameBuilder):
 //!
 //! ```ignore
-//! use optic::*;
+//! use optic_engine::*;
 //!
 //! let game = GameBuilder::new()
 //!     .with_network(NetworkConfig::host(7777))
