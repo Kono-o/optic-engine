@@ -3,9 +3,13 @@ name = "optic-loop"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+online = ["optic-online"]
+
 [dependencies]
 optic-core = { path = "../optic-core" }
 optic-render = { path = "../optic-render" }
 optic-window = { path = "../optic-window" }
 winit = "0.30.12"
 gilrs = "0.10"
+optic-online = { path = "../optic-online", optional = true }

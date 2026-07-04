@@ -11,6 +11,7 @@ file = ["core", "optic-file"]
 render = ["core", "file", "optic-render"]
 window = ["core", "optic-window"]
 minimal = ["render", "window", "optic-loop"]
+online = ["optic-online"]
 
 [dependencies]
 cgmath = "0.18.0"
@@ -19,3 +20,4 @@ optic-file = { path = "../optic-file", optional = true }
 optic-render = { path = "../optic-render", optional = true }
 optic-window = { path = "../optic-window", optional = true }
 optic-loop = { path = "../optic-loop", optional = true }
+optic-online = { path = "../optic-online", optional = true }

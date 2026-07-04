@@ -1,4 +1,4 @@
-use optic_core::Size2D;
+use optic_core::{NetworkEvents, Size2D};
 
 use crate::window::Window;
 use gilrs;
@@ -214,6 +214,7 @@ pub struct Events {
     pub close_requested: bool,
     pub focused: bool,
     pub frame: u64,
+    pub network: NetworkEvents,
 }
 
 fn empty_buttons<const N: usize>() -> [ButtonState; N] {
@@ -235,6 +236,7 @@ impl Events {
             close_requested: false,
             focused: true,
             frame: 1,
+            network: NetworkEvents::default(),
         }
     }
 
@@ -249,6 +251,7 @@ impl Events {
         self.close_requested = false;
         self.focused = true;
         self.frame = 1;
+        self.network = NetworkEvents::default();
     }
 
     // ── Event processing ──────────────────────────────────────────────────
@@ -386,6 +389,9 @@ impl Events {
         self.mouse_scroll_line = None;
         self.mouse_scroll_pixel = None;
         self.resize_event = None;
+        self.network.packets.clear();
+        self.network.peers_connected.clear();
+        self.network.peers_disconnected.clear();
     }
 
     // ── Keyboard queries ──────────────────────────────────────────────────

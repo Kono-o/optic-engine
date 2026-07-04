@@ -8,6 +8,9 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::WindowId;
 
+#[cfg(feature = "online")]
+use optic_online::NetworkHandle;
+
 use crate::{Runtime, Time};
 
 pub struct Game {
@@ -25,6 +28,9 @@ pub struct Game {
     started: bool,
     requested_size: Size2D,
     resized_once: bool,
+
+    #[cfg(feature = "online")]
+    pub(crate) network: Option<NetworkHandle>,
 }
 
 impl Game {
@@ -64,6 +70,8 @@ impl Game {
             started: false,
             requested_size: size,
             resized_once: false,
+            #[cfg(feature = "online")]
+            network: None,
         })
     }
     
@@ -87,6 +95,26 @@ impl Game {
 
     pub fn exit(&mut self) {
         self.running = false;
+    }
+
+    /// Returns a reference to the `NetworkHandle` if networking was enabled.
+    #[cfg(feature = "online")]
+    pub fn network(&self) -> Option<&NetworkHandle> {
+        self.network.as_ref()
+    }
+
+    /// Returns a mutable reference to the `NetworkHandle` if networking was enabled.
+    #[cfg(feature = "online")]
+    pub fn network_mut(&mut self) -> Option<&mut NetworkHandle> {
+        self.network.as_mut()
+    }
+
+    /// Enables networking with the given config, spawning the network thread.
+    #[cfg(feature = "online")]
+    pub fn enable_networking(&mut self, config: optic_core::NetworkConfig) -> OpticResult<()> {
+        let handle = NetworkHandle::new(config)?;
+        self.network = Some(handle);
+        Ok(())
     }
     
 }
@@ -137,6 +165,10 @@ impl ApplicationHandler for Game {
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
         if !self.running || self.window.is_closed() {
+            #[cfg(feature = "online")]
+            if let Some(mut net) = self.network.take() {
+                net.shutdown();
+            }
             if let Some(mut runtime) = self.runtime.take() {
                 runtime.end(self);
             }
@@ -147,6 +179,11 @@ impl ApplicationHandler for Game {
 
         while let Some(gilrs_event) = self.gilrs.next_event() {
             self.events.process_gilrs_event(&gilrs_event);
+        }
+
+        #[cfg(feature = "online")]
+        if let Some(net) = &mut self.network {
+            net.poll(&mut self.events.network);
         }
 
         let _ = self.renderer.ctx.make_current(self.surface_index);

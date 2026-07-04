@@ -1,0 +1,8 @@
+[package]
+name = "optic-online"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+optic-core = { path = "../optic-core" }
+tokio = { version = "1", features = ["rt", "net", "sync", "time", "io-util", "macros"] }

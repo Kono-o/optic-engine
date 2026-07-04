@@ -8,3 +8,5 @@ pub use optic_render::*;
 pub use optic_window::*;
 #[cfg(feature = "minimal")]
 pub use optic_loop::*;
+#[cfg(feature = "online")]
+pub use optic_online::*;
