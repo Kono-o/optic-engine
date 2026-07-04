@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Sanitary file I/O and cached path resolution for Optic engine"
+readme = "../README.md"
 
 [dependencies]
-optic-core = { path = "../optic-core", version = "0.0.1" }
+optic-core = { path = "../optic-core", version = "0.0.2" }

@@ -6,14 +6,15 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Game loop, Runtime trait, and Game builder for Optic engine"
+readme = "../README.md"
 
 [features]
 online = ["optic-online"]
 
 [dependencies]
-optic-core = { path = "../optic-core", version = "0.0.1" }
-optic-render = { path = "../optic-render", version = "0.0.1" }
-optic-window = { path = "../optic-window", version = "0.0.1" }
+optic-core = { path = "../optic-core", version = "0.0.2" }
+optic-render = { path = "../optic-render", version = "0.0.2" }
+optic-window = { path = "../optic-window", version = "0.0.2" }
 winit.workspace = true
 gilrs.workspace = true
-optic-online = { path = "../optic-online", version = "0.0.1", optional = true }
+optic-online = { path = "../optic-online", version = "0.0.2", optional = true }
