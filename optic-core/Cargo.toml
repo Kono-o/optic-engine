@@ -9,4 +9,4 @@ description = "Shared types, geometry, errors, and ANSI logging for Optic engine
 
 [dependencies]
 cgmath.workspace = true
-optic-color = { path = "../optic-color", version = "0.0.2" }
+optic-color = { path = "../optic-color", version = "0.0.3" }

@@ -8,8 +8,8 @@ repository.workspace = true
 description = "OpenGL 4.6 renderer for Optic engine — EGL context, shaders, meshes, textures, cameras, canvas"
 
 [dependencies]
-optic-core = { path = "../optic-core", version = "0.0.2" }
-optic-file = { path = "../optic-file", version = "0.0.2" }
+optic-core = { path = "../optic-core", version = "0.0.3" }
+optic-file = { path = "../optic-file", version = "0.0.3" }
 cgmath.workspace = true
 khronos-egl.workspace = true
 gl.workspace = true

@@ -8,4 +8,4 @@ repository.workspace = true
 description = "Sanitary file I/O and cached path resolution for Optic engine"
 
 [dependencies]
-optic-core = { path = "../optic-core", version = "0.0.2" }
+optic-core = { path = "../optic-core", version = "0.0.3" }
