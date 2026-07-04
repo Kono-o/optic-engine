@@ -47,10 +47,12 @@
 mod game;
 mod runtime;
 mod time;
+mod timer;
 
 pub use game::*;
 pub use runtime::*;
 pub use time::*;
+pub use timer::*;
 
 use gilrs::Gilrs;
 use optic_core::{log_error, CamProj, Coord2D, OpticResult, Size2D};

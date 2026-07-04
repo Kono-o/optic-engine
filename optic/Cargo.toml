@@ -13,8 +13,9 @@ core = ["optic-core"]
 file = ["core", "optic-file"]
 render = ["core", "file", "optic-render"]
 window = ["core", "optic-window"]
+sound = ["core", "file", "optic-sound"]
 minimal = ["render", "window", "optic-loop"]
-full = ["core", "file", "render", "window", "optic-loop"]
+full = ["core", "file", "render", "window", "sound", "optic-loop"]
 online = ["optic-online"]
 
 [dependencies]
@@ -24,4 +25,5 @@ optic-file = { path = "../optic-file", version = "0.0.3", optional = true }
 optic-render = { path = "../optic-render", version = "0.0.3", optional = true }
 optic-window = { path = "../optic-window", version = "0.0.3", optional = true }
 optic-loop = { path = "../optic-loop", version = "0.0.3", optional = true }
+optic-sound = { path = "../optic-sound", version = "0.0.3", optional = true }
 optic-online = { path = "../optic-online", version = "0.0.3", optional = true }

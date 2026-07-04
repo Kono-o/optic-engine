@@ -12,6 +12,7 @@
 /// | `events` | [`Events`] | Per-frame input collection |
 /// | `time` | [`Time`] | Delta time, FPS, elapsed |
 /// | `window` | [`Window`] | Application window |
+/// | `audio` | [`AudioEngine`](optic_sound::AudioEngine) | Kira-backed audio manager |
 ///
 /// # Lifecycle
 ///
@@ -61,6 +62,7 @@ use gilrs::Gilrs;
 use optic_core::{log_error, CamProj, Coord2D, OpticResult, Size2D, CRIMSON};
 use optic_core::{end, end_success, ERROR, SUCCESS};
 use optic_render::{Camera, GPU};
+use optic_sound::AudioEngine;
 use optic_window::{Events, Window};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -73,7 +75,7 @@ use optic_online::NetworkHandle;
 use crate::{Runtime, Time};
 
 /// The primary game object — aggregates the renderer, camera, window, events,
-/// timing, gamepad, and user-provided [`Runtime`].
+/// timing, gamepad, audio, and user-provided [`Runtime`].
 ///
 /// Create via [`Game::new`] and start via [`Game::run`]. All fields are public
 /// so that [`Runtime`] methods can access them directly.
@@ -83,6 +85,7 @@ pub struct Game {
     pub events: Events,
     pub time: Time,
     pub window: Window,
+    pub audio: AudioEngine,
 
     event_loop: Option<EventLoop<()>>,
     surface_index: usize,
@@ -137,11 +140,13 @@ impl Game {
 
         let gilrs = Gilrs::new()
             .map_err(|e| optic_core::OpticError::custom(&format!("gilrs init failed: {e}")))?;
+        let audio = AudioEngine::new()?;
         Ok(Game {
             renderer: gpu,
             camera: Camera::new(size, CamProj::Persp),
             events: Events::new(),
             time: Time::new(),
+            audio,
             event_loop: Some(el),
             window,
             surface_index,

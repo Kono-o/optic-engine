@@ -14,6 +14,7 @@ online = ["optic-online"]
 optic-core = { path = "../optic-core", version = "0.0.3" }
 optic-render = { path = "../optic-render", version = "0.0.3" }
 optic-window = { path = "../optic-window", version = "0.0.3" }
+optic-sound = { path = "../optic-sound", version = "0.0.3" }
 winit.workspace = true
 gilrs.workspace = true
 optic-online = { path = "../optic-online", version = "0.0.3", optional = true }

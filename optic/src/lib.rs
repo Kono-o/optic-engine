@@ -49,6 +49,8 @@ pub use optic_file::*;
 pub use optic_render::*;
 #[cfg(feature = "window")]
 pub use optic_window::*;
+#[cfg(feature = "sound")]
+pub use optic_sound::*;
 #[cfg(feature = "minimal")]
 pub use optic_loop::*;
 #[cfg(feature = "online")]

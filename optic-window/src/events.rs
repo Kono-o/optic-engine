@@ -1,4 +1,5 @@
 use optic_core::{NetworkEvents, Size2D};
+use std::collections::HashMap;
 
 use crate::window::Window;
 use gilrs;
@@ -215,6 +216,18 @@ fn gamepad_axis_from_gilrs(a: gilrs::Axis) -> GamepadAxis {
     }
 }
 
+/// A signal payload — either empty or containing raw byte data.
+///
+/// Use [`emit`](Events::emit) for empty signals and
+/// [`emit_with`](Events::emit_with) to attach a payload.
+#[derive(Debug, Clone)]
+pub enum SignalPayload {
+    /// Signal emitted with no data.
+    None,
+    /// Signal emitted with raw byte payload.
+    Bytes(Vec<u8>),
+}
+
 /// Per-frame input state snapshot.
 ///
 /// `Events` holds all input state for a single frame. It is populated by calling
@@ -273,6 +286,7 @@ pub struct Events {
     pub focused: bool,
     pub frame: u64,
     pub network: NetworkEvents,
+    pub signals: HashMap<String, Vec<SignalPayload>>,
 }
 
 fn empty_buttons<const N: usize>() -> [ButtonState; N] {
@@ -296,6 +310,7 @@ impl Events {
             focused: true,
             frame: 1,
             network: NetworkEvents::default(),
+            signals: HashMap::new(),
         }
     }
 
@@ -312,6 +327,7 @@ impl Events {
         self.focused = true;
         self.frame = 1;
         self.network = NetworkEvents::default();
+        self.signals = HashMap::new();
     }
 
     // ── Event processing ──────────────────────────────────────────────────
@@ -460,6 +476,7 @@ impl Events {
         self.network.packets.clear();
         self.network.peers_connected.clear();
         self.network.peers_disconnected.clear();
+        self.signals.clear();
     }
 
     // ── Keyboard queries ──────────────────────────────────────────────────
@@ -569,5 +586,58 @@ impl Events {
     pub fn gamepad_axis_deadzoned(&self, id: usize, axis: GamepadAxis, deadzone: f32) -> f32 {
         let v = self.gamepad_axis_raw(id, axis);
         if v.abs() < deadzone { 0.0 } else { v }
+    }
+
+    // ── Custom signals ────────────────────────────────────────────────────
+
+    /// Emit a named signal (no payload).
+    ///
+    /// The signal is available for the remainder of the frame and cleared
+    /// at [`end_frame`](Self::end_frame).
+    ///
+    /// ```ignore
+    /// game.events.emit("boss_defeated");
+    /// ```
+    pub fn emit(&mut self, name: &str) {
+        self.signals
+            .entry(name.to_string())
+            .or_default()
+            .push(SignalPayload::None);
+    }
+
+    /// Emit a named signal with a byte payload.
+    ///
+    /// ```ignore
+    /// game.events.emit_with("score", 100u32.to_ne_bytes().to_vec());
+    /// ```
+    pub fn emit_with(&mut self, name: &str, payload: Vec<u8>) {
+        self.signals
+            .entry(name.to_string())
+            .or_default()
+            .push(SignalPayload::Bytes(payload));
+    }
+
+    /// Returns `true` if the named signal was emitted this frame.
+    pub fn was_emitted(&self, name: &str) -> bool {
+        self.signals.get(name).map_or(false, |v| !v.is_empty())
+    }
+
+    /// Returns how many times the named signal was emitted this frame.
+    pub fn emitted_count(&self, name: &str) -> u32 {
+        self.signals.get(name).map_or(0, |v| v.len() as u32)
+    }
+
+    /// Returns the first payload for the named signal, if any.
+    ///
+    /// Returns `None` if the signal wasn't emitted or carries no payload.
+    pub fn payload(&self, name: &str) -> Option<&SignalPayload> {
+        self.signals.get(name)?.first()
+    }
+
+    /// Returns all payloads for the named signal.
+    ///
+    /// Returns an empty slice if the signal wasn't emitted.
+    pub fn payloads(&self, name: &str) -> &[SignalPayload] {
+        self.signals.get(name).map_or(&[], |v| v.as_slice())
     }
 }

@@ -8,6 +8,7 @@ members = [
     "optic-render",
     "optic-loop",
     "optic-online",
+    "optic-sound",
     "optic",
 ]
 
@@ -19,7 +20,7 @@ license = "MIT"
 repository = "https://github.com/Kono-o/optic-engine"
 
 [workspace.dependencies]
-cgmath = "0.18.0"
+cgmath = { version = "0.18.0", features = ["mint"] }
 winit = "0.30.12"
 raw-window-handle = "0.6"
 gilrs = "0.10"
@@ -28,6 +29,7 @@ gl = "0.14.0"
 image = "0.25.8"
 flate2 = "1.1.2"
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "io-util", "macros"] }
+kira = "0.12"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
