@@ -228,7 +228,7 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
                     }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    ws.window.notify_cursor_moved(Coord2D::from(position.x, position.y));
+                    ws.window.notify_cursor_moved(Coord2D::new(position.x, position.y));
                 }
                 WindowEvent::CursorEntered { .. } => {
                     ws.window.notify_cursor_inside(true);

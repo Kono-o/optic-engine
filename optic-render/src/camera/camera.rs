@@ -19,7 +19,7 @@ use crate::util::transform::CamTransform;
 ///
 /// | Direction | Method | Axis |
 /// |---|---|---|
-/// | Forward (in look direction) | [`fly_forw`](Camera::fly_forw) | Camera-local -Z |
+    /// | Forward (in look direction) | [`fly_forward`](Camera::fly_forward) | Camera-local -Z |
 /// | Backward | [`fly_back`](Camera::fly_back) | Camera-local +Z |
 /// | Left (strafe) | [`fly_left`](Camera::fly_left) | Camera-local -X |
 /// | Right (strafe) | [`fly_right`](Camera::fly_right) | Camera-local +X |
@@ -51,8 +51,8 @@ use crate::util::transform::CamTransform;
 /// use optic_core::{CamProj, Size2D};
 /// use optic_render::Camera;
 ///
-/// let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
-/// cam.fly_forw(10.0);       // move in look direction
+/// let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
+/// cam.fly_forward(10.0);       // move in look direction
 /// cam.spin_y(-90.0);        // yaw left 90°
 /// cam.pre_update();          // recalculate matrices
 /// ```
@@ -101,7 +101,7 @@ impl Camera {
 
     /// Recalculates the view and projection matrices from the current transform state.
     ///
-    /// Call this once per frame **after** all movement ([`fly_forw`](Camera::fly_forw), etc.)
+    /// Call this once per frame **after** all movement ([`fly_forward`](Camera::fly_forward), etc.)
     /// and rotation ([`spin_y`](Camera::spin_y), etc.) have been applied.
     /// The matrices are consumed by the rendering pipeline — without this call
     /// the camera will continue using stale matrices from the previous frame.
@@ -154,13 +154,13 @@ impl Camera {
     /// Call this each frame with `speed * delta_time` for smooth first-person
     /// movement. Call [`pre_update`](Camera::pre_update) after all movement and
     /// rotation for the frame.
-    pub fn fly_forw(&mut self, speed: f32) {
+    pub fn fly_forward(&mut self, speed: f32) {
         self.transform.pos += speed * self.transform.front;
     }
     /// Moves the camera backward (opposite the direction it faces).
     ///
-    /// The inverse of [`fly_forw`](Camera::fly_forw). Equivalent to
-    /// `fly_forw(-speed)`.
+    /// The inverse of [`fly_forward`](Camera::fly_forward). Equivalent to
+    /// `fly_forward(-speed)`.
     pub fn fly_back(&mut self, speed: f32) {
         self.transform.pos -= speed * self.transform.front;
     }
@@ -181,7 +181,7 @@ impl Camera {
     }
     /// Moves the camera straight up (world Y axis).
     ///
-    /// Unlike [`fly_forw`](Camera::fly_forw) / [`fly_left`](Camera::fly_left),
+    /// Unlike [`fly_forward`](Camera::fly_forward) / [`fly_left`](Camera::fly_left),
     /// this always moves along the **world** Y axis regardless of the camera's
     /// current pitch or roll.
     pub fn fly_up(&mut self, speed: f32) { self.transform.pos.y += speed; }
@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn camera_new_persp() {
-        let cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+        let cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         assert!((cam.fov() - 75.0).abs() < f32::EPSILON);
         assert!((cam.transform.pos.y - 0.0).abs() < f32::EPSILON);
         assert!((cam.transform.pos.z - 5.0).abs() < f32::EPSILON);
@@ -231,21 +231,21 @@ mod tests {
 
     #[test]
     fn camera_new_ortho() {
-        let cam = Camera::new(Size2D::from(800, 600), CamProj::Ortho);
+        let cam = Camera::new(Size2D::new(800, 600), CamProj::Ortho);
         assert_eq!(cam.proj(), CamProj::Ortho);
     }
 
     #[test]
     fn camera_set_clip() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
-        cam.set_clip(ClipDist::from(0.1, 500.0));
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
+        cam.set_clip(ClipDist::new(0.1, 500.0));
         assert!(approx_eq(cam.clip().near, 0.1));
         assert!(approx_eq(cam.clip().far, 500.0));
     }
 
     #[test]
     fn camera_set_clip_near_far() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         cam.set_clip_near(0.5);
         cam.set_clip_far(2000.0);
         assert!(approx_eq(cam.clip().near, 0.5));
@@ -254,28 +254,28 @@ mod tests {
 
     #[test]
     fn camera_set_fov() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         cam.set_fov(90.0);
         assert!(approx_eq(cam.fov(), 90.0));
     }
 
     #[test]
     fn camera_set_fov_clamped() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         cam.set_fov(-1.0); // clamped to 0.01
         assert!(approx_eq(cam.fov(), 0.01));
     }
 
     #[test]
     fn camera_add_fov() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         cam.add_fov(10.0);
         assert!(approx_eq(cam.fov(), 85.0));
     }
 
     #[test]
     fn camera_ortho_scale() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Ortho);
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Ortho);
         assert!((cam.ortho_scale() - 2.0).abs() < f32::EPSILON);
         cam.set_ortho_scale(5.0);
         assert!((cam.ortho_scale() - 5.0).abs() < f32::EPSILON);
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn camera_set_proj() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         assert_eq!(cam.proj(), CamProj::Persp);
         cam.set_proj(CamProj::Ortho);
         assert_eq!(cam.proj(), CamProj::Ortho);
@@ -293,18 +293,18 @@ mod tests {
 
     #[test]
     fn camera_set_size() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
-        cam.set_size(Size2D::from(800, 600));
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
+        cam.set_size(Size2D::new(800, 600));
         assert_eq!(cam.transform.size.w, 800);
         assert_eq!(cam.transform.size.h, 600);
     }
 
     #[test]
     fn camera_fly_movements() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         let start = cam.transform.pos;
 
-        cam.fly_forw(1.0);
+        cam.fly_forward(1.0);
         // front should be (0, 0, -1) more or less
         let diff = cam.transform.pos - start;
         assert!(approx_eq(diff.z, -1.0));
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn camera_spin() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         cam.spin_x(45.0);
         cam.spin_y(90.0);
         cam.spin_z(30.0);
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn camera_pre_update() {
-        let mut cam = Camera::new(Size2D::from(1920, 1080), CamProj::Persp);
+        let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         let view_before = cam.transform.view_matrix;
         cam.transform.rot.x = 30.0;
         cam.pre_update();

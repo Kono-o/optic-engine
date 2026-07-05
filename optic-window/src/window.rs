@@ -1,6 +1,6 @@
 use optic_core::{Coord2D, CoordOffset, Size2D};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::window::{CursorGrabMode, Fullscreen, Window as WinitWindow};
+use winit::window::{CursorGrabMode, CursorIcon, Fullscreen, Window as WinitWindow};
 
 use crate::ScreenInfo;
 
@@ -61,14 +61,14 @@ impl Window {
         let arc = std::sync::Arc::new(w);
         let window = Self {
             inner: Some(arc),
-            prev_cursor_pos: Coord2D::empty(),
-            cursor_delta: CoordOffset::empty(),
-            prev_position: Coord2D::empty(),
-            position_delta: CoordOffset::empty(),
+            prev_cursor_pos: Coord2D::zero(),
+            cursor_delta: CoordOffset::zero(),
+            prev_position: Coord2D::zero(),
+            position_delta: CoordOffset::zero(),
             prev_size: size,
             cursor_inside: true,
             tracking_started: false,
-            cursor_pos: Coord2D::empty(),
+            cursor_pos: Coord2D::zero(),
             cursor_visible: true,
             cursor_grabbed: false,
             cursor_confined: false,
@@ -93,14 +93,14 @@ impl Window {
         let arc = std::sync::Arc::new(w);
         let window = Self {
             inner: Some(arc),
-            prev_cursor_pos: Coord2D::empty(),
-            cursor_delta: CoordOffset::empty(),
-            prev_position: Coord2D::empty(),
-            position_delta: CoordOffset::empty(),
+            prev_cursor_pos: Coord2D::zero(),
+            cursor_delta: CoordOffset::zero(),
+            prev_position: Coord2D::zero(),
+            position_delta: CoordOffset::zero(),
             prev_size: size,
             cursor_inside: true,
             tracking_started: false,
-            cursor_pos: Coord2D::empty(),
+            cursor_pos: Coord2D::zero(),
             cursor_visible: true,
             cursor_grabbed: false,
             cursor_confined: false,
@@ -151,7 +151,7 @@ impl Window {
     pub fn size(&self) -> Size2D {
         self.inner.as_ref().map_or(self.prev_size, |w| {
             let s = w.inner_size();
-            Size2D::from(s.width, s.height)
+            Size2D::new(s.width, s.height)
         })
     }
 
@@ -212,7 +212,7 @@ impl Window {
     /// Desktop position of the window (live winit query via `outer_position`).
     pub fn position(&self) -> Coord2D {
         self.inner.as_ref().and_then(|w| {
-            w.outer_position().ok().map(|p| Coord2D::from(p.x as f64, p.y as f64))
+            w.outer_position().ok().map(|p| Coord2D::new(p.x as f64, p.y as f64))
         }).unwrap_or(self.prev_position)
     }
 
@@ -244,7 +244,7 @@ impl Window {
     /// Cumulative window position delta since the last call to this method (reset on read).
     pub fn position_delta(&mut self) -> CoordOffset {
         let d = self.position_delta;
-        self.position_delta = CoordOffset::empty();
+        self.position_delta = CoordOffset::zero();
         d
     }
 
@@ -299,6 +299,11 @@ impl Window {
         }
     }
 
+    /// Toggle window visibility.
+    pub fn toggle_visible(&self) {
+        self.set_visible(!self.is_visible());
+    }
+
     /// True if the window is minimized (live winit query).
     pub fn is_minimized(&self) -> bool {
         self.inner.as_ref().and_then(|w| w.is_minimized()).unwrap_or(false)
@@ -315,6 +320,15 @@ impl Window {
     pub fn restore(&self) {
         if let Some(ref w) = self.inner {
             w.set_minimized(false);
+        }
+    }
+
+    /// Toggle minimized state.
+    pub fn toggle_minimized(&self) {
+        if self.is_minimized() {
+            self.restore();
+        } else {
+            self.minimize();
         }
     }
 
@@ -337,6 +351,15 @@ impl Window {
         }
     }
 
+    /// Toggle maximized state.
+    pub fn toggle_maximized(&self) {
+        if self.is_maximized() {
+            self.unmaximize();
+        } else {
+            self.maximize();
+        }
+    }
+
     /// True if the window has focus (live winit query).
     pub fn has_focus(&self) -> bool {
         self.inner.as_ref().map_or(false, |w| w.has_focus())
@@ -355,6 +378,18 @@ impl Window {
     pub fn request_redraw(&self) {
         if let Some(ref w) = self.inner {
             w.request_redraw();
+        }
+    }
+
+    /// The DPI scale factor for this window (live winit query).
+    pub fn dpi_scale(&self) -> f64 {
+        self.inner.as_ref().map_or(1.0, |w| w.scale_factor())
+    }
+
+    /// Set the cursor icon.
+    pub fn set_cursor(&self, cursor: CursorIcon) {
+        if let Some(ref w) = self.inner {
+            w.set_cursor(cursor);
         }
     }
 
@@ -393,9 +428,9 @@ impl Window {
     pub fn cursor_pos_normalized(&self) -> Coord2D {
         let sz = self.size();
         if sz.w == 0 || sz.h == 0 {
-            return Coord2D::empty();
+            return Coord2D::zero();
         }
-        Coord2D::from(self.cursor_pos.x / sz.w as f64, 1.0 - self.cursor_pos.y / sz.h as f64)
+        Coord2D::new(self.cursor_pos.x / sz.w as f64, 1.0 - self.cursor_pos.y / sz.h as f64)
     }
 
     /// True if the cursor is inside the window client area (updated via events).
@@ -491,8 +526,8 @@ impl Window {
             self.prev_cursor_pos = self.cursor_pos;
             self.prev_position = new_pos;
             self.prev_size = self.size();
-            self.position_delta = CoordOffset::empty();
-            self.cursor_delta = CoordOffset::empty();
+            self.position_delta = CoordOffset::zero();
+            self.cursor_delta = CoordOffset::zero();
             self.tracking_started = true;
         } else {
             let raw = self.cursor_pos - self.prev_cursor_pos;

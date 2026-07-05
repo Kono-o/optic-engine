@@ -12,7 +12,7 @@ use crate::handles::texture::{create_texture, Texture2D};
 /// use optic_render::asset::TextureFile;
 ///
 /// let tex = TextureFile::from_disk("textures/wood.png")?;
-/// let gpu_tex = tex.ship(); // uploads to GPU
+/// let gpu_tex = tex.upload(); // uploads to GPU
 /// ```
 ///
 /// # Caching
@@ -33,13 +33,13 @@ impl TextureFile {
     pub fn pixel_count(&self) -> usize {
         self.size.w as usize * self.size.h as usize
     }
-    /// Overrides the wrap mode (used before [`ship`](TextureFile::ship)).
+    /// Overrides the wrap mode (used before [`upload`](TextureFile::upload)).
     pub fn set_wrap(&mut self, wrap: ImgWrap) { self.wrap = wrap; }
-    /// Overrides the filter mode (used before [`ship`](TextureFile::ship)).
+    /// Overrides the filter mode (used before [`upload`](TextureFile::upload)).
     pub fn set_filter(&mut self, filter: ImgFilter) { self.filter = filter; }
 
     /// Uploads this texture to the GPU and returns a [`Texture2D`] handle.
-    pub fn ship(&self) -> Texture2D {
+    pub fn upload(&self) -> Texture2D {
         let id = create_texture(&self.bytes, self.size, &self.fmt, &self.filter, &self.wrap);
         Texture2D::new(id, self.size, self.fmt, self.filter, self.wrap)
     }
@@ -78,7 +78,7 @@ impl TextureFile {
 
         let tex = Self {
             bytes,
-            size: Size2D::from(w, h),
+            size: Size2D::new(w, h),
             fmt,
             filter: ImgFilter::Closest,
             wrap: ImgWrap::Clip,
@@ -162,8 +162,8 @@ impl TextureFile {
         }
         Ok(Self {
             bytes,
-            size: Size2D::from(w, h),
-            fmt: ImgFormat::from(channels, bit_depth),
+            size: Size2D::new(w, h),
+            fmt: ImgFormat::new(channels, bit_depth),
             filter,
             wrap,
         })
@@ -178,7 +178,7 @@ mod tests {
     fn pixel_count() {
         let img = TextureFile {
             bytes: vec![0u8; 1920 * 1080 * 4],
-            size: Size2D::from(1920, 1080),
+            size: Size2D::new(1920, 1080),
             fmt: ImgFormat::RGBA(8),
             filter: ImgFilter::Closest,
             wrap: ImgWrap::Clip,
@@ -190,7 +190,7 @@ mod tests {
     fn pixel_count_zero() {
         let img = TextureFile {
             bytes: vec![],
-            size: Size2D::empty(),
+            size: Size2D::zero(),
             fmt: ImgFormat::RGBA(8),
             filter: ImgFilter::Closest,
             wrap: ImgWrap::Clip,
@@ -202,7 +202,7 @@ mod tests {
     fn image_cached_roundtrip() {
         let img = TextureFile {
             bytes: vec![128u8; 16 * 16 * 4],
-            size: Size2D::from(16, 16),
+            size: Size2D::new(16, 16),
             fmt: ImgFormat::RGBA(8),
             filter: ImgFilter::Linear,
             wrap: ImgWrap::Repeat,
@@ -240,7 +240,7 @@ mod tests {
     fn set_wrap_filter() {
         let mut img = TextureFile {
             bytes: vec![],
-            size: Size2D::from(1, 1),
+            size: Size2D::new(1, 1),
             fmt: ImgFormat::RGBA(8),
             filter: ImgFilter::Closest,
             wrap: ImgWrap::Clip,

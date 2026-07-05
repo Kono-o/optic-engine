@@ -17,10 +17,10 @@ impl ScreenInfo {
         let pos = handle.position();
         Self {
             name: handle.name().unwrap_or_default(),
-            size: Size2D::from(sz.width, sz.height),
+            size: Size2D::new(sz.width, sz.height),
             refresh_rate: handle.refresh_rate_millihertz().unwrap_or(0) / 1000,
             scale_factor: handle.scale_factor(),
-            position: Coord2D::from(pos.x as f64, pos.y as f64),
+            position: Coord2D::new(pos.x as f64, pos.y as f64),
         }
     }
 }

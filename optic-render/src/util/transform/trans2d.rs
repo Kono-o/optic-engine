@@ -21,12 +21,12 @@ use cgmath::*;
 /// | Category | Methods |
 /// |---|---|
 /// | **Position** — getter | [`pos`](Transform2D::pos) |
-/// | **Position** — absolute setter | [`set_pos_all`](Transform2D::set_pos_all), [`set_pos_x`](Transform2D::set_pos_x), [`set_pos_y`](Transform2D::set_pos_y) |
-/// | **Position** — relative move | [`move_all`](Transform2D::move_all), [`move_x`](Transform2D::move_x), [`move_y`](Transform2D::move_y) |
-/// | **Rotation** — getter/setter | [`rot`](Transform2D::rot), [`set_rot`](Transform2D::set_rot), [`rotate`](Transform2D::rotate) |
-/// | **Scale** — getter | [`scale`](Transform2D::scale) |
-/// | **Scale** — absolute setter | [`set_scale_all`](Transform2D::set_scale_all), [`set_scale_same`](Transform2D::set_scale_same), [`set_scale_x`](Transform2D::set_scale_x), [`set_scale_y`](Transform2D::set_scale_y) |
-/// | **Scale** — relative add | [`scale_all`](Transform2D::scale_all), [`scale_same`](Transform2D::scale_same), [`scale_x`](Transform2D::scale_x), [`scale_y`](Transform2D::scale_y) |
+    /// | **Position** — absolute setter | [`set_position`](Transform2D::set_position), [`set_position_x`](Transform2D::set_position_x), [`set_position_y`](Transform2D::set_position_y) |
+    /// | **Position** — relative move | [`translate`](Transform2D::translate), [`translate_x`](Transform2D::translate_x), [`translate_y`](Transform2D::translate_y) |
+    /// | **Rotation** — getter/setter | [`rotation`](Transform2D::rotation), [`set_rotation`](Transform2D::set_rotation), [`rotate`](Transform2D::rotate) |
+    /// | **Scale** — getter | [`scale_factor`](Transform2D::scale_factor) |
+    /// | **Scale** — absolute setter | [`set_scale`](Transform2D::set_scale), [`set_scale_uniform`](Transform2D::set_scale_uniform), [`set_scale_x`](Transform2D::set_scale_x), [`set_scale_y`](Transform2D::set_scale_y) |
+    /// | **Scale** — relative add | [`scale`](Transform2D::scale), [`scale_uniform`](Transform2D::scale_uniform), [`scale_x`](Transform2D::scale_x), [`scale_y`](Transform2D::scale_y) |
 /// | **Layer** | [`layer`](Transform2D::layer), [`set_layer`](Transform2D::set_layer) |
 /// | **Aspect** | [`aspect`](Transform2D::aspect), [`set_aspect`](Transform2D::set_aspect) |
 /// | **Matrix** | [`matrix`](Transform2D::matrix), [`calc_matrix`](Transform2D::calc_matrix) |
@@ -80,46 +80,46 @@ impl Transform2D {
     /// Returns the position in normalized coordinates.
     pub fn pos(&self) -> Vector2<f32> { self.pos }
     /// Returns the rotation in degrees.
-    pub fn rot(&self) -> f32 { self.rot }
+    pub fn rotation(&self) -> f32 { self.rot }
     /// Returns the layer (draw order).
     pub fn layer(&self) -> u8 { self.layer }
     /// Returns the scale factor.
-    pub fn scale(&self) -> Vector2<f32> { self.scale }
+    pub fn scale_factor(&self) -> Vector2<f32> { self.scale }
     /// Returns the cached 4×4 transformation matrix.
     pub fn matrix(&self) -> Matrix4<f32> { self.matrix }
 
     /// Translates by `(x, y)` in normalized coordinates.
-    pub fn move_all(&mut self, x: f32, y: f32) { self.pos += vec2(x, y); }
+    pub fn translate(&mut self, x: f32, y: f32) { self.pos += vec2(x, y); }
     /// Translates along the X axis.
-    pub fn move_x(&mut self, x: f32) { self.pos.x += x; }
+    pub fn translate_x(&mut self, x: f32) { self.pos.x += x; }
     /// Translates along the Y axis.
-    pub fn move_y(&mut self, y: f32) { self.pos.y += y; }
+    pub fn translate_y(&mut self, y: f32) { self.pos.y += y; }
     /// Sets the position to `(x, y)`.
-    pub fn set_pos_all(&mut self, x: f32, y: f32) { self.pos = vec2(x, y); }
+    pub fn set_position(&mut self, x: f32, y: f32) { self.pos = vec2(x, y); }
     /// Sets the X coordinate.
-    pub fn set_pos_x(&mut self, x: f32) { self.pos.x = x; }
+    pub fn set_position_x(&mut self, x: f32) { self.pos.x = x; }
     /// Sets the Y coordinate.
-    pub fn set_pos_y(&mut self, y: f32) { self.pos.y = y; }
+    pub fn set_position_y(&mut self, y: f32) { self.pos.y = y; }
 
     /// Adds `rot` degrees to the current rotation.
     pub fn rotate(&mut self, rot: f32) { self.rot += rot; }
     /// Sets the rotation to `rot` degrees.
-    pub fn set_rot(&mut self, rot: f32) { self.rot = rot; }
+    pub fn set_rotation(&mut self, rot: f32) { self.rot = rot; }
     /// Sets the layer.
     pub fn set_layer(&mut self, layer: u8) { self.layer = layer; }
 
     /// Adds `(x, y)` to the current scale.
-    pub fn scale_all(&mut self, x: f32, y: f32) { self.scale += vec2(x, y); }
+    pub fn scale(&mut self, x: f32, y: f32) { self.scale += vec2(x, y); }
     /// Adds `xy` to both scale components.
-    pub fn scale_same(&mut self, xy: f32) { self.scale_all(xy, xy); }
+    pub fn scale_uniform(&mut self, xy: f32) { self.scale(xy, xy); }
     /// Adds `x` to the scale X component.
     pub fn scale_x(&mut self, x: f32) { self.scale.x += x; }
     /// Adds `y` to the scale Y component.
     pub fn scale_y(&mut self, y: f32) { self.scale.y += y; }
     /// Sets the scale to `(x, y)`.
-    pub fn set_scale_all(&mut self, x: f32, y: f32) { self.scale = vec2(x, y); }
+    pub fn set_scale(&mut self, x: f32, y: f32) { self.scale = vec2(x, y); }
     /// Sets both scale components to `xy`.
-    pub fn set_scale_same(&mut self, xy: f32) { self.set_scale_all(xy, xy); }
+    pub fn set_scale_uniform(&mut self, xy: f32) { self.set_scale(xy, xy); }
     /// Sets the scale X component.
     pub fn set_scale_x(&mut self, x: f32) { self.scale.x = x; }
     /// Sets the scale Y component.
@@ -138,27 +138,27 @@ mod tests {
     fn transform2d_default() {
         let t = Transform2D::default();
         assert_eq!(t.pos(), vec2(0.0, 0.0));
-        assert_eq!(t.rot(), 0.0);
-        assert_eq!(t.scale(), vec2(1.0, 1.0));
+        assert_eq!(t.rotation(), 0.0);
+        assert_eq!(t.scale_factor(), vec2(1.0, 1.0));
     }
 
     #[test]
     fn transform2d_set_pos() {
         let mut t = Transform2D::default();
-        t.set_pos_all(100.0, 200.0);
+        t.set_position(100.0, 200.0);
         assert_eq!(t.pos(), vec2(100.0, 200.0));
-        t.set_pos_x(50.0);
-        t.set_pos_y(150.0);
+        t.set_position_x(50.0);
+        t.set_position_y(150.0);
         assert_eq!(t.pos(), vec2(50.0, 150.0));
     }
 
     #[test]
     fn transform2d_move() {
         let mut t = Transform2D::default();
-        t.move_all(10.0, 20.0);
+        t.translate(10.0, 20.0);
         assert_eq!(t.pos(), vec2(10.0, 20.0));
-        t.move_x(5.0);
-        t.move_y(3.0);
+        t.translate_x(5.0);
+        t.translate_y(3.0);
         assert_eq!(t.pos(), vec2(15.0, 23.0));
     }
 
@@ -166,31 +166,31 @@ mod tests {
     fn transform2d_rotate() {
         let mut t = Transform2D::default();
         t.rotate(90.0);
-        assert!(approx_eq(t.rot(), 90.0));
-        t.set_rot(45.0);
-        assert!(approx_eq(t.rot(), 45.0));
+        assert!(approx_eq(t.rotation(), 90.0));
+        t.set_rotation(45.0);
+        assert!(approx_eq(t.rotation(), 45.0));
     }
 
     #[test]
     fn transform2d_scale() {
         let mut t = Transform2D::default();
-        t.set_scale_all(2.0, 3.0);
-        assert_eq!(t.scale(), vec2(2.0, 3.0));
+        t.set_scale(2.0, 3.0);
+        assert_eq!(t.scale_factor(), vec2(2.0, 3.0));
         t.set_scale_x(5.0);
         t.set_scale_y(6.0);
-        assert_eq!(t.scale(), vec2(5.0, 6.0));
+        assert_eq!(t.scale_factor(), vec2(5.0, 6.0));
     }
 
     #[test]
     fn transform2d_scale_operations() {
         let mut t = Transform2D::default();
-        t.scale_all(1.0, 2.0);
-        assert_eq!(t.scale(), vec2(2.0, 3.0));
-        t.scale_same(3.0);
-        assert_eq!(t.scale(), vec2(5.0, 6.0));
+        t.scale(1.0, 2.0);
+        assert_eq!(t.scale_factor(), vec2(2.0, 3.0));
+        t.scale_uniform(3.0);
+        assert_eq!(t.scale_factor(), vec2(5.0, 6.0));
         t.scale_x(1.0);
         t.scale_y(1.0);
-        assert_eq!(t.scale(), vec2(6.0, 7.0));
+        assert_eq!(t.scale_factor(), vec2(6.0, 7.0));
     }
 
     #[test]
@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn transform2d_matrix_translation() {
         let mut t = Transform2D::default();
-        t.set_pos_all(0.5, 0.0);
+        t.set_position(0.5, 0.0);
         t.calc_matrix();
         let m = t.matrix();
         assert!(approx_eq(m[3][0], (0.5 * 2.0 - 1.0) * 1.0));

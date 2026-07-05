@@ -9,7 +9,7 @@ use optic_render::Transform3D;
 /// A handle to a playing 3D sound with spatial audio.
 ///
 /// Positioned in 3D space relative to the listener. Created by
-/// [`AudioEngine::ship_sound3d`](crate::AudioEngine::ship_sound3d).
+/// [`AudioEngine::upload_sound3d`](crate::AudioEngine::upload_sound3d).
 ///
 /// Call [`update`](Sound3D::update) each frame to keep the emitter position
 /// in sync with the game object it's attached to.
@@ -17,8 +17,8 @@ use optic_render::Transform3D;
 /// # Example
 ///
 /// ```ignore
-/// let mut sound = audio.ship_sound3d(&sfx)?;
-/// sound.transform.set_pos_all(10.0, 0.0, 5.0);
+    /// let mut sound = audio.upload_sound3d(&sfx)?;
+/// sound.transform.set_position(10.0, 0.0, 5.0);
 /// sound.play();
 /// // each frame:
 /// sound.update();

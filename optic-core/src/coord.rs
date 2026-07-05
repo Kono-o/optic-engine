@@ -10,8 +10,8 @@ use crate::{componentwise_min, componentwise_max, Components, Size2D};
 /// ```
 /// use optic_core::*;
 ///
-/// let a = Coord2D::from(100.0, 200.0);
-/// let b = Coord2D::from(150.0, 180.0);
+/// let a = Coord2D::new(100.0, 200.0);
+/// let b = Coord2D::new(150.0, 180.0);
 /// let d: CoordOffset = b - a;
 /// let mid = a.lerp(b, 0.5);
 /// ```
@@ -56,15 +56,11 @@ impl Sub<CoordOffset> for Coord2D {
 
 impl Coord2D {
     /// The origin point (0, 0).
-    pub fn empty() -> Coord2D {
+    pub fn zero() -> Coord2D {
         Coord2D { x: 0.0, y: 0.0 }
     }
     /// Construct from x, y coordinates.
-    pub fn from(x: f64, y: f64) -> Self {
-        Self { x, y }
-    }
-    /// Construct from a tuple.
-    pub fn from_tup((x, y): (f64, f64)) -> Self {
+    pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
     /// True if the point lies within the rectangle `(0, 0)` to `(size.w, size.h)`.
@@ -141,15 +137,11 @@ impl Neg for CoordOffset {
 
 impl CoordOffset {
     /// Zero vector (0, 0).
-    pub fn empty() -> CoordOffset {
+    pub fn zero() -> CoordOffset {
         CoordOffset { x: 0.0, y: 0.0 }
     }
     /// Construct from x, y components.
-    pub fn from(x: f64, y: f64) -> Self {
-        Self { x, y }
-    }
-    /// Construct from a tuple.
-    pub fn from_tup((x, y): (f64, f64)) -> Self {
+    pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
     /// True if both components are exactly zero.
@@ -185,5 +177,21 @@ impl CoordOffset {
     /// Componentwise maximum.
     pub fn max(&self, other: CoordOffset) -> CoordOffset {
         componentwise_max(*self, other)
+    }
+    /// Angle (radians) from the positive X axis to this vector.
+    pub fn angle(&self) -> f64 {
+        self.y.atan2(self.x)
+    }
+    /// Perpendicular vector (rotated 90° counter-clockwise).
+    pub fn perpendicular(&self) -> CoordOffset {
+        CoordOffset { x: -self.y, y: self.x }
+    }
+    /// Reflect this vector across a surface with the given normal.
+    pub fn reflect(&self, normal: CoordOffset) -> CoordOffset {
+        *self - normal * 2.0 * self.dot(normal)
+    }
+    /// Project this vector onto another.
+    pub fn project(&self, onto: CoordOffset) -> CoordOffset {
+        onto * (self.dot(onto) / onto.length_squared())
     }
 }

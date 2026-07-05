@@ -82,8 +82,8 @@ pub struct Shader {
     pub workers: Workers,
     pub id: u32,
     pub is_compute: bool,
-    pub tex_ids: Vec<Option<u32>>,
-    pub sbo_ids: Vec<Option<u32>>,
+    pub bound_textures: Vec<Option<u32>>,
+    pub bound_storages: Vec<Option<u32>>,
 }
 
 impl Shader {
@@ -96,14 +96,14 @@ impl Shader {
             workers: Workers::empty(),
             id,
             is_compute,
-            tex_ids: vec![None; Slot::total_slots()],
-            sbo_ids: vec![None; Slot::total_slots()],
+            bound_textures: vec![None; Slot::total_slots()],
+            bound_storages: vec![None; Slot::total_slots()],
         }
     }
 
     /// Attaches a texture to the first available (empty) texture slot.
-    pub fn attach_tex(&mut self, tex: &Texture2D) {
-        for slot in self.tex_ids.iter_mut() {
+    pub fn attach_texture(&mut self, tex: &Texture2D) {
+        for slot in self.bound_textures.iter_mut() {
             if slot.is_none() {
                 *slot = Some(tex.id);
                 break;
@@ -112,8 +112,8 @@ impl Shader {
     }
 
     /// Attaches a storage buffer to the first available (empty) SSBO slot.
-    pub fn attach_sbo(&mut self, sbo: &StorageBuffer) {
-        for slot in self.sbo_ids.iter_mut() {
+    pub fn attach_storage(&mut self, sbo: &StorageBuffer) {
+        for slot in self.bound_storages.iter_mut() {
             if slot.is_none() {
                 *slot = Some(sbo.id);
                 break;
@@ -122,13 +122,13 @@ impl Shader {
     }
 
     /// Binds a texture to a specific slot.
-    pub fn set_tex_at_slot(&mut self, tex: &Texture2D, slot: Slot) {
-        self.tex_ids[slot.as_index()] = Some(tex.id);
+    pub fn bind_texture(&mut self, tex: &Texture2D, slot: Slot) {
+        self.bound_textures[slot.as_index()] = Some(tex.id);
     }
 
     /// Binds a storage buffer to a specific slot.
-    pub fn set_sbo_at_slot(&mut self, sbo: &StorageBuffer, slot: Slot) {
-        self.sbo_ids[slot.as_index()] = Some(sbo.id);
+    pub fn bind_storage(&mut self, sbo: &StorageBuffer, slot: Slot) {
+        self.bound_storages[slot.as_index()] = Some(sbo.id);
     }
 
     /// Deletes the underlying GL program.
@@ -178,20 +178,20 @@ impl Shader {
     }
 
     /// Returns all (slot, tex_id) pairs for currently bound textures.
-    pub fn texture_binds(&self) -> Vec<(u32, u32)> {
-        self.tex_ids.iter().enumerate()
+    pub fn bound_textures_info(&self) -> Vec<(u32, u32)> {
+        self.bound_textures.iter().enumerate()
             .filter_map(|(slot, id)| id.map(|tid| (slot as u32, tid)))
             .collect()
     }
     /// Returns all (slot, sbo_id) pairs for currently bound storage buffers.
-    pub fn storage_binds(&self) -> Vec<(u32, u32)> {
-        self.sbo_ids.iter().enumerate()
+    pub fn bound_storages_info(&self) -> Vec<(u32, u32)> {
+        self.bound_storages.iter().enumerate()
             .filter_map(|(slot, id)| id.map(|sid| (slot as u32, sid)))
             .collect()
     }
     /// Binds all attached textures (image uniforms for compute, sampler2D for pipeline).
     pub fn bind_textures(&self) {
-        for (slot, tex_id) in self.tex_ids.iter().enumerate() {
+        for (slot, tex_id) in self.bound_textures.iter().enumerate() {
             if let Some(id) = tex_id {
                 if self.is_compute {
                     unsafe {
@@ -208,7 +208,7 @@ impl Shader {
 
     /// Binds all attached storage buffers to their slots.
     pub fn bind_storages(&self) {
-        for (slot, sbo_id) in self.sbo_ids.iter().enumerate() {
+        for (slot, sbo_id) in self.bound_storages.iter().enumerate() {
             if let Some(id) = sbo_id {
                 unsafe {
                     gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, slot as u32, *id);
@@ -423,8 +423,8 @@ mod tests {
         let s = Shader::new(42, false);
         assert_eq!(s.id, 42);
         assert!(!s.is_compute);
-        assert_eq!(s.tex_ids.len(), 16);
-        assert_eq!(s.sbo_ids.len(), 16);
+        assert_eq!(s.bound_textures.len(), 16);
+        assert_eq!(s.bound_storages.len(), 16);
     }
 
     #[test]

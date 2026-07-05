@@ -1,4 +1,4 @@
-//! Mesh asset types — CPU-side geometry descriptions that can be shipped to the GPU.
+//! Mesh asset types — CPU-side geometry descriptions that can be uploaded to the GPU.
 //!
 //! This module provides two mesh families:
 //!
@@ -11,7 +11,7 @@
 //! # Architecture
 //!
 //! `Mesh3DFile` / `Mesh2DFile` are *asset* types — pure data on the CPU.
-//! They are converted into GPU resources by calling [`ship`](Mesh3DFile::ship),
+//! They are converted into GPU resources by calling [`upload`](Mesh3DFile::upload),
 //! which returns a [`MeshHandle`] owned by the GPU.
 //!
 //! ```ignore
@@ -19,7 +19,7 @@
 //! let file = Mesh3DFile::cube(2.0);
 //!
 //! // On the GPU (render phase)
-//! let mesh: Mesh3D = gpu.ship_mesh3d(&file);
+//! let mesh: Mesh3D = gpu.upload_mesh3d(&file);
 //! ```
 //!
 //! # Caching
@@ -33,7 +33,7 @@ use optic_core::{DrawMode, OpticError, OpticErrorKind, OpticResult};
 use cgmath::Vector2;
 use std::collections::HashMap;
 
-use crate::asset::attr::{ATTRInfo, ColATTR, CustomATTR, IndATTR, NrmATTR, Pos2DATTR, Pos3DATTR, UVMATTR};
+use crate::asset::attr::{ATTRInfo, ColorATTR, CustomATTR, IndicesATTR, NormalATTR, Pos2DATTR, Pos3DATTR, UVMapATTR};
 use crate::asset::attr::DataType;
 use crate::handles::mesh::{
     create_index_buffer, create_mesh_buffer, fill_buffer, fill_index_buffer, set_attr_layout,
@@ -47,10 +47,10 @@ use crate::handles::mesh::{
 enum OBJ {
     Parsed {
         pos_attr: Pos3DATTR,
-        col_attr: ColATTR,
-        uvm_attr: UVMATTR,
-        nrm_attr: NrmATTR,
-        ind_attr: IndATTR,
+        col_attr: ColorATTR,
+        uvm_attr: UVMapATTR,
+        nrm_attr: NormalATTR,
+        ind_attr: IndicesATTR,
     },
     NonTriangle(String),
 }
@@ -62,10 +62,10 @@ impl OBJ {
     /// faces return [`OBJ::NonTriangle`] with the offending source line.
     fn parse(src: &str) -> Self {
         let mut pos_attr = Pos3DATTR::empty();
-        let mut col_attr = ColATTR::empty();
-        let mut uvm_attr = UVMATTR::empty();
-        let mut nrm_attr = NrmATTR::empty();
-        let mut ind_attr = IndATTR::empty();
+        let mut col_attr = ColorATTR::empty();
+        let mut uvm_attr = UVMapATTR::empty();
+        let mut nrm_attr = NormalATTR::empty();
+        let mut ind_attr = IndicesATTR::empty();
 
         let mut pos_data = Vec::new();
         let mut uvm_data = Vec::new();
@@ -154,7 +154,7 @@ impl OBJ {
 ///
 /// `Mesh3DFile` is the primary asset type for 3D geometry. It stores vertex
 /// and index data in separate typed attribute arrays, ready for interleaving
-/// and GPU upload via [`ship`](Mesh3DFile::ship).
+/// and GPU upload via [`upload`](Mesh3DFile::upload).
 ///
 /// # Loading
 ///
@@ -179,7 +179,7 @@ impl OBJ {
 ///
 /// # Custom attributes
 ///
-/// Use [`attach_custom_attr`](Mesh3DFile::attach_custom_attr) to add
+/// Use [`add_custom_attr`](Mesh3DFile::add_custom_attr) to add
 /// per-vertex data beyond the built-in set (e.g. bone weights, AO values).
 ///
 /// # Binary cache format
@@ -220,11 +220,11 @@ impl OBJ {
 /// ```
 pub struct Mesh3DFile {
     pub pos_attr: Pos3DATTR,
-    pub col_attr: ColATTR,
-    pub uvm_attr: UVMATTR,
-    pub nrm_attr: NrmATTR,
-    pub ind_attr: IndATTR,
-    pub cus_attrs: Vec<CustomATTR>,
+    pub col_attr: ColorATTR,
+    pub uvm_attr: UVMapATTR,
+    pub nrm_attr: NormalATTR,
+    pub ind_attr: IndicesATTR,
+    pub custom_attrs: Vec<CustomATTR>,
 }
 
 impl Mesh3DFile {
@@ -232,11 +232,11 @@ impl Mesh3DFile {
     pub fn empty() -> Self {
         Self {
             pos_attr: Pos3DATTR::empty(),
-            col_attr: ColATTR::empty(),
-            uvm_attr: UVMATTR::empty(),
-            nrm_attr: NrmATTR::empty(),
-            ind_attr: IndATTR::empty(),
-            cus_attrs: Vec::new(),
+            col_attr: ColorATTR::empty(),
+            uvm_attr: UVMapATTR::empty(),
+            nrm_attr: NormalATTR::empty(),
+            ind_attr: IndicesATTR::empty(),
+            custom_attrs: Vec::new(),
         }
     }
 
@@ -256,7 +256,7 @@ impl Mesh3DFile {
                 &format!("mesh not triangulated at: {line}"),
             )),
             OBJ::Parsed { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr } => {
-                Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, cus_attrs: Vec::new() })
+                Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, custom_attrs: Vec::new() })
             }
         }
     }
@@ -271,18 +271,18 @@ impl Mesh3DFile {
     /// Returns an error if the data is truncated or not valid UTF-8 (for ASCII STL).
     pub fn from_stl_src(data: &[u8]) -> OpticResult<Self> {
         let mut pos_attr = Pos3DATTR::empty();
-        let mut col_attr = ColATTR::empty();
-        let mut uvm_attr = UVMATTR::empty();
-        let mut nrm_attr = NrmATTR::empty();
-        let mut ind_attr = IndATTR::empty();
+        let mut col_attr = ColorATTR::empty();
+        let mut uvm_attr = UVMapATTR::empty();
+        let mut nrm_attr = NormalATTR::empty();
+        let mut ind_attr = IndicesATTR::empty();
 
         let def_col = [1.0, 1.0, 1.0, 1.0];
         let def_uvm = [0.0, 0.0];
         let mut unique_verts: HashMap<(u32, u32, u32, u32, u32, u32), u32> = HashMap::new();
 
         let push_vert = |pos: [f32; 3], nrm: [f32; 3], unique: &mut HashMap<(u32, u32, u32, u32, u32, u32), u32>,
-                              pos_attr: &mut Pos3DATTR, nrm_attr: &mut NrmATTR,
-                              col_attr: &mut ColATTR, uvm_attr: &mut UVMATTR| -> u32 {
+                              pos_attr: &mut Pos3DATTR, nrm_attr: &mut NormalATTR,
+                              col_attr: &mut ColorATTR, uvm_attr: &mut UVMapATTR| -> u32 {
             let key = (pos[0].to_bits(), pos[1].to_bits(), pos[2].to_bits(),
                        nrm[0].to_bits(), nrm[1].to_bits(), nrm[2].to_bits());
             if let Some(&idx) = unique.get(&key) {
@@ -367,7 +367,7 @@ impl Mesh3DFile {
             }
         }
 
-        Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, cus_attrs: Vec::new() })
+        Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, custom_attrs: Vec::new() })
     }
 
     /// Loads a mesh from disk, detecting format by extension.
@@ -508,7 +508,7 @@ impl Mesh3DFile {
 
         let nrm_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
         off += 4;
-        let mut nrm_attr = NrmATTR::empty();
+        let mut nrm_attr = NormalATTR::empty();
         if nrm_size > 0 {
             if off + nrm_size > data.len() {
                 return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached mesh (normals): {path}")));
@@ -521,7 +521,7 @@ impl Mesh3DFile {
 
         let uvm_size = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
         off += 4;
-        let mut uvm_attr = UVMATTR::empty();
+        let mut uvm_attr = UVMapATTR::empty();
         if uvm_size > 0 {
             if off + uvm_size > data.len() {
                 return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached mesh (UVs): {path}")));
@@ -537,7 +537,7 @@ impl Mesh3DFile {
         if off + col_size > data.len() {
             return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached mesh (colors): {path}")));
         }
-        let mut col_attr = ColATTR::empty();
+        let mut col_attr = ColorATTR::empty();
         let col_count = col_size / 16;
         for _ in 0..col_count {
             col_attr.push(read_f32x4(&mut off, &data));
@@ -548,7 +548,7 @@ impl Mesh3DFile {
         if off + ind_size > data.len() {
             return Err(OpticError::new(OpticErrorKind::Asset, &format!("truncated cached mesh (indices): {path}")));
         }
-        let mut ind_attr = IndATTR::empty();
+        let mut ind_attr = IndicesATTR::empty();
         let ind_count = ind_size / 4;
         for _ in 0..ind_count {
             let idx = u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
@@ -556,7 +556,7 @@ impl Mesh3DFile {
             ind_attr.push(idx);
         }
 
-        Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, cus_attrs: Vec::new() })
+        Ok(Self { pos_attr, col_attr, uvm_attr, nrm_attr, ind_attr, custom_attrs: Vec::new() })
     }
 
     /// Generates a unit cube centred at the origin with all six faces.
@@ -898,14 +898,14 @@ impl Mesh3DFile {
     ///
     /// The custom attribute must have the same number of elements as the
     /// mesh's vertex count.
-    pub fn attach_custom_attr(&mut self, attr: CustomATTR) {
-        self.cus_attrs.push(attr);
+    pub fn add_custom_attr(&mut self, attr: CustomATTR) {
+        self.custom_attrs.push(attr);
     }
 
     /// Returns `true` if no built-in attributes are populated and no custom
     /// attributes are attached.
     pub fn has_no_attr(&self) -> bool {
-        self.starts_with_custom() && self.cus_attrs.is_empty()
+        self.starts_with_custom() && self.custom_attrs.is_empty()
     }
 
     /// Returns `true` if no built-in vertex attributes are populated.
@@ -921,7 +921,7 @@ impl Mesh3DFile {
     ///
     /// Returns a [`MeshHandle`] ready for instanced or direct drawing.
     /// This is the final step of the asset-to-GPU pipeline for 3D meshes.
-    pub fn ship(&self) -> MeshHandle {
+    pub fn upload(&self) -> MeshHandle {
         create_mesh3d_handle(self)
     }
 }
@@ -947,10 +947,10 @@ pub struct Mesh2DFile {
     pub pos_attr: Pos2DATTR,
     pub layer: u8,
     pub aspect: f32,
-    pub col_attr: ColATTR,
-    pub uvm_attr: UVMATTR,
-    pub ind_attr: IndATTR,
-    pub cus_attrs: Vec<CustomATTR>,
+    pub col_attr: ColorATTR,
+    pub uvm_attr: UVMapATTR,
+    pub ind_attr: IndicesATTR,
+    pub custom_attrs: Vec<CustomATTR>,
 }
 
 /// Controls how 2D mesh positions are offset relative to their centre.
@@ -981,10 +981,10 @@ impl Mesh2DFile {
             pos_attr: Pos2DATTR::empty(),
             layer: 0,
             aspect: 1.0,
-            col_attr: ColATTR::empty(),
-            uvm_attr: UVMATTR::empty(),
-            ind_attr: IndATTR::empty(),
-            cus_attrs: Vec::new(),
+            col_attr: ColorATTR::empty(),
+            uvm_attr: UVMapATTR::empty(),
+            ind_attr: IndicesATTR::empty(),
+            custom_attrs: Vec::new(),
         }
     }
 
@@ -1006,13 +1006,13 @@ impl Mesh2DFile {
     pub fn set_center(&mut self, center: Center) { self.offset_pos_by_center(&center); }
 
     /// Replaces the colour attribute.
-    pub fn set_col_attr(&mut self, attr: ColATTR) { self.col_attr = attr; }
+    pub fn set_col_attr(&mut self, attr: ColorATTR) { self.col_attr = attr; }
 
     /// Replaces the UV attribute.
-    pub fn set_uvm_attr(&mut self, attr: UVMATTR) { self.uvm_attr = attr; }
+    pub fn set_uvm_attr(&mut self, attr: UVMapATTR) { self.uvm_attr = attr; }
 
     /// Replaces the index attribute.
-    pub fn set_ind_attr(&mut self, attr: IndATTR) { self.ind_attr = attr; }
+    pub fn set_ind_attr(&mut self, attr: IndicesATTR) { self.ind_attr = attr; }
 
     /// Creates a textured quad sized to fill the given canvas area.
     ///
@@ -1032,9 +1032,9 @@ impl Mesh2DFile {
         let y = 1.0;
         mesh.set_pos_attr(Pos2DATTR::from_array(&[[-x, y], [x, y], [x, -y], [-x, -y]]));
         mesh.offset_pos_by_center(&Center::Middle);
-        mesh.set_col_attr(ColATTR::from_array(&[[1.0, 1.0, 1.0, 1.0]; 4]));
-        mesh.set_uvm_attr(UVMATTR::from_array(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]));
-        mesh.set_ind_attr(IndATTR::from_array(&[0, 2, 1, 2, 0, 3]));
+        mesh.set_col_attr(ColorATTR::from_array(&[[1.0, 1.0, 1.0, 1.0]; 4]));
+        mesh.set_uvm_attr(UVMapATTR::from_array(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]));
+        mesh.set_ind_attr(IndicesATTR::from_array(&[0, 2, 1, 2, 0, 3]));
         mesh
     }
 
@@ -1047,17 +1047,17 @@ impl Mesh2DFile {
         mesh.set_pos_attr(Pos2DATTR::from_array(&[
             [-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0],
         ]));
-        mesh.set_col_attr(ColATTR::from_array(&[[1.0, 1.0, 1.0, 1.0]; 4]));
-        mesh.set_uvm_attr(UVMATTR::from_array(&[
+        mesh.set_col_attr(ColorATTR::from_array(&[[1.0, 1.0, 1.0, 1.0]; 4]));
+        mesh.set_uvm_attr(UVMapATTR::from_array(&[
             [0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0],
         ]));
-        mesh.set_ind_attr(IndATTR::from_array(&[0, 1, 2, 0, 2, 3]));
+        mesh.set_ind_attr(IndicesATTR::from_array(&[0, 1, 2, 0, 2, 3]));
         mesh
     }
 
     /// Attaches a custom per-vertex attribute.
-    pub fn attach_custom_attr(&mut self, attr: CustomATTR) {
-        self.cus_attrs.push(attr);
+    pub fn add_custom_attr(&mut self, attr: CustomATTR) {
+        self.custom_attrs.push(attr);
     }
 
     /// Creates a circle approximated by a regular polygon.
@@ -1079,10 +1079,10 @@ impl Mesh2DFile {
             ind.push(if i + 1 < segments { i + 2 } else { 1 });
         }
         let vert_count = (segments + 1) as usize;
-        mesh.set_pos_attr(Pos2DATTR::from(pos));
-        mesh.set_col_attr(ColATTR::from(vec![[1.0f32; 4]; vert_count]));
-        mesh.set_uvm_attr(UVMATTR::from(uvm));
-        mesh.set_ind_attr(IndATTR::from(ind));
+        mesh.set_pos_attr(Pos2DATTR::new(pos));
+        mesh.set_col_attr(ColorATTR::new(vec![[1.0f32; 4]; vert_count]));
+        mesh.set_uvm_attr(UVMapATTR::new(uvm));
+        mesh.set_ind_attr(IndicesATTR::new(ind));
         mesh
     }
 
@@ -1123,10 +1123,10 @@ impl Mesh2DFile {
             ind.push(i2);
         }
         let vert_count = (segments * 2) as usize;
-        mesh.set_pos_attr(Pos2DATTR::from(pos));
-        mesh.set_col_attr(ColATTR::from(vec![[1.0f32; 4]; vert_count]));
-        mesh.set_uvm_attr(UVMATTR::from(uvm));
-        mesh.set_ind_attr(IndATTR::from(ind));
+        mesh.set_pos_attr(Pos2DATTR::new(pos));
+        mesh.set_col_attr(ColorATTR::new(vec![[1.0f32; 4]; vert_count]));
+        mesh.set_uvm_attr(UVMapATTR::new(uvm));
+        mesh.set_ind_attr(IndicesATTR::new(ind));
         mesh
     }
 
@@ -1145,9 +1145,9 @@ impl Mesh2DFile {
         let x = width * 0.5;
         let y = height * 0.5;
         mesh.set_pos_attr(Pos2DATTR::from_array(&[[-x, y], [x, y], [x, -y], [-x, -y]]));
-        mesh.set_col_attr(ColATTR::from_array(&[[1.0, 1.0, 1.0, 1.0]; 4]));
-        mesh.set_uvm_attr(UVMATTR::from_array(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]));
-        mesh.set_ind_attr(IndATTR::from_array(&[0, 2, 1, 2, 0, 3]));
+        mesh.set_col_attr(ColorATTR::from_array(&[[1.0, 1.0, 1.0, 1.0]; 4]));
+        mesh.set_uvm_attr(UVMapATTR::from_array(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]));
+        mesh.set_ind_attr(IndicesATTR::from_array(&[0, 2, 1, 2, 0, 3]));
         mesh
     }
 
@@ -1158,7 +1158,7 @@ impl Mesh2DFile {
     }
 
     /// Interleaves vertex attributes and uploads to the GPU.
-    pub fn ship(&self) -> MeshHandle {
+    pub fn upload(&self) -> MeshHandle {
         create_mesh2d_handle(self)
     }
 }
@@ -1207,13 +1207,13 @@ fn create_mesh3d_handle(mesh: &Mesh3DFile) -> MeshHandle {
         stride += info.elem_count * info.byte_count;
         attrs.push((info, &mesh.nrm_attr.data as &dyn AsDataRef));
     }
-    for cus in &mesh.cus_attrs {
+    for cus in &mesh.custom_attrs {
         stride += cus.info.elem_count * cus.info.byte_count;
         attrs.push((&cus.info, &cus.data as &dyn AsDataRef));
     }
 
     let vert_count = if mesh.starts_with_custom() {
-        let first = &mesh.cus_attrs[0];
+        let first = &mesh.custom_attrs[0];
         first.data.len() / (first.info.byte_count * first.info.elem_count)
     } else {
         mesh.pos_attr.data.len()
@@ -1258,12 +1258,12 @@ fn create_mesh3d_handle(mesh: &Mesh3DFile) -> MeshHandle {
         layouts,
         draw_mode: DrawMode::Triangles,
         has_indices,
-        vert_count,
-        ind_count,
+        vertex_count: vert_count,
+        index_count: ind_count,
         vao_id,
-        buf_id,
-        ind_id,
-        vert_stride: stride as u32,
+        vertex_buffer_id: buf_id,
+        index_buffer_id: ind_id,
+        vertex_stride: stride as u32,
         instance_buf_id: 0,
         instance_count: 0,
     }
@@ -1295,13 +1295,13 @@ fn create_mesh2d_handle(mesh: &Mesh2DFile) -> MeshHandle {
         stride += info.elem_count * info.byte_count;
         attrs.push((info, &mesh.uvm_attr.data as &dyn AsDataRef));
     }
-    for cus in &mesh.cus_attrs {
+    for cus in &mesh.custom_attrs {
         stride += cus.info.elem_count * cus.info.byte_count;
         attrs.push((&cus.info, &cus.data as &dyn AsDataRef));
     }
 
     let vert_count = if mesh.starts_with_custom() {
-        let first = &mesh.cus_attrs[0];
+        let first = &mesh.custom_attrs[0];
         first.data.len() / (first.info.byte_count * first.info.elem_count)
     } else {
         mesh.pos_attr.data.len()
@@ -1346,12 +1346,12 @@ fn create_mesh2d_handle(mesh: &Mesh2DFile) -> MeshHandle {
         layouts,
         draw_mode: DrawMode::Triangles,
         has_indices,
-        vert_count,
-        ind_count,
+        vertex_count: vert_count,
+        index_count: ind_count,
         vao_id,
-        buf_id,
-        ind_id,
-        vert_stride: stride as u32,
+        vertex_buffer_id: buf_id,
+        index_buffer_id: ind_id,
+        vertex_stride: stride as u32,
         instance_buf_id: 0,
         instance_count: 0,
     }
@@ -1404,7 +1404,7 @@ mod tests {
         assert!(m.uvm_attr.is_empty());
         assert!(m.nrm_attr.is_empty());
         assert!(m.ind_attr.is_empty());
-        assert!(m.cus_attrs.is_empty());
+        assert!(m.custom_attrs.is_empty());
     }
 
     #[test]
@@ -1430,8 +1430,8 @@ mod tests {
     fn mesh3d_file_attach_custom() {
         let mut m = Mesh3DFile::empty();
         let attr = CustomATTR::empty::<u32>("bone_ids");
-        m.attach_custom_attr(attr);
-        assert_eq!(m.cus_attrs.len(), 1);
+        m.add_custom_attr(attr);
+        assert_eq!(m.custom_attrs.len(), 1);
     }
 
     #[test]
@@ -1441,7 +1441,7 @@ mod tests {
         assert!(m.col_attr.is_empty());
         assert!(m.uvm_attr.is_empty());
         assert!(m.ind_attr.is_empty());
-        assert!(m.cus_attrs.is_empty());
+        assert!(m.custom_attrs.is_empty());
         assert_eq!(m.layer, 0);
         assert!((m.aspect - 1.0).abs() < f32::EPSILON);
     }
@@ -1454,7 +1454,7 @@ mod tests {
 
     #[test]
     fn mesh2d_quad() {
-        let size = Size2D::from(100, 100);
+        let size = Size2D::new(100, 100);
         let m = Mesh2DFile::quad(&size);
         assert_eq!(m.pos_attr.data.len(), 4);
         assert_eq!(m.col_attr.data.len(), 4);
@@ -1466,9 +1466,9 @@ mod tests {
     fn mesh2d_setters() {
         let mut m = Mesh2DFile::empty();
         m.set_pos_attr(Pos2DATTR::from_array(&[[0.0, 0.0], [1.0, 0.0]]));
-        m.set_col_attr(ColATTR::from_array(&[[1.0; 4]; 2]));
-        m.set_uvm_attr(UVMATTR::from_array(&[[0.0, 0.0], [1.0, 0.0]]));
-        m.set_ind_attr(IndATTR::from_array(&[0, 1]));
+        m.set_col_attr(ColorATTR::from_array(&[[1.0; 4]; 2]));
+        m.set_uvm_attr(UVMapATTR::from_array(&[[0.0, 0.0], [1.0, 0.0]]));
+        m.set_ind_attr(IndicesATTR::from_array(&[0, 1]));
         m.set_layer(5);
         assert_eq!(m.pos_attr.data.len(), 2);
         assert_eq!(m.layer, 5);

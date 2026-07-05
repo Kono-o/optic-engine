@@ -119,7 +119,7 @@ impl Game {
     /// let game = Game::new(MyRuntime)?;
     /// ```
     pub fn new<R: Runtime + 'static>(runtime: R) -> OpticResult<Game> {
-        let size = Size2D::from(500,500);
+        let size = Size2D::new(500,500);
         let bg_color = CRIMSON;
         let title = "OPTIC GAME";
         let el = EventLoop::builder()
@@ -263,7 +263,7 @@ impl ApplicationHandler for Game {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.window.notify_cursor_moved(Coord2D::from(position.x, position.y));
+                self.window.notify_cursor_moved(Coord2D::new(position.x, position.y));
             }
             WindowEvent::CursorEntered { .. } => {
                 self.window.notify_cursor_inside(true);

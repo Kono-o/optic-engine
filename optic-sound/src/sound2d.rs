@@ -6,12 +6,12 @@ use kira::{
 /// A handle to a playing 2D sound.
 ///
 /// Controls playback of a single sound instance. Created by
-/// [`AudioEngine::ship_sound2d`](crate::AudioEngine::ship_sound2d).
+/// [`AudioEngine::upload_sound2d`](crate::AudioEngine::upload_sound2d).
 ///
 /// # Example
 ///
 /// ```ignore
-/// let mut sound = audio.ship_sound2d(&sfx)?;
+    /// let mut sound = audio.upload_sound2d(&sfx)?;
 /// sound.set_looping(true);
 /// sound.play();
 /// ```

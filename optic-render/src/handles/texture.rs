@@ -5,7 +5,7 @@ use crate::GL;
 /// A handle to an OpenGL 2D texture object.
 ///
 /// Stores the GL texture ID, size, pixel format, filtering, and wrap mode.
-/// Created by [`create_texture`] or via [`TextureFile::ship`](crate::asset::TextureFile::ship).
+/// Created by [`create_texture`] or via [`TextureFile::upload`](crate::asset::TextureFile::upload).
 #[derive(Clone, Debug)]
 pub struct Texture2D {
     pub id: u32,

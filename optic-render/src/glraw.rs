@@ -1,4 +1,4 @@
-use optic_core::{Cull, PolyMode, RGBA, Size2D};
+use optic_core::{CullFace, PolygonMode, RGBA, Size2D};
 
 /// Low-level, stateless OpenGL 4.6 wrappers.
 ///
@@ -30,12 +30,12 @@ impl GL {
     }
 
     /// Sets polygon rasterisation mode (filled, wireframe, or points).
-    pub fn poly_mode(mode: PolyMode) {
+    pub fn poly_mode(mode: PolygonMode) {
         unsafe {
             match mode {
-                PolyMode::WireFrame => gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE),
-                PolyMode::Filled => gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL),
-                PolyMode::Points => {
+                PolygonMode::WireFrame => gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE),
+                PolygonMode::Filled => gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL),
+                PolygonMode::Points => {
                     gl::PointSize(10.0);
                     gl::PolygonMode(gl::FRONT_AND_BACK, gl::POINT);
                 }
@@ -90,21 +90,21 @@ impl GL {
     }
 
     /// Sets the front face winding order (clockwise or counter-clockwise).
-    pub fn set_cull_face(face: Cull) {
+    pub fn set_cull_face(face: CullFace) {
         unsafe {
             match face {
-                Cull::Clock => gl::FrontFace(gl::CW),
-                Cull::AntiClock => gl::FrontFace(gl::CCW),
+                CullFace::Clock => gl::FrontFace(gl::CW),
+                CullFace::AntiClock => gl::FrontFace(gl::CCW),
             }
         }
     }
 
-    /// Sets the point size (used with [`PolyMode::Points`]).
+    /// Sets the point size (used with [`PolygonMode::Points`]).
     pub fn set_point_size(size: f32) {
         unsafe { gl::PointSize(size); }
     }
 
-    /// Sets the line width (used with [`PolyMode::WireFrame`]).
+    /// Sets the line width (used with [`PolygonMode::WireFrame`]).
     pub fn set_wire_width(width: f32) {
         unsafe { gl::LineWidth(width); }
     }

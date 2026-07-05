@@ -47,10 +47,23 @@ impl OpticError {
     }
     /// Construct a [`Custom`](OpticErrorKind::Custom) error.
     pub fn custom(msg: &str) -> Self {
-        Self {
-            kind: OpticErrorKind::Custom,
-            msg: msg.to_string(),
-        }
+        OpticError::new(OpticErrorKind::Custom, msg)
+    }
+    /// Construct a [`Shader`](OpticErrorKind::Shader) error.
+    pub fn shader(msg: &str) -> Self {
+        OpticError::new(OpticErrorKind::Shader, msg)
+    }
+    /// Construct an [`Asset`](OpticErrorKind::Asset) error.
+    pub fn asset(msg: &str) -> Self {
+        OpticError::new(OpticErrorKind::Asset, msg)
+    }
+    /// Construct a [`File`](OpticErrorKind::File) error.
+    pub fn file(msg: &str) -> Self {
+        OpticError::new(OpticErrorKind::File, msg)
+    }
+    /// Construct an [`Init`](OpticErrorKind::Init) error.
+    pub fn init(msg: &str) -> Self {
+        OpticError::new(OpticErrorKind::Init, msg)
     }
 }
 

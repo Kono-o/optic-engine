@@ -12,10 +12,10 @@ pub enum ATTRName {
     Custom(String),
     Pos2D,
     Pos3D,
-    Col,
-    UVM,
-    Nrm,
-    Ind,
+    Color,
+    UVMap,
+    Normal,
+    Indices,
     Rot3D,
     Rot2D,
     Scale3D,
@@ -28,10 +28,10 @@ impl ATTRName {
         match self {
             ATTRName::Pos2D => "pos2d".into(),
             ATTRName::Pos3D => "pos3d".into(),
-            ATTRName::Col => "color".into(),
-            ATTRName::UVM => "uv map".into(),
-            ATTRName::Nrm => "normals".into(),
-            ATTRName::Ind => "indices".into(),
+            ATTRName::Color => "color".into(),
+            ATTRName::UVMap => "uv map".into(),
+            ATTRName::Normal => "normals".into(),
+            ATTRName::Indices => "indices".into(),
             ATTRName::Rot3D => "rotation 3d".into(),
             ATTRName::Rot2D => "rotation 2d".into(),
             ATTRName::Scale3D => "scale 3d".into(),
@@ -55,7 +55,7 @@ pub struct ATTRInfo {
 
 impl ATTRInfo {
     /// Creates an empty descriptor with default name `Pos3D` and zero sizes.
-    pub fn empty() -> Self {
+    pub fn new() -> Self {
         Self {
             name: ATTRName::Pos3D,
             typ: ATTRType::F32,
@@ -95,7 +95,7 @@ macro_rules! attr {
 
         impl $attr {
             pub fn empty() -> Self {
-                let mut info = ATTRInfo::empty();
+                let mut info = ATTRInfo::new();
                 info.typ = <$typ>::ATTR_FORMAT;
                 info.byte_count = <$typ>::BYTE_COUNT;
                 info.elem_count = <$typ>::ELEM_COUNT;
@@ -103,7 +103,7 @@ macro_rules! attr {
                 Self { data: Vec::new(), info }
             }
 
-            pub fn from(vec: Vec<$typ>) -> Self {
+            pub fn new(vec: Vec<$typ>) -> Self {
                 let mut attr = Self::empty();
                 for elem in vec {
                     attr.data.push(elem);
@@ -112,7 +112,7 @@ macro_rules! attr {
             }
 
             pub fn from_array(array: &[$typ]) -> Self {
-                Self::from(Vec::from(array))
+                Self::new(Vec::from(array))
             }
 
             pub fn push(&mut self, elem: $typ) {
@@ -131,13 +131,13 @@ attr!(Pos3DATTR, [f32; 3], ATTRName::Pos3D);
 // 2D position attribute (`[f32; 2]` per vertex).
 attr!(Pos2DATTR, [f32; 2], ATTRName::Pos2D);
 // RGBA colour attribute (`[f32; 4]` per vertex).
-attr!(ColATTR, [f32; 4], ATTRName::Col);
+attr!(ColorATTR, [f32; 4], ATTRName::Color);
 // UV / texture coordinate attribute (`[f32; 2]` per vertex).
-attr!(UVMATTR, [f32; 2], ATTRName::UVM);
+attr!(UVMapATTR, [f32; 2], ATTRName::UVMap);
 // Normal vector attribute (`[f32; 3]` per vertex).
-attr!(NrmATTR, [f32; 3], ATTRName::Nrm);
+attr!(NormalATTR, [f32; 3], ATTRName::Normal);
 // Index attribute (`u32` per element).
-attr!(IndATTR, u32, ATTRName::Ind);
+attr!(IndicesATTR, u32, ATTRName::Indices);
 // 3D rotation as a quaternion (`[f32; 4]` per instance).
 attr!(Rot3DATTR, [f32; 4], ATTRName::Rot3D);
 // 2D rotation as a single angle in degrees (`f32` per instance).
@@ -149,7 +149,7 @@ attr!(Scale2DATTR, [f32; 2], ATTRName::Scale2D);
 
 /// User-defined vertex or instance attribute with arbitrary byte data.
 ///
-/// Create via [`CustomATTR::empty`] or [`CustomATTR::from`] parameterised by a
+/// Create via [`CustomATTR::empty`] or [`CustomATTR::new`] parameterised by a
 /// [`DataType`], then push elements with [`CustomATTR::push`].
 ///
 /// # Example
@@ -169,7 +169,7 @@ pub struct CustomATTR {
 impl CustomATTR {
     /// Creates an empty custom attribute with the given name and data type.
     pub fn empty<D: DataType>(name: &str) -> Self {
-        let mut info = ATTRInfo::empty();
+        let mut info = ATTRInfo::new();
         info.typ = D::ATTR_FORMAT;
         info.byte_count = D::BYTE_COUNT;
         info.elem_count = D::ELEM_COUNT;
@@ -178,7 +178,7 @@ impl CustomATTR {
     }
 
     /// Creates a custom attribute from a `Vec` of typed elements.
-    pub fn from<D: DataType>(name: &str, vec: Vec<D>) -> Self {
+    pub fn new<D: DataType>(name: &str, vec: Vec<D>) -> Self {
         let mut attr = Self::empty::<D>(name);
         for elem in vec {
             let bytes = elem.u8ify();
@@ -189,7 +189,7 @@ impl CustomATTR {
 
     /// Creates a custom attribute from a slice of typed elements.
     pub fn from_array<D: DataType + Clone>(name: &str, array: &[D]) -> Self {
-        Self::from(name, Vec::from(array))
+        Self::new(name, Vec::from(array))
     }
 
     /// Appends one typed element (serialised to raw bytes).
@@ -210,14 +210,14 @@ mod tests {
 
     #[test]
     fn attr_info_empty() {
-        let info = ATTRInfo::empty();
+        let info = ATTRInfo::new();
         assert_eq!(info.byte_count, 0);
         assert_eq!(info.elem_count, 0);
     }
 
     #[test]
     fn attr_info_fmt_as_string() {
-        let mut info = ATTRInfo::empty();
+        let mut info = ATTRInfo::new();
         info.typ = ATTRType::F32;
         info.elem_count = 3;
         assert_eq!(info.fmt_as_string(), "[f32;3]");
@@ -229,10 +229,10 @@ mod tests {
     fn attr_name_as_string() {
         assert_eq!(ATTRName::Pos2D.as_string(), "pos2d");
         assert_eq!(ATTRName::Pos3D.as_string(), "pos3d");
-        assert_eq!(ATTRName::Col.as_string(), "color");
-        assert_eq!(ATTRName::UVM.as_string(), "uv map");
-        assert_eq!(ATTRName::Nrm.as_string(), "normals");
-        assert_eq!(ATTRName::Ind.as_string(), "indices");
+        assert_eq!(ATTRName::Color.as_string(), "color");
+        assert_eq!(ATTRName::UVMap.as_string(), "uv map");
+        assert_eq!(ATTRName::Normal.as_string(), "normals");
+        assert_eq!(ATTRName::Indices.as_string(), "indices");
         assert_eq!(ATTRName::Rot3D.as_string(), "rotation 3d");
         assert_eq!(ATTRName::Rot2D.as_string(), "rotation 2d");
         assert_eq!(ATTRName::Scale3D.as_string(), "scale 3d");
@@ -267,26 +267,26 @@ mod tests {
 
     #[test]
     fn color_attr() {
-        let mut attr = ColATTR::empty();
+        let mut attr = ColorATTR::empty();
         attr.push([1.0, 0.0, 0.0, 1.0]);
         assert_eq!(attr.data[0], [1.0, 0.0, 0.0, 1.0]);
     }
 
     #[test]
     fn uvm_attr() {
-        let attr = UVMATTR::from_array(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
+        let attr = UVMapATTR::from_array(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]);
         assert_eq!(attr.data.len(), 4);
     }
 
     #[test]
     fn nrm_attr() {
-        let attr = NrmATTR::from_array(&[[0.0, 1.0, 0.0]]);
+        let attr = NormalATTR::from_array(&[[0.0, 1.0, 0.0]]);
         assert_eq!(attr.data[0], [0.0, 1.0, 0.0]);
     }
 
     #[test]
     fn ind_attr() {
-        let mut attr = IndATTR::empty();
+        let mut attr = IndicesATTR::empty();
         attr.push(0);
         attr.push(1);
         attr.push(2);

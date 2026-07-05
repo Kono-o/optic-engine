@@ -14,20 +14,20 @@ use crate::handles::Shader;
 
 /// Low-level OpenGL mesh handle wrapping VAO, VBO, IBO, and instance state.
 ///
-/// Created by [`Mesh3DFile::ship`](crate::asset::Mesh3DFile::ship) or
-/// [`Mesh2DFile::ship`](crate::asset::Mesh2DFile::ship). Contains the vertex
+/// Created by [`Mesh3DFile::upload`](crate::asset::Mesh3DFile::upload) or
+/// [`Mesh2DFile::upload`](crate::asset::Mesh2DFile::upload). Contains the vertex
 /// layouts, draw mode, index state, and instance buffer binding.
 #[derive(Clone, Debug)]
 pub struct MeshHandle {
     pub layouts: Vec<(ATTRInfo, u32)>,
     pub draw_mode: DrawMode,
     pub has_indices: bool,
-    pub vert_count: u32,
-    pub ind_count: u32,
+    pub vertex_count: u32,
+    pub index_count: u32,
     pub vao_id: u32,
-    pub buf_id: u32,
-    pub ind_id: u32,
-    pub vert_stride: u32,
+    pub vertex_buffer_id: u32,
+    pub index_buffer_id: u32,
+    pub vertex_stride: u32,
     pub instance_buf_id: u32,
     pub instance_count: u32,
 }
@@ -40,7 +40,7 @@ impl MeshHandle {
             match self.has_indices {
                 false => self.draw_array_instanced(),
                 true => {
-                    GL::bind_ebo(self.ind_id);
+                    GL::bind_ebo(self.index_buffer_id);
                     self.draw_indexed_instanced();
                 }
             }
@@ -48,7 +48,7 @@ impl MeshHandle {
             match self.has_indices {
                 false => self.draw_array(),
                 true => {
-                    GL::bind_ebo(self.ind_id);
+                    GL::bind_ebo(self.index_buffer_id);
                     self.draw_indexed();
                 }
             }
@@ -59,7 +59,7 @@ impl MeshHandle {
         unsafe {
             gl::DrawElements(
                 match_draw_mode(&self.draw_mode),
-                self.ind_count as GLsizei,
+                self.index_count as GLsizei,
                 gl::UNSIGNED_INT,
                 ptr::null(),
             );
@@ -68,7 +68,7 @@ impl MeshHandle {
 
     fn draw_array(&self) {
         unsafe {
-            gl::DrawArrays(match_draw_mode(&self.draw_mode), 0, self.vert_count as GLsizei);
+            gl::DrawArrays(match_draw_mode(&self.draw_mode), 0, self.vertex_count as GLsizei);
         }
     }
 
@@ -76,7 +76,7 @@ impl MeshHandle {
         unsafe {
             gl::DrawElementsInstanced(
                 match_draw_mode(&self.draw_mode),
-                self.ind_count as GLsizei,
+                self.index_count as GLsizei,
                 gl::UNSIGNED_INT,
                 ptr::null(),
                 self.instance_count as GLsizei,
@@ -89,7 +89,7 @@ impl MeshHandle {
             gl::DrawArraysInstanced(
                 match_draw_mode(&self.draw_mode),
                 0,
-                self.vert_count as GLsizei,
+                self.vertex_count as GLsizei,
                 self.instance_count as GLsizei,
             );
         }
@@ -127,10 +127,10 @@ impl MeshHandle {
     ///
     /// The type `D` must match the attribute's declared type at creation time.
     pub fn update_vertex<D: DataType>(&self, index: u32, attr_index: usize, value: D) -> OpticResult<()> {
-        if index >= self.vert_count {
+        if index >= self.vertex_count {
             return Err(OpticError::new(
                 OpticErrorKind::Custom,
-                &format!("vertex index {index} out of bounds (count: {})", self.vert_count),
+                &format!("vertex index {index} out of bounds (count: {})", self.vertex_count),
             ));
         }
         if attr_index >= self.layouts.len() {
@@ -155,16 +155,16 @@ impl MeshHandle {
         }
         let bytes = value.u8ify();
         let off = self.compute_vert_attr_offset(attr_index, index);
-        subfill_buffer(self.buf_id, off, &bytes);
+        subfill_buffer(self.vertex_buffer_id, off, &bytes);
         Ok(())
     }
 
     /// Reads a single vertex attribute value from the GPU.
-    pub fn get_vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D> {
-        if index >= self.vert_count {
+    pub fn vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D> {
+        if index >= self.vertex_count {
             return Err(OpticError::new(
                 OpticErrorKind::Custom,
-                &format!("vertex index {index} out of bounds (count: {})", self.vert_count),
+                &format!("vertex index {index} out of bounds (count: {})", self.vertex_count),
             ));
         }
         if attr_index >= self.layouts.len() {
@@ -191,7 +191,7 @@ impl MeshHandle {
         let size = slot_info.elem_count * slot_info.byte_count;
         let mut data = vec![0u8; size];
         unsafe {
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.buf_id);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vertex_buffer_id);
             gl::GetBufferSubData(
                 gl::ARRAY_BUFFER,
                 off as isize,
@@ -206,7 +206,7 @@ impl MeshHandle {
     ///
     /// `data` length must be a multiple of the vertex stride.
     pub fn write_range(&self, start_vertex: u32, data: &[u8]) -> OpticResult<()> {
-        let stride = self.vert_stride as usize;
+        let stride = self.vertex_stride as usize;
         if data.len() % stride != 0 {
             return Err(OpticError::new(
                 OpticErrorKind::Custom,
@@ -214,19 +214,19 @@ impl MeshHandle {
             ));
         }
         let vertex_count = data.len() / stride;
-        if start_vertex + vertex_count as u32 > self.vert_count {
+        if start_vertex + vertex_count as u32 > self.vertex_count {
             return Err(OpticError::new(
                 OpticErrorKind::Custom,
                 "write_range extends past the vertex count",
             ));
         }
         let start_off = start_vertex as usize * stride;
-        subfill_buffer(self.buf_id, start_off, data);
+        subfill_buffer(self.vertex_buffer_id, start_off, data);
         Ok(())
     }
 
     fn compute_vert_attr_offset(&self, attr_index: usize, vertex_index: u32) -> usize {
-        let mut offset = vertex_index as usize * self.vert_stride as usize;
+        let mut offset = vertex_index as usize * self.vertex_stride as usize;
         for i in 0..attr_index {
             let si = &self.layouts[i].0;
             offset += si.elem_count * si.byte_count;
@@ -238,9 +238,9 @@ impl MeshHandle {
     pub fn delete(self) {
         unsafe {
             gl::DeleteVertexArrays(1, &self.vao_id);
-            gl::DeleteBuffers(1, &self.buf_id);
+            gl::DeleteBuffers(1, &self.vertex_buffer_id);
             if self.has_indices {
-                gl::DeleteBuffers(1, &self.ind_id);
+                gl::DeleteBuffers(1, &self.index_buffer_id);
             }
         }
     }
@@ -275,13 +275,13 @@ macro_rules! mesh_struct {
             /// Detaches the current shader.
             pub fn remove_shader(&mut self) { self.shader = None; }
             /// Returns the current draw mode.
-            pub fn get_draw_mode(&self) -> DrawMode { self.handle.draw_mode }
+            pub fn draw_mode(&self) -> DrawMode { self.handle.draw_mode }
             /// Sets the draw mode.
             pub fn set_draw_mode(&mut self, draw_mode: DrawMode) { self.handle.draw_mode = draw_mode; }
             /// Returns the index count.
-            pub fn index_count(&self) -> u32 { self.handle.ind_count }
+            pub fn index_count(&self) -> u32 { self.handle.index_count }
             /// Returns the vertex count.
-            pub fn vertex_count(&self) -> u32 { self.handle.vert_count }
+            pub fn vertex_count(&self) -> u32 { self.handle.vertex_count }
             /// Returns `true` if this mesh uses indexed drawing.
             pub fn has_indices(&self) -> bool { self.handle.has_indices }
             /// Returns `true` when the mesh has no vertices.
@@ -309,7 +309,7 @@ impl Mesh3D {
     /// Prints debug information about this mesh to stdout.
     pub fn log_info(&self) {
         let shader_id = self.shader.as_ref().map(|s| s.id).unwrap_or(0);
-        let mode = format!("{:?}", self.get_draw_mode());
+        let mode = format!("{:?}", self.draw_mode());
         println!(
             "[Mesh3D] vis={} verts={} inds={} has_idx={} shader={} mode={} vao={} buf={} ind={}",
             self.visibility,
@@ -319,8 +319,8 @@ impl Mesh3D {
             shader_id,
             mode,
             self.handle.vao_id,
-            self.handle.buf_id,
-            self.handle.ind_id,
+            self.handle.vertex_buffer_id,
+            self.handle.index_buffer_id,
         );
     }
 
@@ -347,7 +347,7 @@ impl Mesh2D {
     /// Prints debug information about this mesh to stdout.
     pub fn log_info(&self) {
         let shader_id = self.shader.as_ref().map(|s| s.id).unwrap_or(0);
-        let mode = format!("{:?}", self.get_draw_mode());
+        let mode = format!("{:?}", self.draw_mode());
         println!(
             "[Mesh2D] vis={} verts={} inds={} has_idx={} shader={} mode={} vao={} buf={} ind={}",
             self.visibility,
@@ -357,8 +357,8 @@ impl Mesh2D {
             shader_id,
             mode,
             self.handle.vao_id,
-            self.handle.buf_id,
-            self.handle.ind_id,
+            self.handle.vertex_buffer_id,
+            self.handle.index_buffer_id,
         );
     }
 
@@ -615,16 +615,16 @@ mod tests {
             layouts: vec![],
             draw_mode: DrawMode::Triangles,
             has_indices: false,
-            vert_count: 42,
-            ind_count: 0,
+            vertex_count: 42,
+            index_count: 0,
             vao_id: 0,
-            buf_id: 0,
-            ind_id: 0,
-            vert_stride: 0,
+            vertex_buffer_id: 0,
+            index_buffer_id: 0,
+            vertex_stride: 0,
             instance_buf_id: 0,
             instance_count: 0,
         };
-        assert_eq!(mh.vert_count, 42);
+        assert_eq!(mh.vertex_count, 42);
         assert!(!mh.has_indices);
     }
 
@@ -634,12 +634,12 @@ mod tests {
             layouts: vec![],
             draw_mode: DrawMode::Triangles,
             has_indices: true,
-            vert_count: 3,
-            ind_count: 3,
+            vertex_count: 3,
+            index_count: 3,
             vao_id: 0,
-            buf_id: 0,
-            ind_id: 0,
-            vert_stride: 0,
+            vertex_buffer_id: 0,
+            index_buffer_id: 0,
+            vertex_stride: 0,
             instance_buf_id: 0,
             instance_count: 0,
         };
@@ -655,7 +655,7 @@ mod tests {
         assert_eq!(m3d.vertex_count(), 3);
         assert_eq!(m3d.index_count(), 3);
         assert!(m3d.has_indices());
-        assert_eq!(m3d.get_draw_mode(), DrawMode::Triangles);
+        assert_eq!(m3d.draw_mode(), DrawMode::Triangles);
         assert!(m3d.shader.is_none());
     }
 
@@ -665,12 +665,12 @@ mod tests {
             layouts: vec![],
             draw_mode: DrawMode::Triangles,
             has_indices: false,
-            vert_count: 3,
-            ind_count: 0,
+            vertex_count: 3,
+            index_count: 0,
             vao_id: 0,
-            buf_id: 0,
-            ind_id: 0,
-            vert_stride: 0,
+            vertex_buffer_id: 0,
+            index_buffer_id: 0,
+            vertex_stride: 0,
             instance_buf_id: 0,
             instance_count: 0,
         };
@@ -694,12 +694,12 @@ mod tests {
             layouts: vec![],
             draw_mode: DrawMode::Triangles,
             has_indices: false,
-            vert_count: 3,
-            ind_count: 0,
+            vertex_count: 3,
+            index_count: 0,
             vao_id: 0,
-            buf_id: 0,
-            ind_id: 0,
-            vert_stride: 0,
+            vertex_buffer_id: 0,
+            index_buffer_id: 0,
+            vertex_stride: 0,
             instance_buf_id: 0,
             instance_count: 0,
         };
@@ -711,7 +711,7 @@ mod tests {
             draw_mode: DrawMode::Triangles,
         };
         m3d.set_draw_mode(DrawMode::Points);
-        assert_eq!(m3d.get_draw_mode(), DrawMode::Points);
+        assert_eq!(m3d.draw_mode(), DrawMode::Points);
     }
 
     #[test]
@@ -720,12 +720,12 @@ mod tests {
             layouts: vec![],
             draw_mode: DrawMode::Triangles,
             has_indices: false,
-            vert_count: 3,
-            ind_count: 0,
+            vertex_count: 3,
+            index_count: 0,
             vao_id: 0,
-            buf_id: 0,
-            ind_id: 0,
-            vert_stride: 0,
+            vertex_buffer_id: 0,
+            index_buffer_id: 0,
+            vertex_stride: 0,
             instance_buf_id: 0,
             instance_count: 0,
         };
@@ -751,12 +751,12 @@ mod tests {
             layouts: vec![],
             draw_mode: DrawMode::Triangles,
             has_indices: false,
-            vert_count: 3,
-            ind_count: 0,
+            vertex_count: 3,
+            index_count: 0,
             vao_id: 0,
-            buf_id: 0,
-            ind_id: 0,
-            vert_stride: 0,
+            vertex_buffer_id: 0,
+            index_buffer_id: 0,
+            vertex_stride: 0,
             instance_buf_id: 0,
             instance_count: 0,
         };
@@ -768,7 +768,7 @@ mod tests {
             draw_mode: DrawMode::Triangles,
         };
         let ident = m3d.transform.matrix();
-        m3d.transform.set_pos_all(10.0, 20.0, 30.0);
+        m3d.transform.set_position(10.0, 20.0, 30.0);
         m3d.update();
         let m = m3d.transform.matrix();
         assert!(ident != m);
@@ -780,12 +780,12 @@ mod tests {
             layouts: vec![],
             draw_mode: DrawMode::Triangles,
             has_indices: false,
-            vert_count: 0,
-            ind_count: 0,
+            vertex_count: 0,
+            index_count: 0,
             vao_id: 0,
-            buf_id: 0,
-            ind_id: 0,
-            vert_stride: 0,
+            vertex_buffer_id: 0,
+            index_buffer_id: 0,
+            vertex_stride: 0,
             instance_buf_id: 0,
             instance_count: 0,
         };
@@ -806,12 +806,12 @@ mod tests {
             layouts: vec![],
             draw_mode: DrawMode::Triangles,
             has_indices: true,
-            vert_count: 4,
-            ind_count: 6,
+            vertex_count: 4,
+            index_count: 6,
             vao_id: 0,
-            buf_id: 0,
-            ind_id: 0,
-            vert_stride: 0,
+            vertex_buffer_id: 0,
+            index_buffer_id: 0,
+            vertex_stride: 0,
             instance_buf_id: 0,
             instance_count: 0,
         };

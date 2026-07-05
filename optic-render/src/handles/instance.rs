@@ -2,7 +2,7 @@ use optic_core::{OpticError, OpticErrorKind, OpticResult};
 use cgmath::{InnerSpace, Matrix4, Vector3, Vector4};
 
 use crate::asset::attr::{
-    ATTRInfo, ATTRName, ColATTR, CustomATTR, DataType, Pos2DATTR, Pos3DATTR, Rot2DATTR, Rot3DATTR,
+    ATTRInfo, ATTRName, ColorATTR, CustomATTR, DataType, Pos2DATTR, Pos3DATTR, Rot2DATTR, Rot3DATTR,
     Scale2DATTR, Scale3DATTR,
 };
 
@@ -22,7 +22,7 @@ fn build_slots(
     pos: Option<&Pos3DATTR>,
     rot: Option<&Rot3DATTR>,
     scale: Option<&Scale3DATTR>,
-    col: Option<&ColATTR>,
+    col: Option<&ColorATTR>,
     custom: &[CustomATTR],
 ) -> Vec<AttrSlot> {
     let mut slots = Vec::new();
@@ -102,7 +102,7 @@ pub(crate) struct InstanceKind {
 /// An instance buffer packs per-instance attributes (position, rotation, scale,
 /// colour, and custom attributes) into a single interleaved GPU buffer. This
 /// type collects attribute data on the CPU side and interleaves them when
-/// [`ship`](InstanceDesc3D::ship) is called.
+/// [`upload`](InstanceDesc3D::upload) is called.
 ///
 /// # Attribute layout
 ///
@@ -128,28 +128,28 @@ pub(crate) struct InstanceKind {
 ///     desc.col_attr.push([1.0, 0.0, 0.0, 1.0]);
 /// }
 ///
-/// // desc.ship() transfers the interleaved data to a GPU buffer.
+/// // desc.upload() transfers the interleaved data to a GPU buffer.
 /// ```
 pub struct InstanceDesc3D {
     pub pos_attr: Pos3DATTR,
     pub rot_attr: Rot3DATTR,
     pub scale_attr: Scale3DATTR,
-    pub col_attr: ColATTR,
-    pub cus_attrs: Vec<CustomATTR>,
+    pub col_attr: ColorATTR,
+    pub custom_attrs: Vec<CustomATTR>,
 }
 
 impl InstanceDesc3D {
     /// Creates an empty descriptor with no attributes.
     ///
     /// Push per-instance data into the individual attribute fields before calling
-    /// [`ship`](InstanceDesc3D::ship).
+    /// [`upload`](InstanceDesc3D::upload).
     pub fn empty() -> Self {
         Self {
             pos_attr: Pos3DATTR::empty(),
             rot_attr: Rot3DATTR::empty(),
             scale_attr: Scale3DATTR::empty(),
-            col_attr: ColATTR::empty(),
-            cus_attrs: Vec::new(),
+            col_attr: ColorATTR::empty(),
+            custom_attrs: Vec::new(),
         }
     }
 
@@ -218,8 +218,8 @@ impl InstanceDesc3D {
     /// `iRot`, `iScale`, or `iColor`, and must be unique among themselves.
     ///
     /// Returns `&mut self` for chaining.
-    pub fn attach_custom_attr(&mut self, attr: CustomATTR) -> &mut Self {
-        self.cus_attrs.push(attr);
+    pub fn add_custom_attr(&mut self, attr: CustomATTR) -> &mut Self {
+        self.custom_attrs.push(attr);
         self
     }
 
@@ -233,18 +233,18 @@ impl InstanceDesc3D {
     /// - Returns an error if non-empty attributes have mismatched element counts.
     /// - Returns an error if custom attribute names collide with reserved names
     ///   or each other.
-    pub fn ship(&self) -> OpticResult<InstanceBuffer> {
+    pub fn upload(&self) -> OpticResult<InstanceBuffer> {
         let count = self.resolve_count();
         let has_any_attr = self.pos_attr.is_empty()
             && self.rot_attr.is_empty()
             && self.scale_attr.is_empty()
             && self.col_attr.is_empty()
-            && self.cus_attrs.is_empty();
+            && self.custom_attrs.is_empty();
 
         if has_any_attr {
             return Err(OpticError::new(
                 OpticErrorKind::Custom,
-                "cannot ship an instance buffer with zero attributes populated",
+                "cannot upload an instance buffer with zero attributes populated",
             ));
         }
 
@@ -256,7 +256,7 @@ impl InstanceDesc3D {
             Some(&self.rot_attr),
             Some(&self.scale_attr),
             Some(&self.col_attr),
-            &self.cus_attrs,
+            &self.custom_attrs,
         );
 
         let stride: usize = slots.iter().map(|s| s.size).sum();
@@ -275,7 +275,7 @@ impl InstanceDesc3D {
         if !self.col_attr.is_empty() {
             raw.push(self.col_attr.data.as_bytes());
         }
-        for c in &self.cus_attrs {
+        for c in &self.custom_attrs {
             raw.push(&c.data);
         }
 
@@ -288,7 +288,7 @@ impl InstanceDesc3D {
         let layouts: Vec<(ATTRInfo, u32)> = slots.iter().enumerate().map(|(i, s)| (s.info.clone(), i as u32)).collect();
 
         let mut custom_offsets = Vec::new();
-        for c in &self.cus_attrs {
+        for c in &self.custom_attrs {
             let off = slots.iter()
                 .position(|s| s.info.name == c.info.name)
                 .map(|idx| slots[idx].offset)
@@ -334,7 +334,7 @@ impl InstanceDesc3D {
                 return Some(attr.len());
             }
         }
-        for c in &self.cus_attrs {
+        for c in &self.custom_attrs {
             if !c.is_empty() {
                 let elem_size = c.info.elem_count * c.info.byte_count;
                 return Some(c.data.len() / elem_size);
@@ -369,7 +369,7 @@ impl InstanceDesc3D {
         check!(self.scale_attr, "scale_attr");
         check!(self.col_attr, "col_attr");
 
-        for c in &self.cus_attrs {
+        for c in &self.custom_attrs {
             let elem_size = c.info.elem_count * c.info.byte_count;
             let c_count = if elem_size > 0 { c.data.len() / elem_size } else { 0 };
             if c_count != count {
@@ -388,7 +388,7 @@ impl InstanceDesc3D {
 
     fn verify_custom_names(&self) -> OpticResult<()> {
         let reserved = ["iPos", "iRot", "iScale", "iColor"];
-        for c in &self.cus_attrs {
+        for c in &self.custom_attrs {
             let name = match &c.info.name {
                 ATTRName::Custom(n) => n.as_str(),
                 _ => continue,
@@ -400,10 +400,10 @@ impl InstanceDesc3D {
                 ));
             }
         }
-        for i in 0..self.cus_attrs.len() {
-            for j in i + 1..self.cus_attrs.len() {
-                let ni = match &self.cus_attrs[i].info.name { ATTRName::Custom(n) => n, _ => continue };
-                let nj = match &self.cus_attrs[j].info.name { ATTRName::Custom(n) => n, _ => continue };
+        for i in 0..self.custom_attrs.len() {
+            for j in i + 1..self.custom_attrs.len() {
+                let ni = match &self.custom_attrs[i].info.name { ATTRName::Custom(n) => n, _ => continue };
+                let nj = match &self.custom_attrs[j].info.name { ATTRName::Custom(n) => n, _ => continue };
                 if ni == nj {
                     return Err(OpticError::new(
                         OpticErrorKind::Custom,
@@ -435,8 +435,8 @@ pub struct InstanceDesc2D {
     pub pos_attr: Pos2DATTR,
     pub rot_attr: Rot2DATTR,
     pub scale_attr: Scale2DATTR,
-    pub col_attr: ColATTR,
-    pub cus_attrs: Vec<CustomATTR>,
+    pub col_attr: ColorATTR,
+    pub custom_attrs: Vec<CustomATTR>,
 }
 
 impl InstanceDesc2D {
@@ -446,14 +446,14 @@ impl InstanceDesc2D {
             pos_attr: Pos2DATTR::empty(),
             rot_attr: Rot2DATTR::empty(),
             scale_attr: Scale2DATTR::empty(),
-            col_attr: ColATTR::empty(),
-            cus_attrs: Vec::new(),
+            col_attr: ColorATTR::empty(),
+            custom_attrs: Vec::new(),
         }
     }
 
     /// Appends a custom attribute for chaining.
-    pub fn attach_custom_attr(&mut self, attr: CustomATTR) -> &mut Self {
-        self.cus_attrs.push(attr);
+    pub fn add_custom_attr(&mut self, attr: CustomATTR) -> &mut Self {
+        self.custom_attrs.push(attr);
         self
     }
 
@@ -461,18 +461,18 @@ impl InstanceDesc2D {
     ///
     /// # Errors
     ///
-    /// Same error conditions as [`InstanceDesc3D::ship`].
-    pub fn ship(&self) -> OpticResult<InstanceBuffer> {
+    /// Same error conditions as [`InstanceDesc3D::upload`].
+    pub fn upload(&self) -> OpticResult<InstanceBuffer> {
         let has_any_attr = self.pos_attr.is_empty()
             && self.rot_attr.is_empty()
             && self.scale_attr.is_empty()
             && self.col_attr.is_empty()
-            && self.cus_attrs.is_empty();
+            && self.custom_attrs.is_empty();
 
         if has_any_attr {
             return Err(OpticError::new(
                 OpticErrorKind::Custom,
-                "cannot ship an instance buffer with zero attributes populated",
+                "cannot upload an instance buffer with zero attributes populated",
             ));
         }
 
@@ -489,7 +489,7 @@ impl InstanceDesc2D {
         if !self.rot_attr.is_empty() { push(self.rot_attr.info.clone()); }
         if !self.scale_attr.is_empty() { push(self.scale_attr.info.clone()); }
         if !self.col_attr.is_empty() { push(self.col_attr.info.clone()); }
-        for c in &self.cus_attrs { push(c.info.clone()); }
+        for c in &self.custom_attrs { push(c.info.clone()); }
 
         let stride = offset;
         let count = self.resolve_count();
@@ -500,7 +500,7 @@ impl InstanceDesc2D {
         if !self.rot_attr.is_empty() { raw.push(self.rot_attr.data.as_bytes()); }
         if !self.scale_attr.is_empty() { raw.push(self.scale_attr.data.as_bytes()); }
         if !self.col_attr.is_empty() { raw.push(self.col_attr.data.as_bytes()); }
-        for c in &self.cus_attrs { raw.push(&c.data); }
+        for c in &self.custom_attrs { raw.push(&c.data); }
 
         let cpu_mirror = if instance_count > 0 {
             interleave(&slots, &raw, instance_count)
@@ -511,7 +511,7 @@ impl InstanceDesc2D {
         let layouts: Vec<(ATTRInfo, u32)> = slots.iter().enumerate().map(|(i, s)| (s.info.clone(), i as u32)).collect();
 
         let mut custom_offsets = Vec::new();
-        for c in &self.cus_attrs {
+        for c in &self.custom_attrs {
             let off = slots.iter()
                 .position(|s| s.info.name == c.info.name)
                 .map(|idx| slots[idx].offset)
@@ -557,7 +557,7 @@ impl InstanceDesc2D {
                 return Some(attr.len());
             }
         }
-        for c in &self.cus_attrs {
+        for c in &self.custom_attrs {
             if !c.is_empty() {
                 let elem_size = c.info.elem_count * c.info.byte_count;
                 return Some(c.data.len() / elem_size);
@@ -572,7 +572,7 @@ impl InstanceDesc2D {
 /// A GPU buffer of interleaved per-instance attributes with a CPU-side mirror
 /// for random access.
 ///
-/// Created by [`InstanceDesc3D::ship`] or [`InstanceDesc2D::ship`]. Each
+/// Created by [`InstanceDesc3D::upload`] or [`InstanceDesc2D::upload`]. Each
 /// instance is a single packed row of attributes (position, rotation, scale,
 /// colour, and custom data). The buffer is designed for use with
 /// `glDrawArraysInstanced` / `glDrawElementsInstanced`.
@@ -586,7 +586,7 @@ impl InstanceDesc2D {
 ///
 /// | Read method | Source | Latency |
 /// |---|---|---|
-/// | [`get_position`](Self::get_position), [`get_color`](Self::get_color), [`get_instance`](Self::get_instance) | CPU mirror | Instant |
+/// | [`position`](Self::position), [`color`](Self::color), [`instance`](Self::instance) | CPU mirror | Instant |
 /// | _Read from GPU_ | Not supported | — |
 ///
 /// # Growth
@@ -623,7 +623,7 @@ impl InstanceDesc2D {
 ///     desc.pos_attr.push([i as f32 * 2.0, 0.0, 0.0]);
 ///     desc.col_attr.push([1.0, 0.0, 0.0, 1.0]);
 /// }
-/// let mut buffer = desc.ship()?;
+/// let mut buffer = desc.upload()?;
 ///
 /// // Re-position instance 5
 /// buffer.set_position(5, Vector3::new(20.0, 0.0, 0.0))?;
@@ -644,6 +644,17 @@ pub struct InstanceBuffer {
 impl InstanceBuffer {
     /// Returns the number of active instances.
     pub fn count(&self) -> u32 { self.count }
+
+    /// Returns the number of active instances as a `usize`.
+    pub fn len(&self) -> usize { self.count as usize }
+
+    /// Returns `true` if no instances are active.
+    pub fn is_empty(&self) -> bool { self.count == 0 }
+
+    /// Removes all instances without deallocating (O(1)).
+    pub fn clear(&mut self) {
+        self.count = 0;
+    }
 
     /// Returns the total capacity (allocated slots, may be larger than count).
     pub fn capacity(&self) -> u32 { self.capacity }
@@ -718,17 +729,17 @@ impl InstanceBuffer {
     ///
     /// This is the lowest-level read. It copies bytes from the CPU mirror and
     /// deserialises them into `D`. The GPU buffer is **not** touched — once an
-    /// instance buffer is shipped, data flows from the CPU mirror to the GPU,
+    /// instance buffer is uploaded, data flows from the CPU mirror to the GPU,
     /// never the other way.
     ///
-    /// For convenience readers, see [`get_position`](Self::get_position),
-    /// [`get_rotation`](Self::get_rotation), [`get_scale`](Self::get_scale),
-    /// [`get_color`](Self::get_color), and [`get_custom`](Self::get_custom).
+    /// For convenience readers, see [`position`](Self::position),
+    /// [`rotation`](Self::rotation), [`scale`](Self::scale),
+    /// [`color`](Self::color), and [`custom_attr`](Self::custom_attr).
     ///
     /// # Errors
     ///
     /// Same as [`update_instance`](Self::update_instance).
-    pub fn get_instance<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D> {
+    pub fn instance<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D> {
         if index >= self.count {
             return Err(OpticError::new(OpticErrorKind::Custom, &format!("instance index {index} out of bounds (count: {})", self.count)));
         }
@@ -762,8 +773,8 @@ impl InstanceBuffer {
     /// Updates a custom attribute of one instance by name.
     ///
     /// Use this when you defined a custom attribute via
-    /// [`InstanceDesc3D::attach_custom_attr`] or
-    /// [`InstanceDesc2D::attach_custom_attr`] and ship with that descriptor.
+    /// [`InstanceDesc3D::add_custom_attr`] or
+    /// [`InstanceDesc2D::add_custom_attr`] and upload with that descriptor.
     /// The attribute is looked up by name (not by index), making this robust
     /// against layout reordering.
     ///
@@ -801,7 +812,7 @@ impl InstanceBuffer {
     /// # Errors
     ///
     /// Same as [`update_custom`](InstanceBuffer::update_custom).
-    pub fn get_custom<D: DataType>(&self, index: u32, name: &str) -> OpticResult<D> {
+    pub fn custom_attr<D: DataType>(&self, index: u32, name: &str) -> OpticResult<D> {
         let slot = self.kind.custom_offsets.iter().find(|s| s.name == name)
             .ok_or_else(|| OpticError::new(OpticErrorKind::Custom, &format!("custom attribute \"{name}\" not found")))?;
 
@@ -846,11 +857,11 @@ impl InstanceBuffer {
     /// # Errors
     ///
     /// Returns an error if the buffer has no position attribute.
-    pub fn get_position(&self, index: u32) -> OpticResult<Vector3<f32>> {
+    pub fn position(&self, index: u32) -> OpticResult<Vector3<f32>> {
         if !self.kind.has_pos {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no position attribute"));
         }
-        let arr: [f32; 3] = self.get_instance(index, 0)?;
+        let arr: [f32; 3] = self.instance(index, 0)?;
         Ok(Vector3::new(arr[0], arr[1], arr[2]))
     }
 
@@ -888,12 +899,12 @@ impl InstanceBuffer {
     /// # Errors
     ///
     /// Returns an error if the buffer has no rotation attribute.
-    pub fn get_rotation(&self, index: u32) -> OpticResult<Vector4<f32>> {
+    pub fn rotation(&self, index: u32) -> OpticResult<Vector4<f32>> {
         if !self.kind.has_rot {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no rotation attribute"));
         }
         let attr_index = if self.kind.has_pos { 1 } else { 0 };
-        let arr: [f32; 4] = self.get_instance(index, attr_index)?;
+        let arr: [f32; 4] = self.instance(index, attr_index)?;
         Ok(Vector4::new(arr[0], arr[1], arr[2], arr[3]))
     }
 
@@ -927,7 +938,7 @@ impl InstanceBuffer {
     /// # Errors
     ///
     /// Returns an error if the buffer has no scale attribute.
-    pub fn get_scale(&self, index: u32) -> OpticResult<Vector3<f32>> {
+    pub fn scale(&self, index: u32) -> OpticResult<Vector3<f32>> {
         if !self.kind.has_scale {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no scale attribute"));
         }
@@ -935,7 +946,7 @@ impl InstanceBuffer {
         if self.kind.has_pos { attr_index += 1; }
         if self.kind.has_rot { attr_index += 1; }
         let actual_idx = attr_index as usize;
-        let arr: [f32; 3] = self.get_instance(index, actual_idx)?;
+        let arr: [f32; 3] = self.instance(index, actual_idx)?;
         Ok(Vector3::new(arr[0], arr[1], arr[2]))
     }
 
@@ -972,7 +983,7 @@ impl InstanceBuffer {
     /// # Errors
     ///
     /// Returns an error if the buffer has no colour attribute.
-    pub fn get_color(&self, index: u32) -> OpticResult<optic_core::RGBA> {
+    pub fn color(&self, index: u32) -> OpticResult<optic_core::RGBA> {
         if !self.kind.has_col {
             return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no color attribute"));
         }
@@ -980,7 +991,7 @@ impl InstanceBuffer {
         if self.kind.has_pos { attr_index += 1; }
         if self.kind.has_rot { attr_index += 1; }
         if self.kind.has_scale { attr_index += 1; }
-        let rgba: [f32; 4] = self.get_instance(index, attr_index as usize)?;
+        let rgba: [f32; 4] = self.instance(index, attr_index as usize)?;
         Ok(optic_core::RGBA(rgba[0], rgba[1], rgba[2], rgba[3]))
     }
 
@@ -989,7 +1000,7 @@ impl InstanceBuffer {
     /// Resizes the instance count, filling new slots with defaults.
     ///
     /// Use this to add or remove instances at the end of the buffer without
-    /// creating a new descriptor and re-shipping. New slots are filled with
+    /// creating a new descriptor and re-uploading. New slots are filled with
     /// sensible defaults:
     ///
     /// | Attribute | Default |
@@ -1010,7 +1021,7 @@ impl InstanceBuffer {
     /// # Example
     ///
     /// ```ignore
-    /// # let mut buffer: InstanceBuffer = desc.ship()?;
+    /// # let mut buffer: InstanceBuffer = desc.upload()?;
     /// buffer.set_instance_count(200);  // grow from 100 to 200
     /// buffer.set_instance_count(50);   // shrink: last 150 are inaccessible
     /// buffer.shrink_to_fit();          // release GPU memory
@@ -1084,6 +1095,22 @@ impl InstanceBuffer {
         Ok(idx)
     }
 
+    /// Removes and returns the last instance (O(1)).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer is empty.
+    pub fn pop(&mut self) -> OpticResult<()> {
+        if self.count == 0 {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                "cannot pop from an empty instance buffer",
+            ));
+        }
+        self.count -= 1;
+        Ok(())
+    }
+
     /// Removes the instance at `index` by swapping it with the last instance
     /// (unordered, O(1)).
     ///
@@ -1137,14 +1164,14 @@ impl InstanceBuffer {
 
     /// Replaces the entire buffer's data from a 3D instance descriptor.
     ///
-    /// This is a full re-ship: the old GPU buffer handle is replaced and the
+    /// This is a full re-upload: the old GPU buffer handle is replaced and the
     /// old handle is **leaked**. If you need explicit GPU-side cleanup, free
     /// the old handle via `glDeleteBuffers` before calling this method.
     ///
     /// Use this when the attribute layout has changed (e.g. added or removed
     /// a custom attribute) so the old interleaved format is incompatible.
     pub fn write_all(&mut self, desc: &InstanceDesc3D) -> OpticResult<()> {
-        let new_buf = desc.ship()?;
+        let new_buf = desc.upload()?;
         self.buf_id = new_buf.buf_id;
         self.capacity = new_buf.capacity;
         self.count = new_buf.count;

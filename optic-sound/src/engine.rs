@@ -25,7 +25,7 @@ use crate::sound3d::Sound3D;
 ///
 /// let mut audio = AudioEngine::new()?;
 /// let sfx = SoundFile::from_disk("sounds/hello.wav")?;
-/// let mut sound = audio.ship_sound2d(&sfx)?;
+    /// let mut sound = audio.upload_sound2d(&sfx)?;
 /// sound.play();
 /// ```
 pub struct AudioEngine {
@@ -81,11 +81,11 @@ impl AudioEngine {
         })
     }
 
-    /// Ship a `SoundFile` into a playable [`Sound2D`] handle.
+    /// Upload a `SoundFile` into a playable [`Sound2D`] handle.
     ///
     /// The sound is loaded into the audio backend but does not start playing
     /// until [`Sound2D::play`] is called.
-    pub fn ship_sound2d(&mut self, file: &SoundFile) -> OpticResult<Sound2D> {
+    pub fn upload_sound2d(&mut self, file: &SoundFile) -> OpticResult<Sound2D> {
         let handle = self.manager.play(file.to_static_sound_data()).map_err(|e| {
             OpticError::new(
                 optic_core::OpticErrorKind::Asset,
@@ -95,12 +95,12 @@ impl AudioEngine {
         Ok(Sound2D::new(handle, file.duration_secs))
     }
 
-    /// Ship a `SoundFile` into a playable [`Sound3D`] handle with spatial audio.
+    /// Upload a `SoundFile` into a playable [`Sound3D`] handle with spatial audio.
     ///
     /// The sound plays through a spatial sub-track linked to the engine's
     /// listener. Call [`Sound3D::update`] each frame to keep the emitter
     /// position in sync.
-    pub fn ship_sound3d(&mut self, file: &SoundFile) -> OpticResult<Sound3D> {
+    pub fn upload_sound3d(&mut self, file: &SoundFile) -> OpticResult<Sound3D> {
         let mut spatial_track = self.manager.add_spatial_sub_track(
             &self.listener,
             cgmath::Vector3::new(0.0, 0.0, 0.0),

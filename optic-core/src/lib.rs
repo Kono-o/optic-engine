@@ -10,7 +10,7 @@
 //! |--------|----------|
 //! | [`geometry`] | [`Size2D`], [`Size3D`], [`ClipDist`], [`CamProj`], [`Components`] trait |
 //! | [`coord`] | [`Coord2D`] (point), [`CoordOffset`] (vector/displacement) |
-//! | [`enums`] | [`PolyMode`], [`Cull`], [`DrawMode`], [`ImgFormat`], [`ImgFilter`], [`ImgWrap`], [`ATTRType`] |
+//! | [`enums`] | [`PolygonMode`], [`CullFace`], [`DrawMode`], [`ImgFormat`], [`ImgFilter`], [`ImgWrap`], [`ATTRType`] |
 //! | [`error`] | [`OpticError`], [`OpticErrorKind`], [`OpticResult`] |
 //! | [`ansi`] | [`ansi::ANSI`] color codes for terminal output |
 //! | [`consts`] | Asset paths, cache magic, version constants |

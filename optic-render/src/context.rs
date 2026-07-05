@@ -166,7 +166,7 @@ impl RenderContext {
         });
 
         let (gl_ver, glsl_ver, device) = load_gl_info();
-        let pbuffer_surface = WindowSurface { surface: pbuffer, size: Size2D::from(1, 1) };
+        let pbuffer_surface = WindowSurface { surface: pbuffer, size: Size2D::new(1, 1) };
 
         Ok(Self {
             display,

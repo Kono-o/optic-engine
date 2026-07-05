@@ -1,4 +1,4 @@
-use optic_core::{log_info, ColorInfo, Cull, DrawMode, Gradient, PolyMode, RGBA, Size2D};
+use optic_core::{log_info, ColorInfo, CullFace, DrawMode, Gradient, PolygonMode, RGBA, Size2D};
 
 use crate::context::RenderContext;
 use crate::glraw::GL;
@@ -34,8 +34,8 @@ use crate::{asset, Camera};
 /// # Fallback assets
 ///
 /// On construction, `GPU` loads built-in default shaders and a checkerboard
-/// fallback texture. [`ship_mesh3d`](Self::ship_mesh3d) and
-/// [`ship_mesh2d`](Self::ship_mesh2d) attach these automatically, so you can
+/// fallback texture. [`upload_mesh3d`](Self::upload_mesh3d) and
+/// [`upload_mesh2d`](Self::upload_mesh2d) attach these automatically, so you can
 /// render something immediately without providing custom shaders.
 ///
 /// # Example
@@ -49,8 +49,8 @@ use crate::{asset, Camera};
 /// ```
 pub struct GPU {
     pub ctx: RenderContext,
-    pub poly_mode: PolyMode,
-    pub cull_face: Cull,
+    pub poly_mode: PolygonMode,
+    pub cull_face: CullFace,
     pub bg_color: RGBA,
     pub msaa: bool,
     pub msaa_samples: u32,
@@ -116,18 +116,18 @@ impl GPU {
             v
         };
 
-        let canvas_size = Size2D::from(1, 1);
+        let canvas_size = Size2D::new(1, 1);
         let mut gpu = Self {
             ctx,
             bg_color,
             msaa: true,
             culling: true,
             msaa_samples: 4,
-            cull_face: Cull::AntiClock,
-            poly_mode: PolyMode::Filled,
+            cull_face: CullFace::AntiClock,
+            poly_mode: PolygonMode::Filled,
             fallback_shader2d: Shader::new(0, false),
             fallback_shader3d: Shader::new(0, false),
-            fallback_texture: Texture2D::new(0, Size2D::empty(), optic_core::ImgFormat::RGBA(8), optic_core::ImgFilter::Closest, optic_core::ImgWrap::Repeat),
+            fallback_texture: Texture2D::new(0, Size2D::zero(), optic_core::ImgFormat::RGBA(8), optic_core::ImgFilter::Closest, optic_core::ImgWrap::Repeat),
             canvas_size,
             current_target_size: canvas_size,
             max_color_attachments,
@@ -138,21 +138,21 @@ impl GPU {
         if let Ok(fallback_tex) = asset::TextureFile::fallback() {
             let mut tex = fallback_tex;
             tex.set_wrap(optic_core::ImgWrap::Repeat);
-            gpu.fallback_texture = gpu.ship_texture(&tex);
+            gpu.fallback_texture = gpu.upload_texture(&tex);
         }
         if let Ok(shader_asset) = asset::ShaderFile::default_3d() {
-            if let Some(shader) = gpu.ship_shader(&shader_asset) {
+            if let Ok(shader) = gpu.upload_shader(&shader_asset) {
                 gpu.fallback_shader3d = shader;
                 let mut s = gpu.fallback_shader3d.clone();
-                s.attach_tex(&gpu.fallback_texture);
+                s.attach_texture(&gpu.fallback_texture);
                 gpu.fallback_shader3d = s;
             }
         }
         if let Ok(shader_asset) = asset::ShaderFile::default_2d() {
-            if let Some(shader) = gpu.ship_shader(&shader_asset) {
+            if let Ok(shader) = gpu.upload_shader(&shader_asset) {
                 gpu.fallback_shader2d = shader;
                 let mut s = gpu.fallback_shader2d.clone();
-                s.attach_tex(&gpu.fallback_texture);
+                s.attach_texture(&gpu.fallback_texture);
                 gpu.fallback_shader2d = s;
             }
         }
@@ -188,17 +188,17 @@ impl GPU {
         log_info!(
             "> mode: {}",
             match self.poly_mode {
-                PolyMode::Points => "POINTS",
-                PolyMode::WireFrame => "WIREFRAME",
-                PolyMode::Filled => "RASTERIZE",
+                PolygonMode::Points => "POINTS",
+                PolygonMode::WireFrame => "WIREFRAME",
+                PolygonMode::Filled => "RASTERIZE",
             }
         );
         log_info!(
             "> cull: {}",
             if self.culling {
                 let face = match self.cull_face {
-                    Cull::Clock => "clockwise",
-                    Cull::AntiClock => "anti-clock",
+        CullFace::Clock => "clockwise",
+        CullFace::AntiClock => "anti-clock",
                 };
                 format!("ON [{face}]")
             } else {
@@ -269,10 +269,10 @@ impl GPU {
     ///
     /// | Mode | Effect |
     /// |---|---|
-    /// | [`PolyMode::Filled`] | Solid triangles (default) |
-    /// | [`PolyMode::WireFrame`] | Triangle outlines |
-    /// | [`PolyMode::Points`] | Vertex points |
-    pub fn set_poly_mode(&mut self, mode: PolyMode) {
+    /// | [`PolygonMode::Filled`] | Solid triangles (default) |
+    /// | [`PolygonMode::WireFrame`] | Triangle outlines |
+    /// | [`PolygonMode::Points`] | Vertex points |
+    pub fn set_poly_mode(&mut self, mode: PolygonMode) {
         self.poly_mode = mode;
         GL::poly_mode(mode);
     }
@@ -280,8 +280,8 @@ impl GPU {
     /// Toggles between filled and wireframe mode.
     pub fn toggle_wireframe(&mut self) {
         let mode = match self.poly_mode {
-            PolyMode::WireFrame => PolyMode::Filled,
-            _ => PolyMode::WireFrame,
+            PolygonMode::WireFrame => PolygonMode::Filled,
+            _ => PolygonMode::WireFrame,
         };
         self.set_poly_mode(mode);
     }
@@ -294,7 +294,7 @@ impl GPU {
         GL::set_wire_width(width);
     }
 
-    /// Sets the point size used when [`PolyMode::Points`] is active.
+    /// Sets the point size used when [`PolygonMode::Points`] is active.
     pub fn set_point_size(&self, size: f32) {
         GL::set_point_size(size);
     }
@@ -336,8 +336,8 @@ impl GPU {
     /// Sets which face is culled (clockwise or counter-clockwise).
     ///
     /// Vertices in counter-clockwise order (the default in OpenGL) are
-    /// front-facing. Set to [`Cull::Clock`] to cull the front face instead.
-    pub fn set_cull_face(&mut self, cull_face: Cull) {
+    /// front-facing. Set to [`CullFace::Clock`] to cull the front face instead.
+    pub fn set_cull_face(&mut self, cull_face: CullFace) {
         self.cull_face = cull_face;
         GL::set_cull_face(cull_face);
     }
@@ -345,8 +345,8 @@ impl GPU {
     /// Flips the cull face between clockwise and counter-clockwise.
     pub fn flip_cull_face(&mut self) {
         self.cull_face = match self.cull_face {
-            Cull::Clock => Cull::AntiClock,
-            Cull::AntiClock => Cull::Clock,
+        CullFace::Clock => CullFace::AntiClock,
+        CullFace::AntiClock => CullFace::Clock,
         };
         GL::set_cull_face(self.cull_face);
     }
@@ -369,7 +369,43 @@ impl GPU {
         self.current_target_size
     }
 
-    // ── Asset shipping ───────────────────────────────────────────────────
+    /// Returns the current OpenGL viewport rect.
+    pub fn viewport(&self) -> (i32, i32, i32, i32) {
+        let mut vp = [0i32; 4];
+        unsafe { gl::GetIntegerv(gl::VIEWPORT, vp.as_mut_ptr()); }
+        (vp[0], vp[1], vp[2], vp[3])
+    }
+
+    /// Sets the OpenGL viewport rect.
+    pub fn set_viewport(&self, x: i32, y: i32, w: i32, h: i32) {
+        unsafe { gl::Viewport(x, y, w, h); }
+    }
+
+    /// Flushes OpenGL commands (non-blocking).
+    pub fn flush(&self) {
+        unsafe { gl::Flush(); }
+    }
+
+    /// Blocks until all OpenGL commands are complete.
+    pub fn finish(&self) {
+        unsafe { gl::Finish(); }
+    }
+
+    /// Resets the GPU back to default state.
+    ///
+    /// This clears all cached state on the GPU and resets the renderer's
+    /// internal state to match defaults.
+    pub fn reset_state(&mut self) {
+        self.bg_color = RGBA::new(0.0, 0.0, 0.0, 1.0);
+        self.poly_mode = PolygonMode::Filled;
+        self.msaa = false;
+        self.culling = false;
+        self.cull_face = CullFace::AntiClock;
+        self.current_target_size = self.canvas_size;
+        let _ = self.set_render_target(&RenderTarget::Screen);
+    }
+
+    // ── Asset upload ─────────────────────────────────────────────────────
 
     /// Returns a clone of the 3D fallback shader (with the fallback texture
     /// pre-bound).
@@ -377,7 +413,7 @@ impl GPU {
     /// Useful when you want to render a mesh without writing a custom shader:
     ///
     /// ```ignore
-    /// let mut mesh = gpu.ship_mesh3d(&my_mesh_file);
+    /// let mut mesh = gpu.upload_mesh3d(&my_mesh_file);
     /// mesh.shader = Some(gpu.fallback_shader3d());
     /// ```
     pub fn fallback_shader3d(&self) -> Shader {
@@ -397,13 +433,13 @@ impl GPU {
     ///
     /// ```ignore
     /// let cube = Mesh3DFile::cube(2.0);
-    /// let mesh = gpu.ship_mesh3d(&cube);
+    /// let mesh = gpu.upload_mesh3d(&cube);
     /// gpu.render3d(&mesh, &camera);
     /// ```
-    pub fn ship_mesh3d(&self, file: &asset::Mesh3DFile) -> Mesh3D {
+    pub fn upload_mesh3d(&self, file: &asset::Mesh3DFile) -> Mesh3D {
         Mesh3D {
             visibility: true,
-            handle: file.ship(),
+            handle: file.upload(),
             shader: Some(self.fallback_shader3d()),
             transform: Transform3D::default(),
             draw_mode: DrawMode::Triangles,
@@ -412,10 +448,10 @@ impl GPU {
 
     /// Uploads a [`Mesh2DFile`](asset::Mesh2DFile) to the GPU and returns a
     /// [`Mesh2D`] with the fallback 2D shader attached.
-    pub fn ship_mesh2d(&self, file: &asset::Mesh2DFile) -> Mesh2D {
+    pub fn upload_mesh2d(&self, file: &asset::Mesh2DFile) -> Mesh2D {
         Mesh2D {
             visibility: true,
-            handle: file.ship(),
+            handle: file.upload(),
             shader: Some(self.fallback_shader2d()),
             transform: Transform2D::default(),
             draw_mode: DrawMode::Triangles,
@@ -424,21 +460,21 @@ impl GPU {
 
     /// Compiles a [`ShaderFile`](asset::ShaderFile) into a usable [`Shader`].
     ///
-    /// Returns `None` if compilation or linking fails (errors are logged
+    /// Returns `Err` if compilation or linking fails (errors are logged
     /// internally by the GLSL compiler). A returned shader is ready to bind
     /// uniforms and attach textures.
-    pub fn ship_shader(&self, asset: &asset::ShaderFile) -> Option<Shader> {
-        asset.compile().ok()
+    pub fn upload_shader(&self, asset: &asset::ShaderFile) -> optic_core::OpticResult<Shader> {
+        asset.compile()
     }
 
     /// Uploads a [`TextureFile`](asset::TextureFile) to the GPU.
     ///
     /// ```ignore
     /// let tex_file = TextureFile::from_disk("assets/grass.png")?;
-    /// let tex: Texture2D = gpu.ship_texture(&tex_file);
+    /// let tex: Texture2D = gpu.upload_texture(&tex_file);
     /// ```
-    pub fn ship_texture(&self, image: &asset::TextureFile) -> Texture2D {
-        image.ship()
+    pub fn upload_texture(&self, image: &asset::TextureFile) -> Texture2D {
+        image.upload()
     }
 
     /// Bakes a [`Gradient`] into a 1-pixel-high 2D texture (colour ramp).
@@ -451,10 +487,10 @@ impl GPU {
     /// use optic_core::Gradient;
     ///
     /// let grad = Gradient::rainbow();
-    /// let ramp: Texture2D = gpu.ship_gradient(&grad, 256);
+    /// let ramp: Texture2D = gpu.upload_gradient(&grad, 256);
     /// // Use as a lookup texture in a shader
     /// ```
-    pub fn ship_gradient(&self, gradient: &Gradient, resolution: u32) -> Texture2D {
+    pub fn upload_gradient(&self, gradient: &Gradient, resolution: u32) -> Texture2D {
         let res = resolution.max(1);
         let colors = gradient.sample_n(res as usize);
         let mut bytes = Vec::with_capacity(res as usize * 4);
@@ -465,7 +501,7 @@ impl GPU {
             bytes.push(b);
             bytes.push(a);
         }
-        let size = Size2D::from(res, 1);
+        let size = Size2D::new(res, 1);
         let id = crate::handles::texture::create_texture(
             &bytes,
             size,
@@ -489,12 +525,12 @@ impl GPU {
     /// | Too many draw buffers | `"exceeds GL_MAX_DRAW_BUFFERS"` |
     /// | Too many MSAA samples | `"exceeds GL_MAX_SAMPLES"` |
     /// | FBO incomplete | Framebuffer status error |
-    pub fn ship_canvas(&mut self, desc: &crate::handles::CanvasDesc) -> optic_core::OpticResult<Canvas> {
+    pub fn upload_canvas(&mut self, desc: &crate::handles::CanvasDesc) -> optic_core::OpticResult<Canvas> {
         if desc.color_formats.len() as i32 > self.max_color_attachments {
             return Err(optic_core::OpticError::new(
                 optic_core::OpticErrorKind::Custom,
                 &format!(
-                    "ship_canvas: {} color attachments exceeds GL_MAX_COLOR_ATTACHMENTS ({})",
+                    "upload_canvas: {} color attachments exceeds GL_MAX_COLOR_ATTACHMENTS ({})",
                     desc.color_formats.len(), self.max_color_attachments,
                 ),
             ));
@@ -503,7 +539,7 @@ impl GPU {
             return Err(optic_core::OpticError::new(
                 optic_core::OpticErrorKind::Custom,
                 &format!(
-                    "ship_canvas: {} color attachments exceeds GL_MAX_DRAW_BUFFERS ({})",
+                    "upload_canvas: {} color attachments exceeds GL_MAX_DRAW_BUFFERS ({})",
                     desc.color_formats.len(), self.max_draw_buffers,
                 ),
             ));
@@ -512,7 +548,7 @@ impl GPU {
             return Err(optic_core::OpticError::new(
                 optic_core::OpticErrorKind::Custom,
                 &format!(
-                    "ship_canvas: {} samples exceeds GL_MAX_SAMPLES ({})",
+                    "upload_canvas: {} samples exceeds GL_MAX_SAMPLES ({})",
                     desc.samples, self.max_samples,
                 ),
             ));
@@ -529,7 +565,7 @@ impl GPU {
     ///
     /// ```ignore
     /// // Render to a canvas
-    /// let canvas = gpu.ship_canvas(&my_desc)?;
+    /// let canvas = gpu.upload_canvas(&my_desc)?;
     /// gpu.set_render_target(&RenderTarget::Canvas(&canvas))?;
     /// gpu.clear();
     ///
@@ -563,7 +599,7 @@ impl GPU {
     ///
     /// ```ignore
     /// let cube_file = Mesh3DFile::cube(2.0);
-    /// let mesh = gpu.ship_mesh3d(&cube_file);
+    /// let mesh = gpu.upload_mesh3d(&cube_file);
     ///
     /// gpu.render3d(&mesh, &camera);
     /// ```
@@ -579,7 +615,7 @@ impl GPU {
     ///
     /// ```ignore
     /// let quad_file = Mesh2DFile::quad(&(800, 600).into());
-    /// let mesh = gpu.ship_mesh2d(&quad_file);
+    /// let mesh = gpu.upload_mesh2d(&quad_file);
     ///
     /// gpu.render2d(&mesh);
     /// ```

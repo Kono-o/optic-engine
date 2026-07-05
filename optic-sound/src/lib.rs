@@ -1,7 +1,7 @@
 //! Audio playback for the Optic engine.
 //!
 //! Provides a render-like pipeline for audio: [`SoundFile`] (disk asset) →
-//! [`AudioEngine::ship_sound2d`]/[`ship_sound3d`](AudioEngine::ship_sound3d) →
+//! [`AudioEngine::upload_sound2d`]/[`upload_sound3d`](AudioEngine::upload_sound3d) →
 //! [`Sound2D`]/[`Sound3D`] (playable handles).
 //!
 //! # Architecture

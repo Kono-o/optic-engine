@@ -51,7 +51,7 @@ pub fn componentwise_max<T: PartialOrd + Copy, C: Components<T, N>, const N: usi
 /// ```
 /// use optic_core::*;
 ///
-/// let s = Size2D::from(1920, 1080);
+/// let s = Size2D::new(1920, 1080);
 /// assert_eq!(s.aspect_ratio(), 16.0 / 9.0);
 /// ```
 ///
@@ -108,15 +108,15 @@ impl_size_ops!(Size2D, 2);
 
 impl Size2D {
     /// Zero-size (0, 0).
-    pub fn empty() -> Size2D {
+    pub fn zero() -> Size2D {
         Self { w: 0, h: 0 }
     }
     /// Construct from explicit width and height.
-    pub fn from(w: u32, h: u32) -> Self {
+    pub fn new(w: u32, h: u32) -> Self {
         Self { w, h }
     }
     /// Reduce both dimensions by `n` (saturating).
-    pub fn shave(&self, n: u32) -> Size2D {
+    pub fn shrink(&self, n: u32) -> Size2D {
         Size2D {
             w: self.w.saturating_sub(n),
             h: self.h.saturating_sub(n),
@@ -164,6 +164,29 @@ impl Size2D {
     pub fn to_size3d(&self, depth: u32) -> Size3D {
         Size3D { w: self.w, h: self.h, d: depth }
     }
+    /// Transpose width and height.
+    pub fn transpose(&self) -> Size2D {
+        Size2D { w: self.h, h: self.w }
+    }
+    /// True if this size fully contains `other` (both dimensions ≥).
+    pub fn contains(&self, other: Size2D) -> bool {
+        self.w >= other.w && self.h >= other.h
+    }
+    /// Expand by `n` on all sides (saturating).
+    pub fn expand(&self, n: u32) -> Size2D {
+        Size2D { w: self.w.saturating_add(n), h: self.h.saturating_add(n) }
+    }
+    /// Shorthand alias for [`shrink`](Self::shrink).
+    pub fn pad(&self, n: u32) -> Size2D {
+        self.shrink(n)
+    }
+    /// Clamp each dimension to [`min`, `max`].
+    pub fn clamp(&self, min: Size2D, max: Size2D) -> Size2D {
+        Size2D {
+            w: self.w.clamp(min.w, max.w),
+            h: self.h.clamp(min.h, max.h),
+        }
+    }
 }
 
 /// A 3D size with non-negative integer dimensions.
@@ -187,15 +210,15 @@ impl_size_ops!(Size3D, 3);
 
 impl Size3D {
     /// Zero-size (0, 0, 0).
-    pub fn empty() -> Size3D {
+    pub fn zero() -> Size3D {
         Self { w: 0, h: 0, d: 0 }
     }
     /// Construct from width, height, and depth.
-    pub fn from(w: u32, h: u32, d: u32) -> Self {
+    pub fn new(w: u32, h: u32, d: u32) -> Self {
         Self { w, h, d }
     }
     /// Reduce all three dimensions by `n` (saturating).
-    pub fn shave(&self, n: u32) -> Size3D {
+    pub fn shrink(&self, n: u32) -> Size3D {
         Size3D {
             w: self.w.saturating_sub(n),
             h: self.h.saturating_sub(n),
@@ -222,6 +245,30 @@ impl Size3D {
     pub fn to_size2d(&self) -> Size2D {
         Size2D { w: self.w, h: self.h }
     }
+    /// Transpose width ↔ height (depth stays unchanged).
+    pub fn transpose(&self) -> Size3D {
+        Size3D { w: self.h, h: self.w, d: self.d }
+    }
+    /// True if this size fully contains `other` (all three dimensions ≥).
+    pub fn contains(&self, other: Size3D) -> bool {
+        self.w >= other.w && self.h >= other.h && self.d >= other.d
+    }
+    /// Expand by `n` on all sides (saturating).
+    pub fn expand(&self, n: u32) -> Size3D {
+        Size3D { w: self.w.saturating_add(n), h: self.h.saturating_add(n), d: self.d.saturating_add(n) }
+    }
+    /// Shorthand alias for [`shrink`](Self::shrink).
+    pub fn pad(&self, n: u32) -> Size3D {
+        self.shrink(n)
+    }
+    /// Clamp each dimension to [`min`, `max`].
+    pub fn clamp(&self, min: Size3D, max: Size3D) -> Size3D {
+        Size3D {
+            w: self.w.clamp(min.w, max.w),
+            h: self.h.clamp(min.h, max.h),
+            d: self.d.clamp(min.d, max.d),
+        }
+    }
 }
 
 /// Near/far clip plane distances for a camera.
@@ -233,12 +280,12 @@ pub struct ClipDist {
 
 impl Default for ClipDist {
     fn default() -> Self {
-        ClipDist::from(0.01, 1000.0)
+        ClipDist::new(0.01, 1000.0)
     }
 }
 
 impl ClipDist {
-    pub fn from(near: f32, far: f32) -> ClipDist {
+    pub fn new(near: f32, far: f32) -> ClipDist {
         ClipDist { near, far }
     }
 }

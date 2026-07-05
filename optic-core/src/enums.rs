@@ -1,6 +1,6 @@
 /// Polygon rasterization mode.
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum PolyMode {
+pub enum PolygonMode {
     Points,
     WireFrame,
     Filled,
@@ -8,7 +8,7 @@ pub enum PolyMode {
 
 /// Face culling direction.
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Cull {
+pub enum CullFace {
     Clock,
     AntiClock,
 }
@@ -60,7 +60,7 @@ impl ImgFormat {
     /// Construct from channel count and bit depth.
     ///
     /// Channels ≥ 4 produce `RGBA`. Unknown channels default to `RGBA`.
-    pub fn from(channels: u8, bit_depth: u8) -> ImgFormat {
+    pub fn new(channels: u8, bit_depth: u8) -> ImgFormat {
         match channels {
             1 => ImgFormat::R(bit_depth),
             2 => ImgFormat::RG(bit_depth),

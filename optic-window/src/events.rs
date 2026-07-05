@@ -392,7 +392,7 @@ impl Events {
                 }
             }
             WindowEvent::Resized(size) => {
-                self.resize_event = Some(Size2D::from(size.width, size.height));
+                self.resize_event = Some(Size2D::new(size.width, size.height));
             }
             WindowEvent::CloseRequested => {
                 self.close_requested = true;

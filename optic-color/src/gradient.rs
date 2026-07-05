@@ -145,6 +145,26 @@ impl Gradient {
     /// Remove all stops.
     pub fn clear(&mut self) { self.stops.clear(); }
 
+    /// Returns the number of gradient stops.
+    pub fn len(&self) -> usize {
+        self.stops.len()
+    }
+
+    /// Returns `true` if the gradient has no stops.
+    pub fn is_empty(&self) -> bool {
+        self.stops.is_empty()
+    }
+
+    /// Returns a reference to the first stop, or `None` if the gradient is empty.
+    pub fn first(&self) -> Option<&GradientStop> {
+        self.stops.first()
+    }
+
+    /// Returns a reference to the last stop, or `None` if the gradient is empty.
+    pub fn last(&self) -> Option<&GradientStop> {
+        self.stops.last()
+    }
+
     /// Sample the gradient at position `t`.
     ///
     /// The effective position is determined by the current [`GradientWrap`]

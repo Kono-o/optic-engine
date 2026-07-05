@@ -21,7 +21,7 @@ pub struct CanvasDesc {
 impl Default for CanvasDesc {
     fn default() -> Self {
         Self {
-            size: Size2D::from(512, 512),
+            size: Size2D::new(512, 512),
             color_formats: vec![ImgFormat::RGBA(8)],
             depth: true,
             depth_as_texture: true,
@@ -37,7 +37,7 @@ impl Default for CanvasDesc {
 /// An off-screen render target (framebuffer object) with optional MSAA.
 ///
 /// Supports multiple colour attachments, depth/stencil, and MSAA resolve.
-/// Created via [`Canvas::new`] or [`GPU::ship_canvas`](crate::GPU::ship_canvas).
+/// Created via [`Canvas::new`] or [`GPU::upload_canvas`](crate::GPU::upload_canvas).
 ///
 /// # Example
 ///

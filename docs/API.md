@@ -170,9 +170,9 @@ pub enum CamProj {
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn empty() -> Size2D` | `Size2D { w: 0, h: 0 }` |
-| `pub fn from(w: u32, h: u32) -> Self` | New from dimensions |
-| `pub fn from(arr: [u32; 2]) -> Self` | From array (via `Components` trait) |
+| `pub fn zero() -> Size2D` | `Size2D { w: 0, h: 0 }` |
+| `pub fn new(w: u32, h: u32) -> Self` | New from dimensions |
+| `pub fn from(arr: [u32; 2]) -> Self` | From array (via `From` trait) |
 | `pub fn from(tup: (u32, u32)) -> Self` | From tuple |
 | `pub fn shave(&self, n: u32) -> Size2D` | Subtract n from each side (saturating) |
 | `pub fn aspect_ratio(&self) -> f32` | `w as f32 / h as f32` (clamped to 0.001) |
@@ -192,8 +192,8 @@ pub enum CamProj {
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn empty() -> Size3D` | Zero-initialized |
-| `pub fn from(w: u32, h: u32, d: u32) -> Self` | New from dimensions |
+| `pub fn zero() -> Size3D` | Zero-initialized |
+| `pub fn new(w: u32, h: u32, d: u32) -> Self` | New from dimensions |
 | `pub fn from(arr: [u32; 3]) -> Self` | From array |
 | `pub fn from(tup: (u32, u32, u32)) -> Self` | From tuple |
 | `pub fn shave(&self, n: u32) -> Size3D` | Subtract n from each side (saturating) |
@@ -209,7 +209,7 @@ pub enum CamProj {
 #### ClipDist
 
 - `impl Default` → `ClipDist { near: 0.01, far: 1000.0 }`
-- `pub fn from(near: f32, far: f32) -> ClipDist`
+- `pub fn new(near: f32, far: f32) -> ClipDist`
 
 ### Coordinate Types
 
@@ -244,8 +244,8 @@ impl Neg for CoordOffset {}
 
 | Method | Coord2D (point) | CoordOffset (vector) |
 |--------|-----------------|----------------------|
-| `empty()` | (0,0) | (0,0) |
-| `from(x, y)` | New coord | New coord |
+| `zero()` | (0,0) | (0,0) |
+| `new(x, y)` | New coord | New coord |
 | `from_tup((x, y))` | From tuple | From tuple |
 | `is_inside(size: Size2D)` | Checks bounds | — |
 | `is_zero()` | — | Returns true if both zero |
@@ -268,10 +268,10 @@ impl Neg for CoordOffset {}
 
 ```rust
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum PolyMode { Points, WireFrame, Filled }
+pub enum PolygonMode { Points, WireFrame, Filled }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Cull { Clock, AntiClock }
+pub enum CullFace { Clock, AntiClock }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub enum DrawMode { Points, Lines, #[default] Triangles, Strip }
@@ -320,6 +320,10 @@ pub type OpticResult<T> = Result<T, OpticError>;
 |-----------|-------------|
 | `pub fn new(kind: OpticErrorKind, msg: &str) -> Self` | Construct an error |
 | `pub fn custom(msg: &str) -> Self` | Shorthand for `OpticErrorKind::Custom` |
+| `pub fn shader(msg: &str) -> Self` | Shorthand for `OpticErrorKind::Shader` |
+| `pub fn asset(msg: &str) -> Self` | Shorthand for `OpticErrorKind::Asset` |
+| `pub fn file(msg: &str) -> Self` | Shorthand for `OpticErrorKind::File` |
+| `pub fn init(msg: &str) -> Self` | Shorthand for `OpticErrorKind::Init` |
 | `impl fmt::Display for OpticError` | Formatted as `"{kind}: {msg}"` |
 
 ### Error Handling Pattern
@@ -580,6 +584,10 @@ pub struct Gradient {
 | `add_stop(position, color: impl ToRgba)` | Insert stop (sorted) |
 | `remove_stop(index)` | Remove stop by index |
 | `stops()` | `&[GradientStop]` |
+| `len()` | Number of stops |
+| `is_empty()` | True if no stops |
+| `first()` | `Option<&GradientStop>` — first stop |
+| `last()` | `Option<&GradientStop>` — last stop |
 | `clear()` | Remove all stops |
 | `sample(t)` | Sample at `t` (0..1) with wrap/interp/color-space |
 | `sample_n(count)` | `Vec<RGBA>` of count evenly-spaced samples |
@@ -752,12 +760,15 @@ pub struct Window {
 |-----------|-------------|
 | `pub fn is_visible(&self) -> bool` | Is window visible? |
 | `pub fn set_visible(&self, visible: bool)` | Show/hide window |
+| `pub fn toggle_visible(&self)` | Toggle window visibility |
 | `pub fn is_minimized(&self) -> bool` | Is minimized? |
 | `pub fn minimize(&self)` | Minimize window |
 | `pub fn restore(&self)` | Restore from minimized |
+| `pub fn toggle_minimized(&self)` | Toggle minimized state |
 | `pub fn is_maximized(&self) -> bool` | Is maximized? |
 | `pub fn maximize(&self)` | Maximize window |
 | `pub fn unmaximize(&self)` | Restore from maximized |
+| `pub fn toggle_maximized(&self)` | Toggle maximized state |
 | `pub fn has_focus(&self) -> bool` | Does the window have keyboard focus? |
 | `pub fn focus(&self)` | Request focus |
 
@@ -781,12 +792,14 @@ pub struct Window {
 | `pub fn toggle_cursor_confine(&mut self)` | Toggle confine |
 | `pub fn is_cursor_loopback(&self) -> bool` | Is cursor loopback enabled? |
 | `pub fn set_cursor_loopback(&mut self, loopback: bool)` | Enable/disable edge-wrapping loopback |
+| `pub fn set_cursor(&self, cursor: CursorIcon)` | Set the cursor icon |
 
 #### Screen Info
 
 | Signature | Description |
 |-----------|-------------|
 | `pub fn screen_info(&self) -> Option<ScreenInfo>` | Information about the current monitor |
+| `pub fn dpi_scale(&self) -> f64` | The DPI scale factor for this window |
 
 #### Frame Update
 
@@ -942,8 +955,8 @@ pub struct ScreenInfo {
 ```rust
 pub struct GPU {
     pub ctx: RenderContext,
-    pub poly_mode: PolyMode,
-    pub cull_face: Cull,
+    pub poly_mode: PolygonMode,
+    pub cull_face: CullFace,
     pub bg_color: RGBA,
     pub msaa: bool,
     pub msaa_samples: u32,
@@ -979,17 +992,22 @@ pub struct GPU {
 | `pub fn clear(&self)` | Clear color + depth buffers |
 | `pub fn set_msaa_samples(&mut self, samples: u32)` | Set MSAA sample count |
 | `pub fn set_bg_color(&mut self, color: RGBA)` | Set background clear color |
-| `pub fn set_poly_mode(&mut self, mode: PolyMode)` | Set polygon mode |
+| `pub fn set_poly_mode(&mut self, mode: PolygonMode)` | Set polygon mode |
 | `pub fn toggle_wireframe(&mut self)` | Toggle between Filled and WireFrame |
 | `pub fn set_msaa(&mut self, enable: bool)` | Enable/disable MSAA |
 | `pub fn toggle_msaa(&mut self)` | Toggle MSAA |
 | `pub fn set_culling(&mut self, enable: bool)` | Enable/disable backface culling |
 | `pub fn toggle_culling(&mut self)` | Toggle culling |
-| `pub fn set_cull_face(&mut self, cull_face: Cull)` | Set which face to cull |
+| `pub fn set_cull_face(&mut self, cull_face: CullFace)` | Set which face to cull |
 | `pub fn flip_cull_face(&mut self)` | Swap cull face |
 | `pub fn set_canvas_size(&mut self, size: Size2D)` | Set canvas/render size |
 | `pub fn set_wire_width(&mut self, width: f32)` | Wireframe line width |
 | `pub fn set_point_size(&self, size: f32)` | Point size |
+| `pub fn reset_state(&mut self)` | Reset all GPU state to defaults |
+| `pub fn viewport(&self) -> (i32, i32, i32, i32)` | Get the current viewport rect |
+| `pub fn set_viewport(&self, x: i32, y: i32, w: i32, h: i32)` | Set the viewport rect |
+| `pub fn flush(&self)` | Flush OpenGL commands (non-blocking) |
+| `pub fn finish(&self)` | Block until all OpenGL commands complete |
 
 #### Fallback Assets
 
@@ -998,16 +1016,16 @@ pub struct GPU {
 | `pub fn fallback_shader3d(&self) -> Shader` | Default 3D shader |
 | `pub fn fallback_shader2d(&self) -> Shader` | Default 2D shader |
 
-#### GPU Resource Shipping
+#### GPU Resource Upload
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn ship_mesh3d(&self, file: &Mesh3DFile) -> Mesh3D` | Upload 3D mesh to GPU |
-| `pub fn ship_mesh2d(&self, file: &Mesh2DFile) -> Mesh2D` | Upload 2D mesh to GPU |
-| `pub fn ship_shader(&self, asset: &ShaderFile) -> Option<Shader>` | Compile and upload shader |
-| `pub fn ship_texture(&self, image: &TextureFile) -> Texture2D` | Upload texture to GPU |
-| `pub fn ship_gradient(&self, gradient: &Gradient, resolution: u32) -> Texture2D` | Bake gradient to 1D RGBA texture |
-| `pub fn ship_canvas(&mut self, desc: &CanvasDesc) -> OpticResult<Canvas>` | Create offscreen render target |
+| `pub fn upload_mesh3d(&self, file: &Mesh3DFile) -> Mesh3D` | Upload 3D mesh to GPU |
+| `pub fn upload_mesh2d(&self, file: &Mesh2DFile) -> Mesh2D` | Upload 2D mesh to GPU |
+| `pub fn upload_shader(&self, asset: &ShaderFile) -> OpticResult<Shader>` | Compile and upload shader |
+| `pub fn upload_texture(&self, image: &TextureFile) -> Texture2D` | Upload texture to GPU |
+| `pub fn upload_gradient(&self, gradient: &Gradient, resolution: u32) -> Texture2D` | Bake gradient to 1D RGBA texture |
+| `pub fn upload_canvas(&mut self, desc: &CanvasDesc) -> OpticResult<Canvas>` | Create offscreen render target |
 
 #### Rendering
 
@@ -1063,12 +1081,12 @@ pub struct GL;  // unit struct, all methods are associated
 | `pub fn clear()` | Clear color + depth buffers |
 | `pub fn set_clear(color: RGBA)` | Set clear color via `glClearColor` |
 | `pub fn resize(size: Size2D)` | Set viewport |
-| `pub fn poly_mode(mode: PolyMode)` | Set polygon render mode |
+| `pub fn poly_mode(mode: PolygonMode)` | Set polygon render mode |
 | `pub fn enable_msaa(enable: bool)` | Enable/disable MSAA |
 | `pub fn enable_depth(enable: bool)` | Enable/disable depth testing |
 | `pub fn enable_alpha(enable: bool)` | Enable/disable alpha blending (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) |
 | `pub fn enable_cull(enable: bool)` | Enable/disable face culling |
-| `pub fn set_cull_face(face: Cull)` | Set which face to cull |
+| `pub fn set_cull_face(face: CullFace)` | Set which face to cull |
 | `pub fn set_point_size(size: f32)` | Set point size |
 | `pub fn set_wire_width(width: f32)` | Set line width |
 | `pub fn bind_shader(id: u32)` | Bind shader program |
@@ -1110,7 +1128,7 @@ pub struct Camera {
 | `pub fn add_fov(&mut self, value: f32)` | Add to FOV |
 | `pub fn set_ortho_scale(&mut self, value: f32)` | Set ortho scale |
 | `pub fn add_ortho_scale(&mut self, value: f32)` | Add to ortho scale |
-| `pub fn fly_forw(&mut self, speed: f32)` | Move camera forward |
+| `pub fn fly_forward(&mut self, speed: f32)` | Move camera forward |
 | `pub fn fly_back(&mut self, speed: f32)` | Move camera backward |
 | `pub fn fly_left(&mut self, speed: f32)` | Move camera left |
 | `pub fn fly_right(&mut self, speed: f32)` | Move camera right |
@@ -1162,7 +1180,7 @@ pub struct Mesh3D {
 |-----------|-------------|
 | `pub fn set_shader(&mut self, shader: Shader)` | Assign a shader |
 | `pub fn remove_shader(&mut self)` | Remove shader |
-| `pub fn get_draw_mode(&self) -> DrawMode` | Get draw mode |
+| `pub fn draw_mode(&self) -> DrawMode` | Get draw mode |
 | `pub fn set_draw_mode(&mut self, draw_mode: DrawMode)` | Set draw mode |
 | `pub fn index_count(&self) -> u32` | Number of indices |
 | `pub fn vertex_count(&self) -> u32` | Number of vertices |
@@ -1203,12 +1221,12 @@ pub struct MeshHandle {
     pub layouts: Vec<(ATTRInfo, u32)>,
     pub draw_mode: DrawMode,
     pub has_indices: bool,
-    pub vert_count: u32,
-    pub ind_count: u32,
+    pub vertex_count: u32,
+    pub index_count: u32,
     pub vao_id: u32,
-    pub buf_id: u32,
-    pub ind_id: u32,
-    pub vert_stride: u32,
+    pub vertex_buffer_id: u32,
+    pub index_buffer_id: u32,
+    pub vertex_stride: u32,
     pub instance_buf_id: u32,
     pub instance_count: u32,
 }
@@ -1219,7 +1237,7 @@ pub struct MeshHandle {
 | `pub fn draw(&self)` | Issue the draw call (respects instancing when `instance_count > 0`) |
 | `pub fn set_instances(&mut self, buffer: &InstanceBuffer)` | Bind an instance buffer for instanced rendering |
 | `pub fn update_vertex<D: DataType>(&self, index: u32, attr_index: usize, value: D) -> OpticResult<()>` | Update a single vertex attribute |
-| `pub fn get_vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D>` | Read back a single vertex attribute |
+| `pub fn vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D>` | Read back a single vertex attribute |
 | `pub fn write_range(&self, start_vertex: u32, data: &[u8]) -> OpticResult<()>` | Write raw bytes starting at a vertex offset |
 | `pub fn delete(self)` | Free GPU resources |
 
@@ -1230,8 +1248,8 @@ pub struct InstanceDesc3D {
     pub pos_attr: Pos3DATTR,
     pub rot_attr: Rot3DATTR,
     pub scale_attr: Scale3DATTR,
-    pub col_attr: ColATTR,
-    pub cus_attrs: Vec<CustomATTR>,
+    pub col_attr: ColorATTR,
+    pub custom_attrs: Vec<CustomATTR>,
 }
 ```
 
@@ -1240,8 +1258,8 @@ pub struct InstanceDesc3D {
 | `pub fn empty() -> Self` | Empty descriptor |
 | `pub fn from_positions(positions: &[Vector3<f32>]) -> Self` | Initialize from position vectors |
 | `pub fn from_transforms(transforms: &[Matrix4<f32>]) -> Self` | Extract pos/rot/scale from 4×4 matrices |
-| `pub fn attach_custom_attr(&mut self, attr: CustomATTR) -> &mut Self` | Add a custom per-instance attribute |
-| `pub fn ship(&self) -> OpticResult<InstanceBuffer>` | Upload to GPU |
+| `pub fn add_custom_attr(&mut self, attr: CustomATTR) -> &mut Self` | Add a custom per-instance attribute |
+| `pub fn upload(&self) -> OpticResult<InstanceBuffer>` | Upload to GPU |
 
 ### InstanceDesc2D
 
@@ -1250,16 +1268,16 @@ pub struct InstanceDesc2D {
     pub pos_attr: Pos2DATTR,
     pub rot_attr: Rot2DATTR,
     pub scale_attr: Scale2DATTR,
-    pub col_attr: ColATTR,
-    pub cus_attrs: Vec<CustomATTR>,
+    pub col_attr: ColorATTR,
+    pub custom_attrs: Vec<CustomATTR>,
 }
 ```
 
 | Signature | Description |
 |-----------|-------------|
 | `pub fn empty() -> Self` | Empty descriptor |
-| `pub fn attach_custom_attr(&mut self, attr: CustomATTR) -> &mut Self` | Add a custom per-instance attribute |
-| `pub fn ship(&self) -> OpticResult<InstanceBuffer>` | Upload to GPU |
+| `pub fn add_custom_attr(&mut self, attr: CustomATTR) -> &mut Self` | Add a custom per-instance attribute |
+| `pub fn upload(&self) -> OpticResult<InstanceBuffer>` | Upload to GPU |
 
 ### InstanceBuffer
 
@@ -1273,23 +1291,27 @@ pub struct InstanceBuffer {
 | Signature | Description |
 |-----------|-------------|
 | `pub fn count(&self) -> u32` | Number of instances currently stored |
+| `pub fn len(&self) -> usize` | Number of instances as usize |
+| `pub fn is_empty(&self) -> bool` | True if no instances |
+| `pub fn clear(&mut self)` | Remove all instances (O1) |
 | `pub fn capacity(&self) -> u32` | Allocated capacity (instances) |
 | `pub fn update_instance<D: DataType>(&mut self, index: u32, attr_index: usize, value: D) -> OpticResult<()>` | Update a single attribute on one instance |
-| `pub fn get_instance<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D>` | Read a single attribute from one instance |
+| `pub fn instance<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D>` | Read a single attribute from one instance |
 | `pub fn update_custom<D: DataType>(&mut self, index: u32, name: &str, value: D) -> OpticResult<()>` | Update a custom attribute by name |
-| `pub fn get_custom<D: DataType>(&self, index: u32, name: &str) -> OpticResult<D>` | Read a custom attribute by name |
+| `pub fn custom_attr<D: DataType>(&self, index: u32, name: &str) -> OpticResult<D>` | Read a custom attribute by name |
 | `pub fn set_position(&mut self, index: u32, pos: Vector3<f32>) -> OpticResult<()>` | Set instance position (3D) |
-| `pub fn get_position(&self, index: u32) -> OpticResult<Vector3<f32>>` | Get instance position (3D) |
+| `pub fn position(&self, index: u32) -> OpticResult<Vector3<f32>>` | Get instance position (3D) |
 | `pub fn set_rotation(&mut self, index: u32, rot: Vector4<f32>) -> OpticResult<()>` | Set instance rotation as quaternion |
-| `pub fn get_rotation(&self, index: u32) -> OpticResult<Vector4<f32>>` | Get instance rotation as quaternion |
+| `pub fn rotation(&self, index: u32) -> OpticResult<Vector4<f32>>` | Get instance rotation as quaternion |
 | `pub fn set_scale(&mut self, index: u32, scale: Vector3<f32>) -> OpticResult<()>` | Set instance scale (3D) |
-| `pub fn get_scale(&self, index: u32) -> OpticResult<Vector3<f32>>` | Get instance scale (3D) |
+| `pub fn scale(&self, index: u32) -> OpticResult<Vector3<f32>>` | Get instance scale (3D) |
 | `pub fn set_color(&mut self, index: u32, color: RGBA) -> OpticResult<()>` | Set instance color |
-| `pub fn get_color(&self, index: u32) -> OpticResult<RGBA>` | Get instance color |
+| `pub fn color(&self, index: u32) -> OpticResult<RGBA>` | Get instance color |
 | `pub fn set_instance_count(&mut self, new_count: u32)` | Update visible instance count (truncates or extends) |
 | `pub fn reserve(&mut self, additional: u32)` | Pre-allocate capacity |
 | `pub fn shrink_to_fit(&mut self)` | Shrink capacity to match count |
 | `pub fn push_raw(&mut self, bytes: &[u8]) -> OpticResult<u32>` | Append raw bytes as a new instance; returns index |
+| `pub fn pop(&mut self) -> OpticResult<()>` | Remove the last instance |
 | `pub fn remove_instance(&mut self, index: u32) -> OpticResult<()>` | Remove instance (swap-remove — last moves into slot) |
 | `pub fn remove_instance_ordered(&mut self, index: u32) -> OpticResult<()>` | Remove instance (shift elements, preserves order) |
 | `pub fn write_all(&mut self, desc: &InstanceDesc3D) -> OpticResult<()>` | Bulk-write all instances from a descriptor |
@@ -1304,25 +1326,25 @@ pub struct Shader {
     pub workers: Workers,
     pub id: u32,
     pub is_compute: bool,
-    pub tex_ids: Vec<Option<u32>>,
-    pub sbo_ids: Vec<Option<u32>>,
+    pub bound_textures: Vec<Option<u32>>,
+    pub bound_storages: Vec<Option<u32>>,
 }
 ```
 
 | Signature | Description |
 |-----------|-------------|
 | `pub fn new(id: u32, is_compute: bool) -> Self` | Wrap a shader program ID |
-| `pub fn attach_tex(&mut self, tex: &Texture2D)` | Attach texture to next available slot |
-| `pub fn attach_sbo(&mut self, sbo: &StorageBuffer)` | Attach SSBO to next available slot |
-| `pub fn set_tex_at_slot(&mut self, tex: &Texture2D, slot: Slot)` | Bind texture to specific slot |
-| `pub fn set_sbo_at_slot(&mut self, sbo: &StorageBuffer, slot: Slot)` | Bind SSBO to specific slot |
+| `pub fn attach_texture(&mut self, tex: &Texture2D)` | Attach texture to next available slot |
+| `pub fn attach_storage(&mut self, sbo: &StorageBuffer)` | Attach SSBO to next available slot |
+| `pub fn bind_texture(&mut self, tex: &Texture2D, slot: Slot)` | Bind texture to specific slot |
+| `pub fn bind_storage(&mut self, sbo: &StorageBuffer, slot: Slot)` | Bind SSBO to specific slot |
 | `pub fn delete(self)` | Delete the shader program |
 | `pub fn bind(&self)` | Use this shader |
 | `pub fn unbind(&self)` | Unbind shader |
 | `pub fn compute(&self)` | Dispatch compute shader with worker group counts |
 | `pub fn uniform_location(&self, name: &str) -> Option<u32>` | Query uniform location |
-| `pub fn texture_binds(&self) -> Vec<(u32, u32)>` | List of (tex_id, slot) bindings |
-| `pub fn storage_binds(&self) -> Vec<(u32, u32)>` | List of (sbo_id, slot) bindings |
+| `pub fn bound_textures_info(&self) -> Vec<(u32, u32)>` | List of (tex_id, slot) bindings |
+| `pub fn bound_storages_info(&self) -> Vec<(u32, u32)>` | List of (sbo_id, slot) bindings |
 | `pub fn bind_textures(&self)` | Bind all attached textures |
 | `pub fn bind_storages(&self)` | Bind all attached SSBOs |
 | `pub fn set_i32(&self, name: &str, v: i32)` | Set int uniform |
@@ -1400,25 +1422,25 @@ impl Default for Transform2D {}
 |-----------|-------------|
 | `pub fn calc_matrix(&mut self)` | Recalculate transform matrix from pos/rot/scale |
 | `pub fn pos(&self) -> Vector2<f32>` | Position |
-| `pub fn rot(&self) -> f32` | Rotation (degrees) |
+| `pub fn rotation(&self) -> f32` | Rotation (degrees) |
+| `pub fn scale_factor(&self) -> Vector2<f32>` | Scale |
 | `pub fn layer(&self) -> u8` | Z layer |
-| `pub fn scale(&self) -> Vector2<f32>` | Scale |
 | `pub fn matrix(&self) -> Matrix4<f32>` | Current 4×4 transform matrix |
-| `pub fn move_all(&mut self, x: f32, y: f32)` | Translate |
-| `pub fn move_x(&mut self, x: f32)` | Translate X |
-| `pub fn move_y(&mut self, y: f32)` | Translate Y |
-| `pub fn set_pos_all(&mut self, x: f32, y: f32)` | Set position |
-| `pub fn set_pos_x(&mut self, x: f32)` | Set position X |
-| `pub fn set_pos_y(&mut self, y: f32)` | Set position Y |
+| `pub fn translate(&mut self, x: f32, y: f32)` | Translate |
+| `pub fn translate_x(&mut self, x: f32)` | Translate X |
+| `pub fn translate_y(&mut self, y: f32)` | Translate Y |
+| `pub fn set_position(&mut self, x: f32, y: f32)` | Set position |
+| `pub fn set_position_x(&mut self, x: f32)` | Set position X |
+| `pub fn set_position_y(&mut self, y: f32)` | Set position Y |
 | `pub fn rotate(&mut self, rot: f32)` | Add rotation |
-| `pub fn set_rot(&mut self, rot: f32)` | Set rotation |
+| `pub fn set_rotation(&mut self, rot: f32)` | Set rotation |
 | `pub fn set_layer(&mut self, layer: u8)` | Set Z layer |
-| `pub fn scale_all(&mut self, x: f32, y: f32)` | Add scale |
-| `pub fn scale_same(&mut self, xy: f32)` | Uniform add scale |
+| `pub fn scale(&mut self, x: f32, y: f32)` | Add scale |
+| `pub fn scale_uniform(&mut self, xy: f32)` | Uniform add scale |
 | `pub fn scale_x(&mut self, x: f32)` | Add scale X |
 | `pub fn scale_y(&mut self, y: f32)` | Add scale Y |
-| `pub fn set_scale_all(&mut self, x: f32, y: f32)` | Set scale |
-| `pub fn set_scale_same(&mut self, xy: f32)` | Uniform set scale |
+| `pub fn set_scale(&mut self, x: f32, y: f32)` | Set scale |
+| `pub fn set_scale_uniform(&mut self, xy: f32)` | Uniform set scale |
 | `pub fn set_scale_x(&mut self, x: f32)` | Set scale X |
 | `pub fn set_scale_y(&mut self, y: f32)` | Set scale Y |
 
@@ -1439,32 +1461,32 @@ impl Default for Transform3D {}
 |-----------|-------------|
 | `pub fn calc_matrix(&mut self)` | Recalculate transform matrix |
 | `pub fn pos(&self) -> Vector3<f32>` | Position |
-| `pub fn rot(&self) -> Vector3<f32>` | Rotation (degrees) |
-| `pub fn scale(&self) -> Vector3<f32>` | Scale |
+| `pub fn rotation(&self) -> Vector3<f32>` | Rotation (degrees) |
+| `pub fn scale_factor(&self) -> Vector3<f32>` | Scale |
 | `pub fn matrix(&self) -> Matrix4<f32>` | Current 4×4 transform matrix |
-| `pub fn move_all(&mut self, x: f32, y: f32, z: f32)` | Translate |
-| `pub fn move_x(&mut self, x: f32)` | Translate X |
-| `pub fn move_y(&mut self, y: f32)` | Translate Y |
-| `pub fn move_z(&mut self, z: f32)` | Translate Z |
-| `pub fn set_pos_all(&mut self, x: f32, y: f32, z: f32)` | Set position |
-| `pub fn set_pos_x(&mut self, x: f32)` | Set position X |
-| `pub fn set_pos_y(&mut self, y: f32)` | Set position Y |
-| `pub fn set_pos_z(&mut self, z: f32)` | Set position Z |
-| `pub fn rotate_all(&mut self, x: f32, y: f32, z: f32)` | Add rotation |
+| `pub fn translate(&mut self, x: f32, y: f32, z: f32)` | Translate |
+| `pub fn translate_x(&mut self, x: f32)` | Translate X |
+| `pub fn translate_y(&mut self, y: f32)` | Translate Y |
+| `pub fn translate_z(&mut self, z: f32)` | Translate Z |
+| `pub fn set_position(&mut self, x: f32, y: f32, z: f32)` | Set position |
+| `pub fn set_position_x(&mut self, x: f32)` | Set position X |
+| `pub fn set_position_y(&mut self, y: f32)` | Set position Y |
+| `pub fn set_position_z(&mut self, z: f32)` | Set position Z |
+| `pub fn rotate(&mut self, x: f32, y: f32, z: f32)` | Add rotation |
 | `pub fn rotate_x(&mut self, x: f32)` | Add rotation X |
 | `pub fn rotate_y(&mut self, y: f32)` | Add rotation Y |
 | `pub fn rotate_z(&mut self, z: f32)` | Add rotation Z |
-| `pub fn set_rot_all(&mut self, x: f32, y: f32, z: f32)` | Set rotation |
-| `pub fn set_rot_x(&mut self, x: f32)` | Set rotation X |
-| `pub fn set_rot_y(&mut self, y: f32)` | Set rotation Y |
-| `pub fn set_rot_z(&mut self, z: f32)` | Set rotation Z |
-| `pub fn scale_all(&mut self, x: f32, y: f32, z: f32)` | Add scale |
-| `pub fn scale_same(&mut self, xyz: f32)` | Uniform add scale |
+| `pub fn set_rotation(&mut self, x: f32, y: f32, z: f32)` | Set rotation |
+| `pub fn set_rotation_x(&mut self, x: f32)` | Set rotation X |
+| `pub fn set_rotation_y(&mut self, y: f32)` | Set rotation Y |
+| `pub fn set_rotation_z(&mut self, z: f32)` | Set rotation Z |
+| `pub fn scale(&mut self, x: f32, y: f32, z: f32)` | Add scale |
+| `pub fn scale_uniform(&mut self, xyz: f32)` | Uniform add scale |
 | `pub fn scale_x(&mut self, x: f32)` | Add scale X |
 | `pub fn scale_y(&mut self, y: f32)` | Add scale Y |
 | `pub fn scale_z(&mut self, z: f32)` | Add scale Z |
-| `pub fn set_scale_all(&mut self, x: f32, y: f32, z: f32)` | Set scale |
-| `pub fn set_scale_same(&mut self, xyz: f32)` | Uniform set scale |
+| `pub fn set_scale(&mut self, x: f32, y: f32, z: f32)` | Set scale |
+| `pub fn set_scale_uniform(&mut self, xyz: f32)` | Uniform set scale |
 | `pub fn set_scale_x(&mut self, x: f32)` | Set scale X |
 | `pub fn set_scale_y(&mut self, y: f32)` | Set scale Y |
 | `pub fn set_scale_z(&mut self, z: f32)` | Set scale Z |
@@ -1621,11 +1643,11 @@ pub enum ShaderType {
 ```rust
 pub struct Mesh3DFile {
     pub pos_attr: Pos3DATTR,
-    pub col_attr: ColATTR,
-    pub uvm_attr: UVMATTR,
-    pub nrm_attr: NrmATTR,
-    pub ind_attr: IndATTR,
-    pub cus_attrs: Vec<CustomATTR>,
+    pub col_attr: ColorATTR,
+    pub uvm_attr: UVMapATTR,
+    pub nrm_attr: NormalATTR,
+    pub ind_attr: IndicesATTR,
+    pub custom_attrs: Vec<CustomATTR>,
 }
 ```
 
@@ -1643,10 +1665,10 @@ pub struct Mesh3DFile {
 | `pub fn cone(radius: f32, height: f32, segments: u32, cap: bool) -> Self` | Generate a cone |
 | `pub fn torus(major_radius: f32, minor_radius: f32, major_segments: u32, minor_segments: u32) -> Self` | Generate a torus |
 | `pub fn plane(width: f32, depth: f32) -> Self` | Generate a flat plane (XZ, Y=0) |
-| `pub fn attach_custom_attr(&mut self, attr: CustomATTR)` | Add a custom vertex attribute |
+| `pub fn add_custom_attr(&mut self, attr: CustomATTR)` | Add a custom vertex attribute |
 | `pub fn has_no_attr(&self) -> bool` | Check if mesh has no vertex data |
 | `pub fn starts_with_custom(&self) -> bool` | Does the first attribute layout start with a custom attribute? |
-| `pub fn ship(&self) -> MeshHandle` | Upload to GPU and get a handle |
+| `pub fn upload(&self) -> MeshHandle` | Upload to GPU and get a handle |
 
 ### Mesh2DFile
 
@@ -1655,10 +1677,10 @@ pub struct Mesh2DFile {
     pub pos_attr: Pos2DATTR,
     pub layer: u8,
     pub aspect: f32,
-    pub col_attr: ColATTR,
-    pub uvm_attr: UVMATTR,
-    pub ind_attr: IndATTR,
-    pub cus_attrs: Vec<CustomATTR>,
+    pub col_attr: ColorATTR,
+    pub uvm_attr: UVMapATTR,
+    pub ind_attr: IndicesATTR,
+    pub custom_attrs: Vec<CustomATTR>,
 }
 ```
 
@@ -1668,18 +1690,18 @@ pub struct Mesh2DFile {
 | `pub fn set_pos_attr(&mut self, attr: Pos2DATTR)` | Set positions |
 | `pub fn set_layer(&mut self, layer: u8)` | Set Z layer |
 | `pub fn set_center(&mut self, center: Center)` | Recenter around a pivot |
-| `pub fn set_col_attr(&mut self, attr: ColATTR)` | Set vertex colors |
-| `pub fn set_uvm_attr(&mut self, attr: UVMATTR)` | Set UV coordinates |
-| `pub fn set_ind_attr(&mut self, attr: IndATTR)` | Set indices |
+| `pub fn set_col_attr(&mut self, attr: ColorATTR)` | Set vertex colors |
+| `pub fn set_uvm_attr(&mut self, attr: UVMapATTR)` | Set UV coordinates |
+| `pub fn set_ind_attr(&mut self, attr: IndicesATTR)` | Set indices |
 | `pub fn quad(size: &Size2D) -> Self` | Generate a textured quad |
 | `pub fn fullscreen_quad() -> Self` | Fullscreen quad (positions [-1,1]) |
 | `pub fn circle(radius: f32, segments: u32) -> Self` | Generate a filled circle |
 | `pub fn polygon(radius: f32, sides: u32) -> Self` | Generate a regular polygon |
 | `pub fn ring(inner_radius: f32, outer_radius: f32, segments: u32) -> Self` | Generate a ring |
 | `pub fn rect(width: f32, height: f32) -> Self` | Generate a rectangle |
-| `pub fn attach_custom_attr(&mut self, attr: CustomATTR)` | Add custom attribute |
+| `pub fn add_custom_attr(&mut self, attr: CustomATTR)` | Add custom attribute |
 | `pub fn starts_with_custom(&self) -> bool` | Does the first layout start with a custom attribute? |
-| `pub fn ship(&self) -> MeshHandle` | Upload to GPU and get a handle |
+| `pub fn upload(&self) -> MeshHandle` | Upload to GPU and get a handle |
 
 ### TextureFile
 
@@ -1698,7 +1720,7 @@ pub struct TextureFile {
 | `pub fn pixel_count(&self) -> usize` | Total pixels |
 | `pub fn set_wrap(&mut self, wrap: ImgWrap)` | Set wrap mode |
 | `pub fn set_filter(&mut self, filter: ImgFilter)` | Set filter mode |
-| `pub fn ship(&self) -> Texture2D` | Upload to GPU |
+| `pub fn upload(&self) -> Texture2D` | Upload to GPU |
 | `pub fn fallback() -> OpticResult<Self>` | Create checkerboard fallback texture |
 | `pub fn from_disk(path: &str) -> OpticResult<Self>` | Load from disk (debug: loads source + overwrites cache; release: loads cache only) |
 | `pub fn save_cached(&self, path: &str) -> OpticResult<()>` | Save to binary cache (`.otxtr`) |
@@ -1711,11 +1733,11 @@ pub struct Pos3DATTR   { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
 #[derive(Debug, Clone)]
 pub struct Pos2DATTR   { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
 #[derive(Debug, Clone)]
-pub struct ColATTR     { pub data: Vec<[f32; 4]>, pub info: ATTRInfo }
+pub struct ColorATTR     { pub data: Vec<[f32; 4]>, pub info: ATTRInfo }
 #[derive(Debug, Clone)]
-pub struct UVMATTR     { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
+pub struct UVMapATTR     { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
 #[derive(Debug, Clone)]
-pub struct NrmATTR     { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
+pub struct NormalATTR     { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
 #[derive(Debug, Clone)]
 pub struct Rot2DATTR   { pub data: Vec<f32>,       pub info: ATTRInfo }
 #[derive(Debug, Clone)]
@@ -1725,7 +1747,7 @@ pub struct Scale2DATTR { pub data: Vec<[f32; 2]>, pub info: ATTRInfo }
 #[derive(Debug, Clone)]
 pub struct Scale3DATTR { pub data: Vec<[f32; 3]>, pub info: ATTRInfo }
 #[derive(Debug, Clone)]
-pub struct IndATTR     { pub data: Vec<u32>,      pub info: ATTRInfo }
+pub struct IndicesATTR     { pub data: Vec<u32>,      pub info: ATTRInfo }
 #[derive(Debug)]
 pub struct CustomATTR {
     pub data: Vec<u8>,
@@ -1738,7 +1760,7 @@ All `*ATTR` structs share these methods via macro:
 | Signature | Description |
 |-----------|-------------|
 | `pub fn empty() -> Self` | Empty attribute |
-| `pub fn from(vec: Vec<T>) -> Self` | From a Vec |
+| `pub fn new(vec: Vec<T>) -> Self` | From a Vec |
 | `pub fn from_array(array: &[T]) -> Self` | From a slice |
 | `pub fn push(&mut self, elem: T)` | Add one element |
 | `pub fn is_empty(&self) -> bool` | No data? |
@@ -1748,7 +1770,7 @@ All `*ATTR` structs share these methods via macro:
 | Signature | Description |
 |-----------|-------------|
 | `pub fn empty<D: DataType>(name: &str) -> Self` | Empty custom attribute with name |
-| `pub fn from<D: DataType>(name: &str, vec: Vec<D>) -> Self` | From typed Vec |
+| `pub fn new<D: DataType>(name: &str, vec: Vec<D>) -> Self` | From typed Vec |
 | `pub fn from_array<D: DataType + Clone>(name: &str, array: &[D]) -> Self` | From typed slice |
 | `pub fn push<D: DataType>(&mut self, elem: D)` | Push a typed element |
 
@@ -1766,7 +1788,7 @@ pub struct ATTRInfo {
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn empty() -> Self` | Zeroed info |
+| `pub fn new() -> Self` | Zeroed info |
 | `pub fn fmt_as_string(&self) -> String` | Formatted as `"{name}:{typ}:{byte_count}:{elem_count}"` |
 
 #### ATTRName
@@ -1775,7 +1797,7 @@ pub struct ATTRInfo {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ATTRName {
     Custom(String),
-    Pos2D, Pos3D, Col, UVM, Nrm, Ind,
+    Pos2D, Pos3D, Color, UVMap, Normal, Indices,
     Rot2D, Rot3D, Scale2D, Scale3D,
 }
 ```
@@ -2098,8 +2120,8 @@ pub struct AudioEngine {
 | Signature | Description |
 |-----------|-------------|
 | `pub fn new() -> OpticResult<Self>` | Create the audio engine and spawn the audio render thread |
-| `pub fn ship_sound2d(&mut self, file: &SoundFile) -> OpticResult<Sound2D>` | Upload a sound file as a 2D sound handle |
-| `pub fn ship_sound3d(&mut self, file: &SoundFile) -> OpticResult<Sound3D>` | Upload a sound file as a 3D spatial sound handle |
+| `pub fn upload_sound2d(&mut self, file: &SoundFile) -> OpticResult<Sound2D>` | Upload a sound file as a 2D sound handle |
+| `pub fn upload_sound3d(&mut self, file: &SoundFile) -> OpticResult<Sound3D>` | Upload a sound file as a 3D spatial sound handle |
 | `pub fn set_master_volume(&mut self, volume: f32)` | Set master volume (0.0..1.0) |
 | `pub fn set_listener(&mut self, pos: Vector3<f32>, forward: Vector3<f32>, up: Vector3<f32>)` | Set 3D listener position/orientation |
 | `pub fn set_listener_from_camera(&mut self, camera: &Camera)` | Position the 3D listener from the active camera |

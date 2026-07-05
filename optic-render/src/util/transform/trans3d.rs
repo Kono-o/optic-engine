@@ -10,14 +10,14 @@ use cgmath::*;
 /// | Category | Methods |
 /// |---|---|
 /// | **Position** — getter | [`pos`](Transform3D::pos) |
-/// | **Position** — absolute setter | [`set_pos_all`](Transform3D::set_pos_all), [`set_pos_x`](Transform3D::set_pos_x), [`set_pos_y`](Transform3D::set_pos_y), [`set_pos_z`](Transform3D::set_pos_z) |
-/// | **Position** — relative move | [`move_all`](Transform3D::move_all), [`move_x`](Transform3D::move_x), [`move_y`](Transform3D::move_y), [`move_z`](Transform3D::move_z) |
-/// | **Rotation** — getter | [`rot`](Transform3D::rot) |
-/// | **Rotation** — absolute setter | [`set_rot_all`](Transform3D::set_rot_all), [`set_rot_x`](Transform3D::set_rot_x), [`set_rot_y`](Transform3D::set_rot_y), [`set_rot_z`](Transform3D::set_rot_z) |
-/// | **Rotation** — relative add | [`rotate_all`](Transform3D::rotate_all), [`rotate_x`](Transform3D::rotate_x), [`rotate_y`](Transform3D::rotate_y), [`rotate_z`](Transform3D::rotate_z) |
-/// | **Scale** — getter | [`scale`](Transform3D::scale) |
-/// | **Scale** — absolute setter | [`set_scale_all`](Transform3D::set_scale_all), [`set_scale_same`](Transform3D::set_scale_same), [`set_scale_x`](Transform3D::set_scale_x), [`set_scale_y`](Transform3D::set_scale_y), [`set_scale_z`](Transform3D::set_scale_z) |
-/// | **Scale** — relative add | [`scale_all`](Transform3D::scale_all), [`scale_same`](Transform3D::scale_same), [`scale_x`](Transform3D::scale_x), [`scale_y`](Transform3D::scale_y), [`scale_z`](Transform3D::scale_z) |
+    /// | **Position** — absolute setter | [`set_position`](Transform3D::set_position), [`set_position_x`](Transform3D::set_position_x), [`set_position_y`](Transform3D::set_position_y), [`set_position_z`](Transform3D::set_position_z) |
+    /// | **Position** — relative move | [`translate`](Transform3D::translate), [`translate_x`](Transform3D::translate_x), [`translate_y`](Transform3D::translate_y), [`translate_z`](Transform3D::translate_z) |
+    /// | **Rotation** — getter | [`rotation`](Transform3D::rotation) |
+    /// | **Rotation** — absolute setter | [`set_rotation`](Transform3D::set_rotation), [`set_rotation_x`](Transform3D::set_rotation_x), [`set_rotation_y`](Transform3D::set_rotation_y), [`set_rotation_z`](Transform3D::set_rotation_z) |
+    /// | **Rotation** — relative add | [`rotate`](Transform3D::rotate), [`rotate_x`](Transform3D::rotate_x), [`rotate_y`](Transform3D::rotate_y), [`rotate_z`](Transform3D::rotate_z) |
+    /// | **Scale** — getter | [`scale_factor`](Transform3D::scale_factor) |
+    /// | **Scale** — absolute setter | [`set_scale`](Transform3D::set_scale), [`set_scale_uniform`](Transform3D::set_scale_uniform), [`set_scale_x`](Transform3D::set_scale_x), [`set_scale_y`](Transform3D::set_scale_y), [`set_scale_z`](Transform3D::set_scale_z) |
+    /// | **Scale** — relative add | [`scale`](Transform3D::scale), [`scale_uniform`](Transform3D::scale_uniform), [`scale_x`](Transform3D::scale_x), [`scale_y`](Transform3D::scale_y), [`scale_z`](Transform3D::scale_z) |
 /// | **Matrix** | [`matrix`](Transform3D::matrix), [`calc_matrix`](Transform3D::calc_matrix) |
 ///
 /// # Example
@@ -26,7 +26,7 @@ use cgmath::*;
 /// use optic_render::Transform3D;
 ///
 /// let mut t = Transform3D::default();
-/// t.set_pos_all(10.0, 0.0, 0.0);
+/// t.set_position(10.0, 0.0, 0.0);
 /// t.rotate_y(90.0);
 /// t.calc_matrix();
 /// ```
@@ -73,31 +73,31 @@ impl Transform3D {
     /// Returns the position.
     pub fn pos(&self) -> Vector3<f32> { self.pos }
     /// Returns the rotation (Euler angles in degrees).
-    pub fn rot(&self) -> Vector3<f32> { self.rot }
+    pub fn rotation(&self) -> Vector3<f32> { self.rot }
     /// Returns the scale.
-    pub fn scale(&self) -> Vector3<f32> { self.scale }
+    pub fn scale_factor(&self) -> Vector3<f32> { self.scale }
     /// Returns the cached 4×4 transformation matrix.
     pub fn matrix(&self) -> Matrix4<f32> { self.matrix }
 
     /// Translates by `(x, y, z)`.
-    pub fn move_all(&mut self, x: f32, y: f32, z: f32) { self.pos += vec3(x, y, z); }
+    pub fn translate(&mut self, x: f32, y: f32, z: f32) { self.pos += vec3(x, y, z); }
     /// Translates along the X axis.
-    pub fn move_x(&mut self, x: f32) { self.pos.x += x; }
+    pub fn translate_x(&mut self, x: f32) { self.pos.x += x; }
     /// Translates along the Y axis.
-    pub fn move_y(&mut self, y: f32) { self.pos.y += y; }
+    pub fn translate_y(&mut self, y: f32) { self.pos.y += y; }
     /// Translates along the Z axis.
-    pub fn move_z(&mut self, z: f32) { self.pos.z += z; }
+    pub fn translate_z(&mut self, z: f32) { self.pos.z += z; }
     /// Sets the position to `(x, y, z)`.
-    pub fn set_pos_all(&mut self, x: f32, y: f32, z: f32) { self.pos = vec3(x, y, z); }
+    pub fn set_position(&mut self, x: f32, y: f32, z: f32) { self.pos = vec3(x, y, z); }
     /// Sets the X coordinate.
-    pub fn set_pos_x(&mut self, x: f32) { self.pos.x = x; }
+    pub fn set_position_x(&mut self, x: f32) { self.pos.x = x; }
     /// Sets the Y coordinate.
-    pub fn set_pos_y(&mut self, y: f32) { self.pos.y = y; }
+    pub fn set_position_y(&mut self, y: f32) { self.pos.y = y; }
     /// Sets the Z coordinate.
-    pub fn set_pos_z(&mut self, z: f32) { self.pos.z = z; }
+    pub fn set_position_z(&mut self, z: f32) { self.pos.z = z; }
 
     /// Rotates by `(x, y, z)` degrees.
-    pub fn rotate_all(&mut self, x: f32, y: f32, z: f32) { self.rot += vec3(x, y, z); }
+    pub fn rotate(&mut self, x: f32, y: f32, z: f32) { self.rot += vec3(x, y, z); }
     /// Rotates around the X axis.
     pub fn rotate_x(&mut self, x: f32) { self.rot.x += x; }
     /// Rotates around the Y axis.
@@ -105,18 +105,18 @@ impl Transform3D {
     /// Rotates around the Z axis.
     pub fn rotate_z(&mut self, z: f32) { self.rot.z += z; }
     /// Sets the rotation to `(x, y, z)` degrees.
-    pub fn set_rot_all(&mut self, x: f32, y: f32, z: f32) { self.rot = vec3(x, y, z); }
+    pub fn set_rotation(&mut self, x: f32, y: f32, z: f32) { self.rot = vec3(x, y, z); }
     /// Sets the X rotation.
-    pub fn set_rot_x(&mut self, x: f32) { self.rot.x = x; }
+    pub fn set_rotation_x(&mut self, x: f32) { self.rot.x = x; }
     /// Sets the Y rotation.
-    pub fn set_rot_y(&mut self, y: f32) { self.rot.y = y; }
+    pub fn set_rotation_y(&mut self, y: f32) { self.rot.y = y; }
     /// Sets the Z rotation.
-    pub fn set_rot_z(&mut self, z: f32) { self.rot.z = z; }
+    pub fn set_rotation_z(&mut self, z: f32) { self.rot.z = z; }
 
     /// Adds `(x, y, z)` to the scale.
-    pub fn scale_all(&mut self, x: f32, y: f32, z: f32) { self.scale += vec3(x, y, z); }
+    pub fn scale(&mut self, x: f32, y: f32, z: f32) { self.scale += vec3(x, y, z); }
     /// Adds `xyz` to all three scale components.
-    pub fn scale_same(&mut self, xyz: f32) { self.scale_all(xyz, xyz, xyz); }
+    pub fn scale_uniform(&mut self, xyz: f32) { self.scale(xyz, xyz, xyz); }
     /// Adds `x` to the scale X component.
     pub fn scale_x(&mut self, x: f32) { self.scale.x += x; }
     /// Adds `y` to the scale Y component.
@@ -124,9 +124,9 @@ impl Transform3D {
     /// Adds `z` to the scale Z component.
     pub fn scale_z(&mut self, z: f32) { self.scale.z += z; }
     /// Sets the scale to `(x, y, z)`.
-    pub fn set_scale_all(&mut self, x: f32, y: f32, z: f32) { self.scale = vec3(x, y, z); }
+    pub fn set_scale(&mut self, x: f32, y: f32, z: f32) { self.scale = vec3(x, y, z); }
     /// Sets all three scale components to `xyz`.
-    pub fn set_scale_same(&mut self, xyz: f32) { self.set_scale_all(xyz, xyz, xyz); }
+    pub fn set_scale_uniform(&mut self, xyz: f32) { self.set_scale(xyz, xyz, xyz); }
     /// Sets the scale X component.
     pub fn set_scale_x(&mut self, x: f32) { self.scale.x = x; }
     /// Sets the scale Y component.
@@ -162,73 +162,73 @@ mod tests {
     fn transform3d_default() {
         let t = Transform3D::default();
         assert_eq!(t.pos(), vec3(0.0, 0.0, 0.0));
-        assert_eq!(t.rot(), vec3(0.0, 0.0, 0.0));
-        assert_eq!(t.scale(), vec3(1.0, 1.0, 1.0));
+        assert_eq!(t.rotation(), vec3(0.0, 0.0, 0.0));
+        assert_eq!(t.scale_factor(), vec3(1.0, 1.0, 1.0));
         assert!(is_identity(&t.matrix()));
     }
 
     #[test]
     fn transform3d_set_pos() {
         let mut t = Transform3D::default();
-        t.set_pos_all(10.0, 20.0, 30.0);
+        t.set_position(10.0, 20.0, 30.0);
         assert_eq!(t.pos(), vec3(10.0, 20.0, 30.0));
     }
 
     #[test]
     fn transform3d_move() {
         let mut t = Transform3D::default();
-        t.move_all(1.0, 2.0, 3.0);
+        t.translate(1.0, 2.0, 3.0);
         assert_eq!(t.pos(), vec3(1.0, 2.0, 3.0));
-        t.move_x(10.0);
+        t.translate_x(10.0);
         assert_eq!(t.pos().x, 11.0);
-        t.move_y(20.0);
+        t.translate_y(20.0);
         assert_eq!(t.pos().y, 22.0);
-        t.move_z(30.0);
+        t.translate_z(30.0);
         assert_eq!(t.pos().z, 33.0);
     }
 
     #[test]
     fn transform3d_rotate() {
         let mut t = Transform3D::default();
-        t.rotate_all(90.0, 0.0, 0.0);
-        assert_eq!(t.rot(), vec3(90.0, 0.0, 0.0));
+        t.rotate(90.0, 0.0, 0.0);
+        assert_eq!(t.rotation(), vec3(90.0, 0.0, 0.0));
         t.rotate_x(45.0);
-        assert!(approx_eq(t.rot().x, 135.0));
+        assert!(approx_eq(t.rotation().x, 135.0));
         t.rotate_y(30.0);
-        assert!(approx_eq(t.rot().y, 30.0));
+        assert!(approx_eq(t.rotation().y, 30.0));
         t.rotate_z(60.0);
-        assert!(approx_eq(t.rot().z, 60.0));
+        assert!(approx_eq(t.rotation().z, 60.0));
     }
 
     #[test]
-    fn transform3d_set_rot() {
+    fn transform3d_set_rotation() {
         let mut t = Transform3D::default();
-        t.set_rot_all(45.0, 90.0, 180.0);
-        assert_eq!(t.rot(), vec3(45.0, 90.0, 180.0));
-        t.set_rot_x(10.0);
-        t.set_rot_y(20.0);
-        t.set_rot_z(30.0);
-        assert_eq!(t.rot(), vec3(10.0, 20.0, 30.0));
+        t.set_rotation(45.0, 90.0, 180.0);
+        assert_eq!(t.rotation(), vec3(45.0, 90.0, 180.0));
+        t.set_rotation_x(10.0);
+        t.set_rotation_y(20.0);
+        t.set_rotation_z(30.0);
+        assert_eq!(t.rotation(), vec3(10.0, 20.0, 30.0));
     }
 
     #[test]
     fn transform3d_scale() {
         let mut t = Transform3D::default();
-        t.set_scale_all(2.0, 3.0, 4.0);
-        assert_eq!(t.scale(), vec3(2.0, 3.0, 4.0));
+        t.set_scale(2.0, 3.0, 4.0);
+        assert_eq!(t.scale_factor(), vec3(2.0, 3.0, 4.0));
     }
 
     #[test]
     fn transform3d_scale_operations() {
         let mut t = Transform3D::default();
-        t.scale_all(1.0, 2.0, 3.0);
-        assert_eq!(t.scale(), vec3(2.0, 3.0, 4.0));
-        t.scale_same(5.0);
-        assert_eq!(t.scale(), vec3(7.0, 8.0, 9.0));
+        t.scale(1.0, 2.0, 3.0);
+        assert_eq!(t.scale_factor(), vec3(2.0, 3.0, 4.0));
+        t.scale_uniform(5.0);
+        assert_eq!(t.scale_factor(), vec3(7.0, 8.0, 9.0));
         t.scale_x(1.0);
         t.scale_y(1.0);
         t.scale_z(1.0);
-        assert_eq!(t.scale(), vec3(8.0, 9.0, 10.0));
+        assert_eq!(t.scale_factor(), vec3(8.0, 9.0, 10.0));
     }
 
     #[test]
@@ -237,7 +237,7 @@ mod tests {
         t.set_scale_x(5.0);
         t.set_scale_y(6.0);
         t.set_scale_z(7.0);
-        assert_eq!(t.scale(), vec3(5.0, 6.0, 7.0));
+        assert_eq!(t.scale_factor(), vec3(5.0, 6.0, 7.0));
     }
 
     #[test]
@@ -248,7 +248,7 @@ mod tests {
         assert!(is_identity(&t.matrix()));
 
         // translation
-        t.set_pos_all(1.0, 2.0, 3.0);
+        t.set_position(1.0, 2.0, 3.0);
         t.calc_matrix();
         let m = t.matrix();
         assert!(approx_eq(m[3][0], 1.0));
@@ -259,8 +259,8 @@ mod tests {
     #[test]
     fn transform3d_matrix_combines() {
         let mut t = Transform3D::default();
-        t.set_pos_all(10.0, 0.0, 0.0);
-        t.set_scale_all(2.0, 1.0, 1.0);
+        t.set_position(10.0, 0.0, 0.0);
+        t.set_scale(2.0, 1.0, 1.0);
         t.calc_matrix();
         let m = t.matrix();
         // translation x is 10, scale x is 2
@@ -269,9 +269,9 @@ mod tests {
     }
 
     #[test]
-    fn transform3d_set_scale_same() {
+    fn transform3d_set_scale_uniform() {
         let mut t = Transform3D::default();
-        t.set_scale_same(3.0);
-        assert_eq!(t.scale(), vec3(3.0, 3.0, 3.0));
+        t.set_scale_uniform(3.0);
+        assert_eq!(t.scale_factor(), vec3(3.0, 3.0, 3.0));
     }
 }

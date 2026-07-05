@@ -57,7 +57,7 @@ pub trait Runtime {
     ///
     /// Use this for one-time initialisation:
     ///
-    /// - Load meshes, textures, and shaders via `GPU::ship_*` methods
+    /// - Load meshes, textures, and shaders via `GPU::upload_*` methods
     /// - Set up initial game state
     /// - Connect to a server (see `Game::enable_networking`, requires `online` feature)
     ///

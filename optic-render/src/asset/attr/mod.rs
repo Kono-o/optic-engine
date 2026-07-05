@@ -5,10 +5,10 @@
 //! descriptors, and a set of concrete attribute containers:
 //!
 //! * [`Pos3DATTR`], [`Pos2DATTR`] — position
-//! * [`ColATTR`] — colour (RGBA)
-//! * [`UVMATTR`] — UV / texture coordinates
-//! * [`NrmATTR`] — normal vectors
-//! * [`IndATTR`] — index buffer
+//! * [`ColorATTR`] — colour (RGBA)
+//! * [`UVMapATTR`] — UV / texture coordinates
+//! * [`NormalATTR`] — normal vectors
+//! * [`IndicesATTR`] — index buffer
 //! * [`Rot3DATTR`], [`Rot2DATTR`] — rotation (quaternion / angle)
 //! * [`Scale3DATTR`], [`Scale2DATTR`] — scale
 //! * [`CustomATTR`] — user-defined arbitrary attribute data
