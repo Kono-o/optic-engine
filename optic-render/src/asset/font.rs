@@ -5,15 +5,23 @@ use optic_core::consts::{OPTIC_CACHE_VERSION, OPTIC_MAGIC, OFONT};
 use crate::asset::img::TextureFile;
 use crate::asset::msdf::{bake_msdf, bake_sdf_from_bitmap, extract_glyph_edges};
 
+/// Metrics for a single glyph in the atlas texture.
+///
+/// Stored per glyph-ID in [`BakedFont::glyphs`].
 #[derive(Clone, Debug)]
 pub struct GlyphMetrics {
+    /// UV rectangle `[u0, v0, u1, v1]` into the atlas texture.
     pub uv_rect: (f32, f32, f32, f32),
+    /// Glyph dimensions in pixels.
     pub size: Size2D,
+    /// Horizontal and vertical bearing offsets.
     pub bearing: (f32, f32),
+    /// Horizontal advance in font units.
     pub advance: f32,
 }
 
 impl GlyphMetrics {
+    /// Zero-initialized metrics.
     pub fn zero() -> Self {
         GlyphMetrics {
             uv_rect: (0.0, 0.0, 0.0, 0.0),
@@ -23,42 +31,71 @@ impl GlyphMetrics {
         }
     }
 
+    /// UV rect as `[u0, v0, u1, v1]`.
     pub fn uv(&self) -> [f32; 4] {
         [self.uv_rect.0, self.uv_rect.1, self.uv_rect.2, self.uv_rect.3]
     }
 
+    /// Size as `[w, h]` in pixels.
     pub fn size_arr(&self) -> [f32; 2] {
         [self.size.w as f32, self.size.h as f32]
     }
 
+    /// Bearing as `[x, y]`.
     pub fn bearing_arr(&self) -> [f32; 2] {
         [self.bearing.0, self.bearing.1]
     }
 }
 
+/// A single baked font style — atlas texture + glyph metrics + edge softness.
+///
+/// One `BakedFont` exists per style variant (regular, bold, italic, bold-italic)
+/// within a [`FontFamilyFile`].
 pub struct BakedFont {
+    /// Atlas texture containing all baked glyphs.
     pub atlas: TextureFile,
+    /// Glyph ID → metrics mapping.
     pub glyphs: HashMap<u32, GlyphMetrics>,
+    /// MSDF edge softness (controls anti-aliasing width).
     pub edge_softness: f32,
 }
 
+/// Complete font family file — metrics, style variants, and optional TTF source.
+///
+/// Load from disk with [`FontFamilyFile::from_disk`], or construct manually
+/// from TTF bytes or a bitmap layout.
 pub struct FontFamilyFile {
+    /// Line height in font units (TTF) or pixels (bitmap).
     pub line_height: f32,
+    /// Ascent above baseline.
     pub ascent: f32,
+    /// Descent below baseline (negative).
     pub descent: f32,
+    /// Regular style baked data.
     pub regular: BakedFont,
+    /// Bold style, if available.
     pub bold: Option<BakedFont>,
+    /// Italic style, if available.
     pub italic: Option<BakedFont>,
+    /// Bold-italic style, if available.
     pub bold_italic: Option<BakedFont>,
+    /// Raw TTF/OTF bytes (needed by rustybuzz for shaping).
     pub ttf_source: Option<Vec<u8>>,
+    /// Whether this is a bitmap font (codepoint-indexed vs glyph-indexed).
     pub is_bitmap: bool,
 }
 
+/// Describes a bitmap font layout for [`FontFamilyFile::from_bitmap_layout`].
 pub struct BitmapFontLayout {
+    /// Source texture containing the glyph tiles.
     pub texture: TextureFile,
+    /// Size of each glyph tile in pixels.
     pub glyph_size: Size2D,
+    /// Number of columns in the source texture grid.
     pub columns: u32,
+    /// Ordered list of Unicode codepoints (maps tile index → codepoint).
     pub codepoint_order: Vec<u32>,
+    /// Fixed advance in pixels, or `None` to use `glyph_size.w`.
     pub advance: Option<u32>,
 }
 
@@ -70,6 +107,10 @@ const STYLE_ITALIC: u8 = 1 << 2;
 const STYLE_BOLD_ITALIC: u8 = 1 << 3;
 
 impl FontFamilyFile {
+    /// Bakes a TTF font into an MSDF atlas for the given codepoint range.
+    ///
+    /// `codepoint_range` is `(start, end)` exclusive — e.g. `(32, 127)` for ASCII.
+    /// `atlas_resolution` is the atlas texture size in pixels (e.g. 1024).
     pub fn from_ttf_file(regular_bytes: &[u8], codepoint_range: (u32, u32), atlas_resolution: u32) -> OpticResult<Self> {
         let face = ttf_parser::Face::parse(regular_bytes, 0)
             .map_err(|_| OpticError::new(OpticErrorKind::Custom, "failed to parse TTF font"))?;
@@ -155,24 +196,30 @@ impl FontFamilyFile {
         })
     }
 
+    /// Adds a bold variant from TTF bytes.
     pub fn with_bold(mut self, bytes: &[u8]) -> OpticResult<Self> {
         let baked = bake_font_variant(bytes, &self.regular.glyphs, ATLAS_SIZE)?;
         self.bold = Some(baked);
         Ok(self)
     }
 
+    /// Adds an italic variant from TTF bytes.
     pub fn with_italic(mut self, bytes: &[u8]) -> OpticResult<Self> {
         let baked = bake_font_variant(bytes, &self.regular.glyphs, ATLAS_SIZE)?;
         self.italic = Some(baked);
         Ok(self)
     }
 
+    /// Adds a bold-italic variant from TTF bytes.
     pub fn with_bold_italic(mut self, bytes: &[u8]) -> OpticResult<Self> {
         let baked = bake_font_variant(bytes, &self.regular.glyphs, ATLAS_SIZE)?;
         self.bold_italic = Some(baked);
         Ok(self)
     }
 
+    /// Constructs a font family from a bitmap font layout.
+    ///
+    /// Generates an SDF atlas from the source bitmap tiles.
     pub fn from_bitmap_layout(layout: BitmapFontLayout) -> OpticResult<Self> {
         let tile_w = layout.glyph_size.w as f32;
         let tile_h = layout.glyph_size.h as f32;
@@ -259,6 +306,11 @@ impl FontFamilyFile {
         })
     }
 
+    /// Loads a font from disk.
+    ///
+    /// If `path` ends with `.ofont`, loads from cache directly.
+    /// Otherwise checks for an existing cache, bakes from TTF if missing,
+    /// and writes the cache for next time.
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         if path.ends_with(OFONT) {
             return Self::from_cached(path);
@@ -276,6 +328,7 @@ impl FontFamilyFile {
         Ok(family)
     }
 
+    /// Saves the font family to a binary `.ofont` cache file.
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
         let mut data = Vec::new();
         data.extend_from_slice(&OPTIC_MAGIC);
@@ -308,6 +361,7 @@ impl FontFamilyFile {
         optic_file::write_bytes(path, &data)
     }
 
+    /// Loads a font family from a binary `.ofont` cache file.
     pub fn from_cached(path: &str) -> OpticResult<Self> {
         let data = optic_file::read_bytes(path)?;
         let header = 8 + 2 + 12 + 2;
@@ -362,10 +416,12 @@ impl FontFamilyFile {
         Ok(FontFamilyFile { line_height, ascent, descent, regular, bold, italic, bold_italic, ttf_source, is_bitmap })
     }
 
+    /// Returns the built-in 8×8 bitmap fallback font (ASCII 32..126).
     pub fn fallback() -> OpticResult<Self> {
         fallback_font_family()
     }
 
+    /// Returns `line_height` for bitmap fonts or `1.0` for TTF fonts.
     pub fn units_per_em(&self) -> f32 {
         if self.is_bitmap {
             self.line_height

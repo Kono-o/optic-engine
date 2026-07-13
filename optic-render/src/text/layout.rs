@@ -10,61 +10,114 @@ use crate::text::bbcode::{
 
 const DEFAULT_COLOR: RGBA = WHITE;
 
+/// A shaped glyph with positioning offsets relative to the run origin.
 #[derive(Clone, Debug)]
 pub struct ShapedGlyph {
+    /// Glyph ID (unicode codepoint for bitmap fonts, ttf glyph index for TTF).
     pub gid: u32,
+    /// Byte offset of the cluster this glyph belongs to in the source text.
     pub cluster_start: usize,
+    /// Horizontal offset from the run origin (in font units).
     pub x_offset: f32,
+    /// Vertical offset from the baseline (in font units).
     pub y_offset: f32,
+    /// Horizontal advance (in font units).
     pub x_advance: f32,
 }
 
+/// A glyph positioned in layout space, ready for instanced rendering.
 #[derive(Clone, Debug)]
 pub struct LayoutGlyph {
+    /// Glyph ID.
     pub gid: u32,
+    /// X position in pixels.
     pub x: f32,
+    /// Y position in pixels.
     pub y: f32,
+    /// Width in pixels.
     pub width: f32,
+    /// Height in pixels.
     pub height: f32,
+    /// UV rectangle `[u0, v0, u1, v1]` into the atlas texture.
     pub uv: [f32; 4],
+    /// Glyph color.
     pub color: RGBA,
+    /// Packed style flags (`FAUX_BOLD | FAUX_ITALIC | BORDER`).
     pub style_flags: u32,
+    /// MSDF edge softness for this style.
     pub softness: f32,
+    /// Index of the span this glyph belongs to.
     pub span_index: usize,
+    /// Character index in the full text.
     pub char_index: usize,
+    /// The resolved text style for this glyph.
     pub style: TextStyle,
 }
 
+/// A decorative element (background, underline, strikethrough).
 #[derive(Clone, Debug)]
 pub struct LayoutDecoration {
+    /// X position in pixels.
     pub x: f32,
+    /// Y position in pixels.
     pub y: f32,
+    /// Width in pixels.
     pub width: f32,
+    /// Height in pixels.
     pub height: f32,
+    /// Decoration color.
     pub color: RGBA,
+    /// Index of the span this decoration belongs to.
     pub span_index: usize,
+    /// Character index in the full text.
     pub char_index: usize,
+    /// The resolved text style.
     pub style: TextStyle,
+    /// Type of decoration.
     pub kind: DecorationKind,
 }
 
+/// Type of text decoration.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DecorationKind {
+    /// Solid background behind the glyph run.
     Background,
+    /// Underline below the baseline.
     Underline,
+    /// Strikethrough through the middle of the glyph.
     Strikethrough,
 }
 
+/// Complete layout result from [`layout_text`].
+///
+/// Contains positioned glyphs, decoration quads, and dimensions.
+/// Pass to [`build_glyph_desc_2d`] / [`build_glyph_desc_3d`] to
+/// produce instance buffers for the GPU.
 #[derive(Clone, Debug)]
 pub struct TextLayout {
+    /// The parsed BBCode source.
     pub parsed: ParsedText,
+    /// Positioned glyphs ready for instanced rendering.
     pub glyphs: Vec<LayoutGlyph>,
+    /// Decoration quads (backgrounds, underlines, strikethroughs).
     pub decorations: Vec<LayoutDecoration>,
+    /// Total layout width in pixels.
     pub width: f32,
+    /// Total layout height in pixels.
     pub height: f32,
+    /// `true` if any glyph has a dynamic effect that changes over time.
     pub is_dynamic: bool,
 }
 
+/// Lays out a BBCode string against a [`FontFamily`].
+///
+/// Produces a [`TextLayout`] with positioned glyphs and decoration quads.
+///
+/// # Arguments
+/// * `raw` — BBCode-formatted text.
+/// * `font` — The font family to measure and look up glyphs from.
+/// * `base_size` — Base font size in pixels (scaled by per-span `[size]` tags).
+/// * `wrap_width` — Maximum line width in pixels. `0` disables wrapping.
 pub fn layout_text(
     raw: &str,
     font: &FontFamily,
@@ -235,6 +288,10 @@ fn push_decorations(
     }
 }
 
+/// Shapes a single [`StyledSpan`] into [`ShapedGlyph`]s.
+///
+/// For TTF fonts, uses `rustybuzz` for OpenType shaping (ligatures, kerning, reordering).
+/// For bitmap fonts, each character maps directly to one glyph.
 pub fn shape_span(span: &StyledSpan, font: &FontFamily) -> Vec<ShapedGlyph> {
     if font.is_bitmap() {
         return shape_bitmap(&span.text);
@@ -289,6 +346,11 @@ fn shape_ttf(span: &StyledSpan, font: &FontFamily) -> Vec<ShapedGlyph> {
         .collect()
 }
 
+/// Builds a 2D instance descriptor from a [`TextLayout`].
+///
+/// Each glyph becomes one instance with position, scale, color, UV rect,
+/// style flags, and softness. Dynamic effects (wave, shake, rainbow, pulse)
+/// are applied at the given `time` value.
 pub fn build_glyph_desc_2d(layout: &TextLayout, time: f32) -> InstanceDesc2D {
     let mut desc = InstanceDesc2D::empty();
     let mut uv_attr = CustomATTR::empty::<[f32; 4]>("iUVRect");
@@ -311,6 +373,9 @@ pub fn build_glyph_desc_2d(layout: &TextLayout, time: f32) -> InstanceDesc2D {
     desc
 }
 
+/// Builds a 3D instance descriptor from a [`TextLayout`].
+///
+/// Same as [`build_glyph_desc_2d`] but with Z=0 for 3D placement.
 pub fn build_glyph_desc_3d(layout: &TextLayout, time: f32) -> InstanceDesc3D {
     let mut desc = InstanceDesc3D::empty();
     let mut uv_attr = CustomATTR::empty::<[f32; 4]>("iUVRect");
@@ -333,6 +398,7 @@ pub fn build_glyph_desc_3d(layout: &TextLayout, time: f32) -> InstanceDesc3D {
     desc
 }
 
+/// Builds a 2D instance descriptor for decoration quads (backgrounds, underlines, strikethroughs).
 pub fn build_decoration_desc_2d(layout: &TextLayout, time: f32) -> InstanceDesc2D {
     let mut desc = InstanceDesc2D::empty();
 
@@ -346,6 +412,7 @@ pub fn build_decoration_desc_2d(layout: &TextLayout, time: f32) -> InstanceDesc2
     desc
 }
 
+/// Builds a 3D instance descriptor for decoration quads.
 pub fn build_decoration_desc_3d(layout: &TextLayout, time: f32) -> InstanceDesc3D {
     let mut desc = InstanceDesc3D::empty();
 

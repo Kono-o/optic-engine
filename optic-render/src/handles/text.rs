@@ -35,6 +35,19 @@ fn build_quad_mesh() -> crate::handles::MeshHandle {
 }
 
 /// Screen-space (HUD / UI) text rendered with instanced quads.
+///
+/// Each glyph is an instanced quad sampling from the font's MSDF atlas.
+/// Text supports BBCode markup, word wrapping, and dynamic effects
+/// (wave, shake, rainbow, pulse).
+///
+/// # Rendering
+///
+/// 1. Call [`set_text`](Text2D::set_text) to set/update the BBCode string.
+/// 2. Assign a shader via [`set_shader`](Text2D::set_shader) (the shader
+///    must accept `uProj`, `uLayer`, and texture sampler uniforms).
+/// 3. Call [`update`](Text2D::update) each frame with `game.time.elapsed()`
+///    to animate dynamic effects.
+/// 4. Call [`render`](Text2D::render) with the camera's projection matrix.
 pub struct Text2D {
     raw_text: String,
     font: FontFamily,
@@ -52,6 +65,7 @@ pub struct Text2D {
 }
 
 impl Text2D {
+    /// Creates a new text object with the given font.
     pub fn new(font: FontFamily) -> Self {
         let quad = build_quad_mesh();
 
@@ -77,45 +91,58 @@ impl Text2D {
         self.rebuild_layout()
     }
 
+    /// Returns the raw BBCode text.
     pub fn text(&self) -> &str {
         &self.raw_text
     }
 
+    /// Replaces the font and rebuilds the layout.
     pub fn set_font(&mut self, font: FontFamily) -> OpticResult<()> {
         self.font = font;
         self.rebuild_layout()
     }
 
+    /// Assigns a custom shader for rendering.
     pub fn set_shader(&mut self, shader: Shader) {
         self.shader = Some(shader);
     }
 
+    /// Removes the custom shader, disabling rendering.
     pub fn remove_shader(&mut self) {
         self.shader = None;
     }
 
+    /// Returns a reference to the current shader, if set.
     pub fn shader(&self) -> Option<&Shader> {
         self.shader.as_ref()
     }
 
+    /// Sets the base font size in pixels and rebuilds the layout.
     pub fn set_base_size(&mut self, size: f32) -> OpticResult<()> {
         self.base_size = size;
         self.rebuild_layout()
     }
 
+    /// Sets the word-wrap width in pixels. `0` disables wrapping.
     pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()> {
         self.wrap_width = width;
         self.rebuild_layout()
     }
 
+    /// Returns a reference to the 2D transform.
     pub fn transform(&self) -> &Transform2D {
         &self.transform
     }
 
+    /// Returns a mutable reference to the 2D transform.
     pub fn transform_mut(&mut self) -> &mut Transform2D {
         &mut self.transform
     }
 
+    /// Updates dynamic effects (wave, shake, rainbow, pulse) with the given time.
+    ///
+    /// Call this each frame with `game.time.elapsed()` to animate effects.
+    /// No-op for static text.
     pub fn update(&mut self, time: f32) -> OpticResult<()> {
         self.time = time;
         if !self.is_dynamic {
@@ -124,18 +151,24 @@ impl Text2D {
         self.write_buffers()
     }
 
+    /// Returns `true` if the text contains any dynamic effects.
     pub fn is_dynamic(&self) -> bool {
         self.is_dynamic
     }
 
+    /// Shows or hides the text.
     pub fn set_visibility(&mut self, visible: bool) {
         self.visibility = visible;
     }
 
+    /// Returns whether the text is visible.
     pub fn is_visible(&self) -> bool {
         self.visibility
     }
 
+    /// Renders the text with the given projection matrix.
+    ///
+    /// Does nothing if invisible, has no glyphs, or no shader is assigned.
     pub fn render(&mut self, proj: &Matrix4<f32>) {
         if !self.visibility {
             return;
@@ -177,6 +210,7 @@ impl Text2D {
         }
     }
 
+    /// Deletes the GPU mesh and font resources.
     pub fn delete(self) {
         self.quad_mesh.delete();
         self.font.delete();
@@ -214,6 +248,10 @@ impl Text2D {
 }
 
 /// World-space billboard text rendered via instanced quads.
+///
+/// Same API as [`Text2D`] but renders in 3D space with a view matrix.
+/// The text is positioned by the [`Transform3D`] and rendered as
+/// camera-facing quads.
 pub struct Text3D {
     raw_text: String,
     font: FontFamily,
@@ -231,6 +269,7 @@ pub struct Text3D {
 }
 
 impl Text3D {
+    /// Creates a new 3D text object with the given font.
     pub fn new(font: FontFamily) -> Self {
         let quad = build_quad_mesh();
 
@@ -251,50 +290,61 @@ impl Text3D {
         }
     }
 
+    /// Sets the BBCode text and rebuilds the layout.
     pub fn set_text(&mut self, text: &str) -> OpticResult<()> {
         self.raw_text = text.to_string();
         self.rebuild_layout()
     }
 
+    /// Returns the raw BBCode text.
     pub fn text(&self) -> &str {
         &self.raw_text
     }
 
+    /// Replaces the font and rebuilds the layout.
     pub fn set_font(&mut self, font: FontFamily) -> OpticResult<()> {
         self.font = font;
         self.rebuild_layout()
     }
 
+    /// Assigns a custom shader for rendering.
     pub fn set_shader(&mut self, shader: Shader) {
         self.shader = Some(shader);
     }
 
+    /// Removes the custom shader, disabling rendering.
     pub fn remove_shader(&mut self) {
         self.shader = None;
     }
 
+    /// Returns a reference to the current shader, if set.
     pub fn shader(&self) -> Option<&Shader> {
         self.shader.as_ref()
     }
 
+    /// Sets the base font size in pixels and rebuilds the layout.
     pub fn set_base_size(&mut self, size: f32) -> OpticResult<()> {
         self.base_size = size;
         self.rebuild_layout()
     }
 
+    /// Sets the word-wrap width in pixels. `0` disables wrapping.
     pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()> {
         self.wrap_width = width;
         self.rebuild_layout()
     }
 
+    /// Returns a reference to the 3D transform.
     pub fn transform(&self) -> &Transform3D {
         &self.transform
     }
 
+    /// Returns a mutable reference to the 3D transform.
     pub fn transform_mut(&mut self) -> &mut Transform3D {
         &mut self.transform
     }
 
+    /// Updates dynamic effects with the given time value.
     pub fn update(&mut self, time: f32) -> OpticResult<()> {
         self.time = time;
         if !self.is_dynamic {
@@ -303,18 +353,22 @@ impl Text3D {
         self.write_buffers()
     }
 
+    /// Returns `true` if the text contains any dynamic effects.
     pub fn is_dynamic(&self) -> bool {
         self.is_dynamic
     }
 
+    /// Shows or hides the text.
     pub fn set_visibility(&mut self, visible: bool) {
         self.visibility = visible;
     }
 
+    /// Returns whether the text is visible.
     pub fn is_visible(&self) -> bool {
         self.visibility
     }
 
+    /// Renders the text with view and projection matrices.
     pub fn render(&mut self, view: &Matrix4<f32>, proj: &Matrix4<f32>) {
         if !self.visibility {
             return;

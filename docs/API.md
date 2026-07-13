@@ -70,7 +70,18 @@
    - [Attribute Types](#attribute-types)
    - [DataType Trait](#datatype-trait)
    - [Center](#center)
-6. [Game Loop (`optic_loop`)](#6-game-loop-optic_loop)
+6. [Text Rendering (`optic_render::text`)](#6-text-rendering-optic_rendertext)
+   - [FontFamilyFile](#fontfamilyfile)
+   - [BakedFont](#bakedfont)
+   - [GlyphMetrics](#glyphmetrics)
+   - [BitmapFontLayout](#bitmapfontlayout)
+   - [FontFamily (GPU)](#fontfamily-gpu)
+   - [FontStyle](#fontstyle)
+   - [BBCode Types](#bbcode-types)
+   - [Layout Types](#layout-types)
+   - [Text2D](#text2d)
+   - [Text3D](#text3d)
+7. [Game Loop (`optic_loop`)](#7-game-loop-optic_loop)
    - [Runtime Trait](#runtime-trait)
    - [Game](#game)
    - [Time](#time)
@@ -79,18 +90,20 @@
    - [WindowState](#windowstate)
    - [GameLoop](#gameloop)
    - [Standalone `run()`](#standalone-run)
-7. [File Utilities (`optic_file`)](#7-file-utilities-optic_file)
-8. [Networking (`optic_online`)](#8-networking-optic_online)
+8. [File Utilities (`optic_file`)](#8-file-utilities-optic_file)
+9. [Networking (`optic_online`)](#9-networking-optic_online)
    - [NetworkConfig](#networkconfig)
    - [NetworkMode](#networkmode)
    - [PeerId](#peerid)
    - [NetworkEvents](#networkevents)
    - [NetworkHandle](#networkhandle)
-9. [Sound (`optic_sound`)](#9-sound-optic_sound)
+10. [Sound (`optic_sound`)](#10-sound-optic_sound)
    - [AudioEngine](#audioengine)
    - [SoundFile](#soundfile)
    - [Sound2D](#sound2d)
    - [Sound3D](#sound3d)
+11. [Signals (`optic_signals`)](#11-signals-optic_signals)
+   - [Signal](#signal)
 
 ---
 
@@ -414,6 +427,7 @@ pub const WAV: &str  = "wav";
 pub const OSHDR: &str  = "oshdr";
 pub const OMESH: &str  = "omesh";
 pub const OTXTR: &str  = "otxtr";
+pub const OFONT: &str  = "ofont";
 pub const OMUSIC: &str = "omusic";
 
 // Binary cache magic & version
@@ -1036,6 +1050,8 @@ pub struct GPU {
 | `pub fn current_render_target_size(&self) -> Size2D` | Size of current render target |
 | `pub fn render3d(&self, mesh: &Mesh3D, camera: &Camera)` | Render a 3D mesh |
 | `pub fn render2d(&self, mesh: &Mesh2D)` | Render a 2D mesh (orthographic) |
+| `pub fn render_text2d(&self, text: &mut Text2D, camera: &Camera)` | Render screen-space text |
+| `pub fn render_text3d(&self, text: &mut Text3D, camera: &Camera)` | Render world-space text |
 
 ### RenderContext
 
@@ -1235,6 +1251,7 @@ pub struct MeshHandle {
 | Signature | Description |
 |-----------|-------------|
 | `pub fn draw(&self)` | Issue the draw call (respects instancing when `instance_count > 0`) |
+| `pub fn draw_as(&self, mode: DrawMode)` | Draw with a specific draw mode (overrides the mesh's default) |
 | `pub fn set_instances(&mut self, buffer: &InstanceBuffer)` | Bind an instance buffer for instanced rendering |
 | `pub fn update_vertex<D: DataType>(&self, index: u32, attr_index: usize, value: D) -> OpticResult<()>` | Update a single vertex attribute |
 | `pub fn vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D>` | Read back a single vertex attribute |
@@ -1830,7 +1847,227 @@ pub enum Center {
 
 ---
 
-## 6. Game Loop (`optic_loop`)
+## 6. Text Rendering (`optic_render::text`)
+
+Text rendering uses BBCode markup, MSDF atlas fonts, and instanced quad drawing.
+
+### FontFamilyFile
+
+Asset-level font family — metrics, style variants, and optional TTF source bytes.
+
+```rust
+pub struct FontFamilyFile {
+    pub line_height: f32,
+    pub ascent: f32,
+    pub descent: f32,
+    pub regular: BakedFont,
+    pub bold: Option<BakedFont>,
+    pub italic: Option<BakedFont>,
+    pub bold_italic: Option<BakedFont>,
+    pub ttf_source: Option<Vec<u8>>,
+    pub is_bitmap: bool,
+}
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `pub fn from_ttf_file(regular_bytes: &[u8], codepoint_range: (u32, u32), atlas_resolution: u32) -> OpticResult<Self>` | Bake a TTF font into an MSDF atlas |
+| `pub fn with_bold(self, bytes: &[u8]) -> OpticResult<Self>` | Add bold variant from TTF bytes |
+| `pub fn with_italic(self, bytes: &[u8]) -> OpticResult<Self>` | Add italic variant from TTF bytes |
+| `pub fn with_bold_italic(self, bytes: &[u8]) -> OpticResult<Self>` | Add bold-italic variant from TTF bytes |
+| `pub fn from_bitmap_layout(layout: BitmapFontLayout) -> OpticResult<Self>` | Construct from a bitmap font layout |
+| `pub fn from_disk(path: &str) -> OpticResult<Self>` | Load from disk (auto-caches to `.ofont`) |
+| `pub fn save_cached(&self, path: &str) -> OpticResult<()>` | Save to binary `.ofont` cache |
+| `pub fn from_cached(path: &str) -> OpticResult<Self>` | Load from binary `.ofont` cache |
+| `pub fn fallback() -> OpticResult<Self>` | Built-in 8×8 bitmap fallback font (ASCII 32..126) |
+| `pub fn units_per_em(&self) -> f32` | `line_height` for bitmap, `1.0` for TTF |
+
+### BakedFont
+
+Single baked font style — atlas texture + glyph metrics.
+
+```rust
+pub struct BakedFont {
+    pub atlas: TextureFile,
+    pub glyphs: HashMap<u32, GlyphMetrics>,
+    pub edge_softness: f32,
+}
+```
+
+### GlyphMetrics
+
+Per-glyph atlas lookup data.
+
+```rust
+pub struct GlyphMetrics {
+    pub uv_rect: (f32, f32, f32, f32),
+    pub size: Size2D,
+    pub bearing: (f32, f32),
+    pub advance: f32,
+}
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `pub fn zero() -> Self` | Zero-initialized |
+| `pub fn uv(&self) -> [f32; 4]` | UV rect as array |
+| `pub fn size_arr(&self) -> [f32; 2]` | Size as `[w, h]` |
+| `pub fn bearing_arr(&self) -> [f32; 2]` | Bearing as `[x, y]` |
+
+### BitmapFontLayout
+
+Describes a bitmap font tile grid for `FontFamilyFile::from_bitmap_layout`.
+
+```rust
+pub struct BitmapFontLayout {
+    pub texture: TextureFile,
+    pub glyph_size: Size2D,
+    pub columns: u32,
+    pub codepoint_order: Vec<u32>,
+    pub advance: Option<u32>,
+}
+```
+
+### FontFamily (GPU)
+
+GPU-uploaded font family — one atlas per style variant.
+
+```rust
+pub struct FontFamily { /* private fields */ }
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `pub fn fallback_bitmap() -> OpticResult<Self>` | Built-in 8×8 bitmap font |
+| `pub fn line_height(&self) -> f32` | Line height in font units or pixels |
+| `pub fn ascent(&self) -> f32` | Ascent above baseline |
+| `pub fn descent(&self) -> f32` | Descent below baseline (negative) |
+| `pub fn is_bitmap(&self) -> bool` | Bitmap font? |
+| `pub fn units_per_em(&self) -> f32` | `line_height` (bitmap) or `1.0` (TTF) |
+| `pub fn face_data(&self) -> Option<&[u8]>` | Raw TTF bytes for rustybuzz |
+| `pub fn atlas(&self, style: FontStyle) -> &Texture2D` | Atlas for given style |
+| `pub fn primary_atlas(&self) -> &Texture2D` | Regular atlas |
+| `pub fn edge_softness(&self, style: FontStyle) -> f32` | MSDF edge softness |
+| `pub fn glyph(&self, style: FontStyle, gid: u32) -> Option<&GlyphMetrics>` | Look up glyph |
+| `pub fn has_style(&self, style: FontStyle) -> bool` | Has dedicated atlas? |
+| `pub fn resolve_style(&self, bold: bool, italic: bool) -> (FontStyle, bool, bool)` | Best style + faux flags |
+| `pub fn delete(self)` | Free GPU textures |
+
+### FontStyle
+
+```rust
+pub enum FontStyle { Regular, Bold, Italic, BoldItalic }
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `pub fn with_bold(self, bold: bool) -> Self` | Toggle bold |
+| `pub fn with_italic(self, italic: bool) -> Self` | Toggle italic |
+
+### BBCode Types
+
+```rust
+pub const FAUX_BOLD: u32;     // 1 << 0
+pub const FAUX_ITALIC: u32;   // 1 << 1
+pub const BORDER: u32;        // 1 << 2
+```
+
+| Type | Description |
+|------|-------------|
+| `TextStyle` | Resolved style for a span (bold, italic, color, bgcolor, strikethrough, underline, size, border, kerning, offset, wave, shake, rainbow, pulse) |
+| `StyledSpan` | `{ text: String, style: TextStyle }` |
+| `ParsedText` | `{ spans: Vec<StyledSpan>, is_dynamic: bool }` |
+| `WaveEffect` | `{ amp, freq, speed }` — sine wave Y displacement |
+| `ShakeEffect` | `{ amp, speed }` — random XY shake |
+| `RainbowEffect` | `{ speed }` — HSV rainbow color cycle |
+| `PulseEffect` | `{ amp, speed }` — sine scale pulse |
+
+| Function | Description |
+|----------|-------------|
+| `pub fn parse(raw: &str) -> OpticResult<ParsedText>` | Parse BBCode string |
+| `pub fn detect_dynamic(raw: &str) -> bool` | Has dynamic effects? |
+| `pub fn rainbow_color(effect, time, index, alpha) -> RGBA` | Compute rainbow color |
+
+**Supported tags:** `[b]`, `[i]`, `[color=#rrggbbaa]`, `[bgcolor=#rrggbbaa]`, `[size=N]`, `[s]`, `[u]`, `[border=#rrggbbaa,W]`, `[kerning=N]`, `[offset=x,y]`, `[wave amp=,freq=,speed=]`, `[shake amp=,speed=]`, `[rainbow speed=]`, `[pulse amp=,speed=]`
+
+### Layout Types
+
+| Type | Description |
+|------|-------------|
+| `ShapedGlyph` | `{ gid, cluster_start, x_offset, y_offset, x_advance }` |
+| `LayoutGlyph` | Positioned glyph with `{ gid, x, y, width, height, uv, color, style_flags, softness, span_index, char_index, style }` |
+| `LayoutDecoration` | Decoration quad with `{ x, y, width, height, color, span_index, char_index, style, kind }` |
+| `DecorationKind` | `Background \| Underline \| Strikethrough` |
+| `TextLayout` | Complete layout: `{ parsed, glyphs, decorations, width, height, is_dynamic }` |
+
+| Function | Description |
+|----------|-------------|
+| `pub fn layout_text(raw, font, base_size, wrap_width) -> OpticResult<TextLayout>` | Layout BBCode text |
+| `pub fn shape_span(span, font) -> Vec<ShapedGlyph>` | Shape a single span |
+| `pub fn build_glyph_desc_2d(layout, time) -> InstanceDesc2D` | 2D glyph instances |
+| `pub fn build_glyph_desc_3d(layout, time) -> InstanceDesc3D` | 3D glyph instances |
+| `pub fn build_decoration_desc_2d(layout, time) -> InstanceDesc2D` | 2D decoration instances |
+| `pub fn build_decoration_desc_3d(layout, time) -> InstanceDesc3D` | 3D decoration instances |
+
+### Text2D
+
+Screen-space (HUD / UI) text rendered with instanced quads.
+
+```rust
+pub struct Text2D { /* private fields */ }
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `pub fn new(font: FontFamily) -> Self` | Create with font |
+| `pub fn set_text(&mut self, text: &str) -> OpticResult<()>` | Set BBCode text, rebuild layout |
+| `pub fn text(&self) -> &str` | Get raw text |
+| `pub fn set_font(&mut self, font: FontFamily) -> OpticResult<()>` | Replace font |
+| `pub fn set_shader(&mut self, shader: Shader)` | Assign shader |
+| `pub fn remove_shader(&mut self)` | Remove shader |
+| `pub fn shader(&self) -> Option<&Shader>` | Current shader |
+| `pub fn set_base_size(&mut self, size: f32) -> OpticResult<()>` | Set base font size |
+| `pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()>` | Set wrap width (0 = no wrap) |
+| `pub fn transform(&self) -> &Transform2D` | 2D transform |
+| `pub fn transform_mut(&mut self) -> &mut Transform2D` | Mutable 2D transform |
+| `pub fn update(&mut self, time: f32) -> OpticResult<()>` | Update dynamic effects |
+| `pub fn is_dynamic(&self) -> bool` | Has dynamic effects? |
+| `pub fn set_visibility(&mut self, visible: bool)` | Show/hide |
+| `pub fn is_visible(&self) -> bool` | Is visible? |
+| `pub fn render(&mut self, proj: &Matrix4<f32>)` | Render with projection matrix |
+| `pub fn delete(self)` | Free GPU resources |
+
+### Text3D
+
+World-space billboard text. Same API as Text2D, plus a 3D transform.
+
+```rust
+pub struct Text3D { /* private fields */ }
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `pub fn new(font: FontFamily) -> Self` | Create with font |
+| `pub fn set_text(&mut self, text: &str) -> OpticResult<()>` | Set BBCode text |
+| `pub fn text(&self) -> &str` | Get raw text |
+| `pub fn set_font(&mut self, font: FontFamily) -> OpticResult<()>` | Replace font |
+| `pub fn set_shader(&mut self, shader: Shader)` | Assign shader |
+| `pub fn remove_shader(&mut self)` | Remove shader |
+| `pub fn shader(&self) -> Option<&Shader>` | Current shader |
+| `pub fn set_base_size(&mut self, size: f32) -> OpticResult<()>` | Set base font size |
+| `pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()>` | Set wrap width |
+| `pub fn transform(&self) -> &Transform3D` | 3D transform |
+| `pub fn transform_mut(&mut self) -> &mut Transform3D` | Mutable 3D transform |
+| `pub fn update(&mut self, time: f32) -> OpticResult<()>` | Update dynamic effects |
+| `pub fn is_dynamic(&self) -> bool` | Has dynamic effects? |
+| `pub fn set_visibility(&mut self, visible: bool)` | Show/hide |
+| `pub fn is_visible(&self) -> bool` | Is visible? |
+| `pub fn render(&mut self, view: &Matrix4<f32>, proj: &Matrix4<f32>)` | Render with view+projection |
+| `pub fn delete(self)` | Free GPU resources |
+
+---
+
+## 7. Game Loop (`optic_loop`)
 
 ### Runtime Trait
 
@@ -1922,6 +2159,29 @@ pub struct Timer {
 
 Repeating timers auto-reset on completion. Use `tick_and_emit` to bridge with the signal system.
 
+### Timers
+
+A collection of timers managed as a group.
+
+```rust
+pub struct Timers { /* private */ }
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `pub fn new() -> Self` | Empty collection |
+| `pub fn add(&mut self, timer: Timer)` | Add a timer |
+| `pub fn remove(&mut self, index: usize)` | Remove timer at index (panics if out of bounds) |
+| `pub fn clear(&mut self)` | Remove all timers |
+| `pub fn len(&self) -> usize` | Number of timers |
+| `pub fn is_empty(&self) -> bool` | Empty? |
+| `pub fn get(&self, index: usize) -> Option<&Timer>` | Get timer by index |
+| `pub fn get_mut(&mut self, index: usize) -> Option<&mut Timer>` | Get mutable timer by index |
+| `pub fn tick_all(&mut self, dt: f32) -> Vec<usize>` | Tick all active timers; returns indices that elapsed |
+| `pub fn tick_and_emit_all(&mut self, dt: f32, name: &str, events: &mut Events)` | Tick all and emit named events |
+| `pub fn iter(&self) -> impl Iterator<Item = &Timer>` | Iterator over all timers |
+| `pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Timer>` | Mutable iterator over all timers |
+
 ### FrameState
 
 ```rust
@@ -1972,7 +2232,7 @@ Convenience function for single-window applications. Errors are logged via `log_
 
 ---
 
-## 7. File Utilities (`optic_file`)
+## 8. File Utilities (`optic_file`)
 
 All functions are free functions in the `optic_file` crate:
 
@@ -1990,7 +2250,7 @@ All functions are free functions in the `optic_file` crate:
 
 ---
 
-## 8. Networking (`optic_online`)
+## 9. Networking (`optic_online`)
 
 Enables optional dedicated-server-style UDP multiplayer via the `online` feature on the `optic`
 facade crate (`optic = { features = ["online"] }`). The `NetworkEvents` field on `Events` is always
@@ -2101,7 +2361,7 @@ pub struct NetworkHandle { /* fields private */ }
 
 ---
 
-## 9. Sound (`optic_sound`)
+## 10. Sound (`optic_sound`)
 
 Enabled via the `sound` feature on the `optic` facade crate
 (`optic = { features = ["sound"] }`). `Game` always has a `pub audio: AudioEngine`
@@ -2215,4 +2475,26 @@ pub struct Sound3D {
 - The listener position is set via `AudioEngine::set_listener` or `set_listener_from_camera`.
 - `Sound3D::update()` must be called each frame to sync the emitter position.
 - `min_distance` / `max_distance` control attenuation: full volume within `min`, silent beyond `max`.
+
+---
+
+## 11. Signals (`optic_signals`)
+
+A dirty-flagged value wrapper that implements `DataType` for use as a custom instance attribute.
+
+### Signal
+
+```rust
+pub struct Signal<T> { /* private */ }
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `pub fn new(value: T) -> Self` | Create with initial value (dirty) |
+| `pub fn value(&self) -> &T` | Get reference to value |
+| `pub fn set(&mut self, value: T)` | Set value and mark dirty |
+| `pub fn is_dirty(&self) -> bool` | Has been set since last `clear_dirty`? |
+| `pub fn clear_dirty(&mut self)` | Clear dirty flag |
+
+`Signal<T: DataType>` implements `DataType`, so it can be stored directly in `CustomATTR` and uploaded as a per-instance buffer attribute. The `dirty` flag is useful for incremental GPU updates — only re-upload attributes that have changed.
 

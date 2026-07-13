@@ -4,6 +4,9 @@ use optic_core::{OpticResult, Size2D};
 use crate::asset::{FontFamilyFile, GlyphMetrics};
 use crate::Texture2D;
 
+/// Font style variant — regular, bold, italic, or bold-italic.
+///
+/// Used to select the correct atlas and glyph table from a [`FontFamily`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FontStyle {
     Regular,
@@ -13,6 +16,7 @@ pub enum FontStyle {
 }
 
 impl FontStyle {
+    /// Returns the style with bold toggled on or off.
     pub fn with_bold(self, bold: bool) -> Self {
         match (self, bold) {
             (Self::Regular, true) => Self::Bold,
@@ -23,6 +27,7 @@ impl FontStyle {
         }
     }
 
+    /// Returns the style with italic toggled on or off.
     pub fn with_italic(self, italic: bool) -> Self {
         match (self, italic) {
             (Self::Regular, true) => Self::Italic,
@@ -34,6 +39,14 @@ impl FontStyle {
     }
 }
 
+/// GPU-uploaded font family with atlas textures and glyph metrics.
+///
+/// Created from a [`FontFamilyFile`] via [`FontFamily::new`]. Holds one
+/// atlas texture per style variant (regular, bold, italic, bold-italic)
+/// and the corresponding glyph metric tables.
+///
+/// Use [`FontFamily::fallback_bitmap`] for a built-in 8×8 bitmap font
+/// when no TTF is available.
 #[derive(Clone, Debug)]
 pub struct FontFamily {
     line_height: f32,
@@ -56,6 +69,7 @@ pub struct FontFamily {
 }
 
 impl FontFamily {
+    /// Uploads a [`FontFamilyFile`] to the GPU.
     pub(crate) fn new(file: &FontFamilyFile) -> OpticResult<Self> {
         let regular_atlas = file.regular.atlas.upload();
         let bold_atlas = file.bold.as_ref().map(|b| b.atlas.upload());
@@ -108,6 +122,7 @@ impl FontFamily {
         }
     }
 
+    /// Creates a fallback 8×8 bitmap font covering ASCII 32..126.
     pub fn fallback_bitmap() -> OpticResult<Self> {
         Self::new(&FontFamilyFile::fallback()?)
     }
@@ -117,12 +132,19 @@ impl FontFamily {
         Self::new_no_upload(&FontFamilyFile::fallback().expect("fallback font"))
     }
 
+    /// Line height in font units (for TTF) or pixels (for bitmap).
     pub fn line_height(&self) -> f32 { self.line_height }
+    /// Ascent above baseline in font units or pixels.
     pub fn ascent(&self) -> f32 { self.ascent }
+    /// Descent below baseline (negative) in font units or pixels.
     pub fn descent(&self) -> f32 { self.descent }
 
+    /// Whether this is a bitmap font (codepoint-indexed) vs TTF (glyph-indexed).
     pub fn is_bitmap(&self) -> bool { self.is_bitmap }
 
+    /// Returns `line_height` for bitmap fonts or `1.0` for TTF fonts.
+    ///
+    /// Used as the denominator when converting font-unit metrics to pixels.
     pub fn units_per_em(&self) -> f32 {
         if self.is_bitmap {
             self.line_height
@@ -131,10 +153,12 @@ impl FontFamily {
         }
     }
 
+    /// Raw TTF/OTF font bytes, if available (needed by `rustybuzz` for shaping).
     pub fn face_data(&self) -> Option<&[u8]> {
         self.ttf_source.as_deref()
     }
 
+    /// Returns the atlas texture for the given style, falling back to regular.
     pub fn atlas(&self, style: FontStyle) -> &Texture2D {
         match style {
             FontStyle::Regular => &self.regular_atlas,
@@ -144,10 +168,12 @@ impl FontFamily {
         }
     }
 
+    /// Returns the regular (primary) atlas texture.
     pub fn primary_atlas(&self) -> &Texture2D {
         &self.regular_atlas
     }
 
+    /// MSDF edge softness for the given style.
     pub fn edge_softness(&self, style: FontStyle) -> f32 {
         match style {
             FontStyle::Regular => self.regular_softness,
@@ -157,6 +183,7 @@ impl FontFamily {
         }
     }
 
+    /// Looks up glyph metrics by glyph ID and style, falling back to regular.
     pub fn glyph(&self, style: FontStyle, gid: u32) -> Option<&GlyphMetrics> {
         let map = match style {
             FontStyle::Regular => &self.regular_glyphs,
@@ -171,6 +198,7 @@ impl FontFamily {
         }
     }
 
+    /// Whether the family has a dedicated atlas for the given style.
     pub fn has_style(&self, style: FontStyle) -> bool {
         match style {
             FontStyle::Regular => true,
@@ -180,6 +208,11 @@ impl FontFamily {
         }
     }
 
+    /// Resolves the best [`FontStyle`] for the requested bold/italic combination.
+    ///
+    /// Returns `(style, faux_bold, faux_italic)`. When the family lacks a
+    /// specific variant (e.g. bold), faux flags are set so the shader can
+    /// simulate the effect.
     pub fn resolve_style(&self, bold: bool, italic: bool) -> (FontStyle, bool, bool) {
         let mut style = FontStyle::Regular;
         let mut faux_bold = false;
@@ -213,6 +246,7 @@ impl FontFamily {
         (style, faux_bold, faux_italic)
     }
 
+    /// Deletes all GPU atlas textures.
     pub fn delete(self) {
         self.regular_atlas.delete();
         if let Some(atlas) = self.bold_atlas { atlas.delete(); }

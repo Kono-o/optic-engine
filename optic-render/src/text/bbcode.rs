@@ -2,33 +2,51 @@ use optic_core::{HSV, OpticError, OpticErrorKind, OpticResult, RGBA, BLACK, WHIT
 
 /// Style flags packed into instance `style_flags` (u32).
 pub const FAUX_BOLD: u32 = 1 << 0;
+/// Style flag: faux italic (skewed quads).
 pub const FAUX_ITALIC: u32 = 1 << 1;
+/// Style flag: border/outline pass.
 pub const BORDER: u32 = 1 << 2;
 
+/// Sine-wave vertical displacement effect.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WaveEffect {
+    /// Displacement amplitude in pixels.
     pub amp: f32,
+    /// Horizontal frequency (radians per character).
     pub freq: f32,
+    /// Animation speed multiplier.
     pub speed: f32,
 }
 
+/// Random shake displacement effect.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShakeEffect {
+    /// Displacement amplitude in pixels.
     pub amp: f32,
+    /// Animation speed multiplier.
     pub speed: f32,
 }
 
+/// HSV rainbow color-cycling effect.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RainbowEffect {
+    /// Hue rotation speed (full cycles per second).
     pub speed: f32,
 }
 
+/// Sine-wave scale pulse effect.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PulseEffect {
+    /// Scale amplitude (0.2 = ±20% size variation).
     pub amp: f32,
+    /// Animation speed multiplier.
     pub speed: f32,
 }
 
+/// Resolved style for a single span of text.
+///
+/// Created by the BBCode parser; fields represent the cumulative
+/// effect of all open tags at a given point in the markup.
 #[derive(Clone, Debug, Default)]
 pub struct TextStyle {
     pub bold: bool,
@@ -49,6 +67,7 @@ pub struct TextStyle {
 }
 
 impl TextStyle {
+    /// Returns `true` if any dynamic effect (wave, shake, rainbow, pulse) is active.
     pub fn is_dynamic(&self) -> bool {
         self.wave.is_some()
             || self.shake.is_some()
@@ -56,6 +75,7 @@ impl TextStyle {
             || self.pulse.is_some()
     }
 
+    /// Packs faux-bold, faux-italic, and border into a u32 style_flags value.
     pub fn style_flags(&self, faux_bold: bool, faux_italic: bool) -> u32 {
         let mut flags = 0u32;
         if faux_bold || (self.bold && faux_bold) {
@@ -71,15 +91,21 @@ impl TextStyle {
     }
 }
 
+/// A contiguous run of text sharing the same [`TextStyle`].
 #[derive(Clone, Debug)]
 pub struct StyledSpan {
+    /// The raw text content (no BBCode tags).
     pub text: String,
+    /// Resolved style for this span.
     pub style: TextStyle,
 }
 
+/// Result of parsing a BBCode string into styled spans.
 #[derive(Clone, Debug)]
 pub struct ParsedText {
+    /// Ordered list of styled text spans.
     pub spans: Vec<StyledSpan>,
+    /// `true` if any span contains a dynamic effect (wave/shake/rainbow/pulse).
     pub is_dynamic: bool,
 }
 
@@ -101,6 +127,18 @@ enum OpenTag {
     Pulse(PulseEffect),
 }
 
+/// Parses a BBCode string into a [`ParsedText`] with styled spans.
+///
+/// Returns an error if an unknown tag is encountered or a tag is left unclosed.
+///
+/// # Example
+///
+/// ```
+/// # use optic_render::text::bbcode::parse;
+/// let parsed = parse("[b]bold[/b] normal").unwrap();
+/// assert_eq!(parsed.spans.len(), 2);
+/// assert!(parsed.spans[0].style.bold);
+/// ```
 pub fn parse(raw: &str) -> OpticResult<ParsedText> {
     let mut spans = Vec::new();
     let mut current_text = String::new();
@@ -151,6 +189,9 @@ pub fn parse(raw: &str) -> OpticResult<ParsedText> {
     Ok(ParsedText { spans, is_dynamic })
 }
 
+/// Returns `true` if `raw` contains any dynamic BBCode effects (wave, shake, rainbow, pulse).
+///
+/// Falls back to substring matching if the BBCode is malformed.
 pub fn detect_dynamic(raw: &str) -> bool {
     parse(raw)
         .map(|p| p.is_dynamic)
@@ -385,7 +426,9 @@ fn pop_tag(stack: &mut Vec<TextStyle>, tag: &OpenTag) -> OpticResult<()> {
     Ok(())
 }
 
-/// Apply rainbow color for a glyph at the given index.
+/// Applies rainbow color for a glyph at the given index.
+///
+/// Uses HSV hue rotation: hue = `(time * speed * 360 + index * 30) % 360`.
 pub fn rainbow_color(effect: &RainbowEffect, time: f32, index: usize, alpha: f32) -> RGBA {
     let hue = (time * effect.speed * 360.0 + index as f32 * 30.0) % 360.0;
     HSV::new(hue, 1.0, 1.0).to_rgba_alpha(alpha)
