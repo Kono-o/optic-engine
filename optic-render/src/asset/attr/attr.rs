@@ -10,14 +10,14 @@ use crate::asset::attr::DataType;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ATTRName {
     Custom(String),
-    Pos2D,
-    Pos3D,
+    Position2D,
+    Position3D,
     Color,
     UVMap,
     Normal,
     Indices,
-    Rot3D,
-    Rot2D,
+    Rotation3D,
+    Rotation2D,
     Scale3D,
     Scale2D,
 }
@@ -26,14 +26,14 @@ impl ATTRName {
     /// Returns a human-readable label for this attribute name.
     pub fn as_string(&self) -> String {
         match self {
-            ATTRName::Pos2D => "pos2d".into(),
-            ATTRName::Pos3D => "pos3d".into(),
+            ATTRName::Position2D => "pos2d".into(),
+            ATTRName::Position3D => "pos3d".into(),
             ATTRName::Color => "color".into(),
             ATTRName::UVMap => "uv map".into(),
             ATTRName::Normal => "normals".into(),
             ATTRName::Indices => "indices".into(),
-            ATTRName::Rot3D => "rotation 3d".into(),
-            ATTRName::Rot2D => "rotation 2d".into(),
+            ATTRName::Rotation3D => "rotation 3d".into(),
+            ATTRName::Rotation2D => "rotation 2d".into(),
             ATTRName::Scale3D => "scale 3d".into(),
             ATTRName::Scale2D => "scale 2d".into(),
             ATTRName::Custom(n) => format!("{n}(custom)"),
@@ -54,10 +54,10 @@ pub struct ATTRInfo {
 }
 
 impl ATTRInfo {
-    /// Creates an empty descriptor with default name `Pos3D` and zero sizes.
-    pub fn new() -> Self {
+    /// Creates an empty descriptor with default name `Position3D` and zero sizes.
+    pub fn zero() -> Self {
         Self {
-            name: ATTRName::Pos3D,
+            name: ATTRName::Position3D,
             typ: ATTRType::F32,
             byte_count: 0,
             elem_count: 0,
@@ -95,7 +95,7 @@ macro_rules! attr {
 
         impl $attr {
             pub fn empty() -> Self {
-                let mut info = ATTRInfo::new();
+                let mut info = ATTRInfo::zero();
                 info.typ = <$typ>::ATTR_FORMAT;
                 info.byte_count = <$typ>::BYTE_COUNT;
                 info.elem_count = <$typ>::ELEM_COUNT;
@@ -127,9 +127,9 @@ macro_rules! attr {
 }
 
 // 3D position attribute (`[f32; 3]` per vertex).
-attr!(Pos3DATTR, [f32; 3], ATTRName::Pos3D);
+attr!(Pos3DATTR, [f32; 3], ATTRName::Position3D);
 // 2D position attribute (`[f32; 2]` per vertex).
-attr!(Pos2DATTR, [f32; 2], ATTRName::Pos2D);
+attr!(Pos2DATTR, [f32; 2], ATTRName::Position2D);
 // RGBA colour attribute (`[f32; 4]` per vertex).
 attr!(ColorATTR, [f32; 4], ATTRName::Color);
 // UV / texture coordinate attribute (`[f32; 2]` per vertex).
@@ -139,9 +139,9 @@ attr!(NormalATTR, [f32; 3], ATTRName::Normal);
 // Index attribute (`u32` per element).
 attr!(IndicesATTR, u32, ATTRName::Indices);
 // 3D rotation as a quaternion (`[f32; 4]` per instance).
-attr!(Rot3DATTR, [f32; 4], ATTRName::Rot3D);
+attr!(Rot3DATTR, [f32; 4], ATTRName::Rotation3D);
 // 2D rotation as a single angle in degrees (`f32` per instance).
-attr!(Rot2DATTR, f32, ATTRName::Rot2D);
+attr!(Rot2DATTR, f32, ATTRName::Rotation2D);
 // 3D scale (`[f32; 3]` per instance).
 attr!(Scale3DATTR, [f32; 3], ATTRName::Scale3D);
 // 2D scale (`[f32; 2]` per instance).
@@ -169,7 +169,7 @@ pub struct CustomATTR {
 impl CustomATTR {
     /// Creates an empty custom attribute with the given name and data type.
     pub fn empty<D: DataType>(name: &str) -> Self {
-        let mut info = ATTRInfo::new();
+        let mut info = ATTRInfo::zero();
         info.typ = D::ATTR_FORMAT;
         info.byte_count = D::BYTE_COUNT;
         info.elem_count = D::ELEM_COUNT;
@@ -209,15 +209,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn attr_info_empty() {
-        let info = ATTRInfo::new();
+    fn attr_info_zero() {
+        let info = ATTRInfo::zero();
         assert_eq!(info.byte_count, 0);
         assert_eq!(info.elem_count, 0);
     }
 
     #[test]
     fn attr_info_fmt_as_string() {
-        let mut info = ATTRInfo::new();
+        let mut info = ATTRInfo::zero();
         info.typ = ATTRType::F32;
         info.elem_count = 3;
         assert_eq!(info.fmt_as_string(), "[f32;3]");
@@ -227,14 +227,14 @@ mod tests {
 
     #[test]
     fn attr_name_as_string() {
-        assert_eq!(ATTRName::Pos2D.as_string(), "pos2d");
-        assert_eq!(ATTRName::Pos3D.as_string(), "pos3d");
+        assert_eq!(ATTRName::Position2D.as_string(), "pos2d");
+        assert_eq!(ATTRName::Position3D.as_string(), "pos3d");
         assert_eq!(ATTRName::Color.as_string(), "color");
         assert_eq!(ATTRName::UVMap.as_string(), "uv map");
         assert_eq!(ATTRName::Normal.as_string(), "normals");
         assert_eq!(ATTRName::Indices.as_string(), "indices");
-        assert_eq!(ATTRName::Rot3D.as_string(), "rotation 3d");
-        assert_eq!(ATTRName::Rot2D.as_string(), "rotation 2d");
+        assert_eq!(ATTRName::Rotation3D.as_string(), "rotation 3d");
+        assert_eq!(ATTRName::Rotation2D.as_string(), "rotation 2d");
         assert_eq!(ATTRName::Scale3D.as_string(), "scale 3d");
         assert_eq!(ATTRName::Scale2D.as_string(), "scale 2d");
         let custom = ATTRName::Custom("user_data".into());

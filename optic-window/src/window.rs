@@ -196,7 +196,7 @@ impl Window {
     }
 
     /// True if the window is resizable (live winit query).
-    pub fn resizable(&self) -> bool {
+    pub fn is_resizable(&self) -> bool {
         self.inner.as_ref().map_or(true, |w| w.is_resizable())
     }
 

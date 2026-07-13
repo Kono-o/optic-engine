@@ -26,18 +26,12 @@ use optic_render::Transform3D;
 pub struct Sound3D {
     handle: Option<StaticSoundHandle>,
     spatial_track: Option<SpatialTrackHandle>,
-    /// Volume level (0.0..1.0).
-    pub volume: f32,
-    /// Playback rate multiplier (1.0 = normal).
-    pub pitch: f32,
-    /// Whether the sound loops.
-    pub looping: bool,
-    /// World-space transform (only `.pos` is used for 3D audio).
-    pub transform: Transform3D,
-    /// Full volume within this radius.
-    pub min_distance: f32,
-    /// Fully attenuated beyond this radius.
-    pub max_distance: f32,
+    volume: f32,
+    pitch: f32,
+    looping: bool,
+    transform: Transform3D,
+    min_distance: f32,
+    max_distance: f32,
     duration_secs: f32,
 }
 
@@ -59,6 +53,21 @@ impl Sound3D {
             duration_secs,
         }
     }
+
+    /// Returns the volume (0.0..1.0).
+    pub fn volume(&self) -> f32 { self.volume }
+    /// Returns the pitch multiplier.
+    pub fn pitch(&self) -> f32 { self.pitch }
+    /// Returns whether the sound loops.
+    pub fn looping(&self) -> bool { self.looping }
+    /// Returns a reference to the world-space transform.
+    pub fn transform(&self) -> &Transform3D { &self.transform }
+    /// Returns a mutable reference to the world-space transform.
+    pub fn transform_mut(&mut self) -> &mut Transform3D { &mut self.transform }
+    /// Returns the minimum distance for 3D attenuation.
+    pub fn min_distance(&self) -> f32 { self.min_distance }
+    /// Returns the maximum distance for 3D attenuation.
+    pub fn max_distance(&self) -> f32 { self.max_distance }
 
     /// Starts or restarts playback.
     pub fn play(&mut self) {

@@ -47,12 +47,10 @@
 mod game;
 mod runtime;
 mod time;
-mod timer;
-
 pub use game::*;
 pub use runtime::*;
 pub use time::*;
-pub use timer::*;
+pub use optic_timer::{Timer, Timers};
 
 use gilrs::Gilrs;
 use optic_core::{log_error, CamProj, Coord2D, OpticResult, Size2D};
@@ -172,7 +170,7 @@ impl<F: FnMut(&mut FrameState)> GameLoop<F> {
         for ws in windows.iter_mut() {
             if let Some(handle) = ws.window.raw_handle() {
                 let size = ws.window.size();
-                let idx = gpu.ctx.attach_window(handle, size)
+                let idx = gpu.ctx_mut().attach_window(handle, size)
                     .map_err(|e| optic_core::OpticError::custom(&format!("attach window failed: {e}")))?;
                 ws.surface_index = idx;
             }
@@ -222,8 +220,8 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
             match &event {
                 WindowEvent::Resized(_size) => {
                     if let Some(gpu) = &mut self.gpu {
-                        gpu.ctx.resize_window(ws.surface_index, ws.window.size());
-                        let _ = gpu.ctx.make_current(ws.surface_index);
+                        gpu.ctx_mut().resize_window(ws.surface_index, ws.window.size());
+                        let _ = gpu.ctx().make_current(ws.surface_index);
                         self.camera.set_size(ws.window.size());
                     }
                 }

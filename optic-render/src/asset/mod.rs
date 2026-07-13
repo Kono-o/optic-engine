@@ -16,10 +16,14 @@
 //! descriptors used by meshes and instance buffers.
 
 pub mod attr;
+pub mod font;
 mod img;
 mod msh;
+mod msdf;
 mod shdr;
 
+pub use font::*;
 pub use img::*;
 pub use msh::*;
+pub use msdf::*;
 pub use shdr::*;

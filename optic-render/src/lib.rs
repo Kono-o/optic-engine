@@ -35,6 +35,7 @@ mod context;
 mod glraw;
 pub mod handles;
 mod renderer;
+pub mod text;
 mod util;
 
 pub mod asset;

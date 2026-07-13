@@ -65,6 +65,14 @@ impl OpticError {
     pub fn init(msg: &str) -> Self {
         OpticError::new(OpticErrorKind::Init, msg)
     }
+    /// Construct an [`OpenGL`](OpticErrorKind::OpenGL) error.
+    pub fn opengl(msg: &str) -> Self {
+        OpticError::new(OpticErrorKind::OpenGL, msg)
+    }
+    /// Construct a [`Framebuffer`](OpticErrorKind::Framebuffer) error.
+    pub fn framebuffer(msg: &str) -> Self {
+        OpticError::new(OpticErrorKind::Framebuffer, msg)
+    }
 }
 
 /// Convenience alias for `Result<T, OpticError>`.

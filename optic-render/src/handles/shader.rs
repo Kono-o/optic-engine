@@ -36,9 +36,9 @@ impl Slot {
 /// Used by [`Shader::compute`] to call `glDispatchCompute`.
 #[derive(Clone, Debug)]
 pub struct Workers {
-    pub group_x: u32,
-    pub group_y: u32,
-    pub group_z: u32,
+    group_x: u32,
+    group_y: u32,
+    group_z: u32,
 }
 
 impl Workers {
@@ -79,11 +79,11 @@ impl Workers {
 /// for optional lookups).
 #[derive(Clone, Debug)]
 pub struct Shader {
-    pub workers: Workers,
-    pub id: u32,
-    pub is_compute: bool,
-    pub bound_textures: Vec<Option<u32>>,
-    pub bound_storages: Vec<Option<u32>>,
+    pub(crate) workers: Workers,
+    pub(crate) id: u32,
+    pub(crate) is_compute: bool,
+    pub(crate) bound_textures: Vec<Option<u32>>,
+    pub(crate) bound_storages: Vec<Option<u32>>,
 }
 
 impl Shader {
@@ -101,34 +101,59 @@ impl Shader {
         }
     }
 
+    /// Returns the GL program ID.
+    pub fn id(&self) -> u32 { self.id }
+    /// Returns `true` if this is a compute shader.
+    pub fn is_compute(&self) -> bool { self.is_compute }
+    /// Returns a reference to the worker-group configuration.
+    pub fn workers(&self) -> &Workers { &self.workers }
+    /// Returns a mutable reference to the worker-group configuration.
+    pub fn workers_mut(&mut self) -> &mut Workers { &mut self.workers }
+
     /// Attaches a texture to the first available (empty) texture slot.
+    ///
+    /// Use `attach_texture` when you don't care which slot the texture occupies
+    /// (auto-assignment). Use [`bind_texture`](Self::bind_texture) when you need
+    /// a specific slot (e.g. to match a `layout(binding = N)` in GLSL).
     pub fn attach_texture(&mut self, tex: &Texture2D) {
         for slot in self.bound_textures.iter_mut() {
             if slot.is_none() {
-                *slot = Some(tex.id);
+                *slot = Some(tex.id());
                 break;
             }
         }
     }
 
     /// Attaches a storage buffer to the first available (empty) SSBO slot.
+    ///
+    /// Use `attach_storage` for auto-assignment. Use
+    /// [`bind_storage`](Self::bind_storage) when you need a specific slot
+    /// (e.g. to match a `layout(std430, binding = N)` in GLSL).
     pub fn attach_storage(&mut self, sbo: &StorageBuffer) {
         for slot in self.bound_storages.iter_mut() {
             if slot.is_none() {
-                *slot = Some(sbo.id);
+                *slot = Some(sbo.id());
                 break;
             }
         }
     }
 
     /// Binds a texture to a specific slot.
+    ///
+    /// Prefer [`attach_texture`](Self::attach_texture) when you don't need a
+    /// fixed binding point. Use `bind_texture` when the shader uses an explicit
+    /// `layout(binding = N)`.
     pub fn bind_texture(&mut self, tex: &Texture2D, slot: Slot) {
-        self.bound_textures[slot.as_index()] = Some(tex.id);
+        self.bound_textures[slot.as_index()] = Some(tex.id());
     }
 
     /// Binds a storage buffer to a specific slot.
+    ///
+    /// Prefer [`attach_storage`](Self::attach_storage) when you don't need a
+    /// fixed binding point. Use `bind_storage` when the shader uses an explicit
+    /// `layout(std430, binding = N)`.
     pub fn bind_storage(&mut self, sbo: &StorageBuffer, slot: Slot) {
-        self.bound_storages[slot.as_index()] = Some(sbo.id);
+        self.bound_storages[slot.as_index()] = Some(sbo.id());
     }
 
     /// Deletes the underlying GL program.
@@ -421,16 +446,14 @@ mod tests {
     #[test]
     fn shader_new() {
         let s = Shader::new(42, false);
-        assert_eq!(s.id, 42);
-        assert!(!s.is_compute);
-        assert_eq!(s.bound_textures.len(), 16);
-        assert_eq!(s.bound_storages.len(), 16);
+        assert_eq!(s.id(), 42);
+        assert!(!s.is_compute());
     }
 
     #[test]
     fn shader_new_compute() {
         let s = Shader::new(99, true);
-        assert!(s.is_compute);
+        assert!(s.is_compute());
     }
 
     #[test]

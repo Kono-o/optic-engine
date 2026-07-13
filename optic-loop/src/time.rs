@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::time::Instant;
 
 /// Frame timing data — delta time, smoothed FPS, and elapsed wall-clock time.
@@ -49,8 +50,7 @@ pub struct Time {
     pub prev_time: Instant,
     pub prev_sec: Instant,
     pub local_tick: u32,
-    prev_deltas: Vec<f64>,
-    prev_deltas_size: usize,
+    prev_deltas: VecDeque<f64>,
 }
 
 impl Time {
@@ -68,8 +68,7 @@ impl Time {
             prev_time: now,
             prev_sec: now,
             local_tick: 0,
-            prev_deltas: Vec::with_capacity(32),
-            prev_deltas_size: 32,
+            prev_deltas: VecDeque::with_capacity(32),
         }
     }
 
@@ -90,9 +89,9 @@ impl Time {
         self.delta = now.duration_since(self.prev_time).as_secs_f64();
         self.prev_time = now;
 
-        self.prev_deltas.push(self.delta);
-        if self.prev_deltas.len() > self.prev_deltas_size {
-            self.prev_deltas.remove(0);
+        self.prev_deltas.push_back(self.delta);
+        if self.prev_deltas.len() > 32 {
+            self.prev_deltas.pop_front();
         }
 
         let avg = self.prev_deltas.iter().sum::<f64>() / self.prev_deltas.len() as f64;

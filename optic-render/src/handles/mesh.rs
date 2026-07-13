@@ -7,7 +7,7 @@ use gl::types::{GLenum, GLint, GLsizei, GLsizeiptr};
 use std::ffi::c_void;
 use std::ptr;
 
-use crate::asset::attr::ATTRInfo;
+use crate::asset::attr::{ATTRInfo, ATTRName};
 use crate::asset::attr::DataType;
 use crate::handles::instance::InstanceBuffer;
 use crate::handles::Shader;
@@ -16,49 +16,48 @@ use crate::handles::Shader;
 ///
 /// Created by [`Mesh3DFile::upload`](crate::asset::Mesh3DFile::upload) or
 /// [`Mesh2DFile::upload`](crate::asset::Mesh2DFile::upload). Contains the vertex
-/// layouts, draw mode, index state, and instance buffer binding.
+/// layouts, index state, and instance buffer binding.
 #[derive(Clone, Debug)]
 pub struct MeshHandle {
-    pub layouts: Vec<(ATTRInfo, u32)>,
-    pub draw_mode: DrawMode,
-    pub has_indices: bool,
-    pub vertex_count: u32,
-    pub index_count: u32,
-    pub vao_id: u32,
-    pub vertex_buffer_id: u32,
-    pub index_buffer_id: u32,
-    pub vertex_stride: u32,
-    pub instance_buf_id: u32,
-    pub instance_count: u32,
+    pub(crate) layouts: Vec<(ATTRInfo, u32)>,
+    pub(crate) has_indices: bool,
+    pub(crate) vertex_count: u32,
+    pub(crate) index_count: u32,
+    pub(crate) vao_id: u32,
+    pub(crate) vertex_buffer_id: u32,
+    pub(crate) index_buffer_id: u32,
+    pub(crate) vertex_stride: u32,
+    pub(crate) instance_buf_id: u32,
+    pub(crate) instance_count: u32,
 }
 
 impl MeshHandle {
-    /// Issues the draw call for this mesh (instanced or non-instanced, indexed or array).
-    pub fn draw(&self) {
+    /// Issues the draw call for this mesh with the given draw mode.
+    pub fn draw_as(&self, mode: DrawMode) {
         GL::bind_vao(self.vao_id);
         if self.instance_buf_id != 0 && self.instance_count > 0 {
             match self.has_indices {
-                false => self.draw_array_instanced(),
+                false => self.draw_array_instanced(mode),
                 true => {
                     GL::bind_ebo(self.index_buffer_id);
-                    self.draw_indexed_instanced();
+                    self.draw_indexed_instanced(mode);
                 }
             }
         } else {
             match self.has_indices {
-                false => self.draw_array(),
+                false => self.draw_array(mode),
                 true => {
                     GL::bind_ebo(self.index_buffer_id);
-                    self.draw_indexed();
+                    self.draw_indexed(mode);
                 }
             }
         }
     }
 
-    fn draw_indexed(&self) {
+    fn draw_indexed(&self, mode: DrawMode) {
         unsafe {
             gl::DrawElements(
-                match_draw_mode(&self.draw_mode),
+                match_draw_mode(&mode),
                 self.index_count as GLsizei,
                 gl::UNSIGNED_INT,
                 ptr::null(),
@@ -66,16 +65,16 @@ impl MeshHandle {
         }
     }
 
-    fn draw_array(&self) {
+    fn draw_array(&self, mode: DrawMode) {
         unsafe {
-            gl::DrawArrays(match_draw_mode(&self.draw_mode), 0, self.vertex_count as GLsizei);
+            gl::DrawArrays(match_draw_mode(&mode), 0, self.vertex_count as GLsizei);
         }
     }
 
-    fn draw_indexed_instanced(&self) {
+    fn draw_indexed_instanced(&self, mode: DrawMode) {
         unsafe {
             gl::DrawElementsInstanced(
-                match_draw_mode(&self.draw_mode),
+                match_draw_mode(&mode),
                 self.index_count as GLsizei,
                 gl::UNSIGNED_INT,
                 ptr::null(),
@@ -84,16 +83,37 @@ impl MeshHandle {
         }
     }
 
-    fn draw_array_instanced(&self) {
+    fn draw_array_instanced(&self, mode: DrawMode) {
         unsafe {
             gl::DrawArraysInstanced(
-                match_draw_mode(&self.draw_mode),
+                match_draw_mode(&mode),
                 0,
                 self.vertex_count as GLsizei,
                 self.instance_count as GLsizei,
             );
         }
     }
+
+    /// Returns the vertex layouts.
+    pub fn layouts(&self) -> &Vec<(ATTRInfo, u32)> { &self.layouts }
+    /// Returns `true` if this mesh uses indexed drawing.
+    pub fn has_indices(&self) -> bool { self.has_indices }
+    /// Returns the vertex count.
+    pub fn vertex_count(&self) -> u32 { self.vertex_count }
+    /// Returns the index count.
+    pub fn index_count(&self) -> u32 { self.index_count }
+    /// Returns the VAO ID.
+    pub fn vao_id(&self) -> u32 { self.vao_id }
+    /// Returns the vertex buffer ID.
+    pub fn vertex_buffer_id(&self) -> u32 { self.vertex_buffer_id }
+    /// Returns the index buffer ID.
+    pub fn index_buffer_id(&self) -> u32 { self.index_buffer_id }
+    /// Returns the vertex stride in bytes.
+    pub fn vertex_stride(&self) -> u32 { self.vertex_stride }
+    /// Returns the instance buffer ID (0 if not instanced).
+    pub fn instance_buf_id(&self) -> u32 { self.instance_buf_id }
+    /// Returns the instance count (0 if not instanced).
+    pub fn instance_count(&self) -> u32 { self.instance_count }
 
     /// Binds an instance buffer to this mesh for instanced rendering.
     ///
@@ -202,6 +222,38 @@ impl MeshHandle {
         Ok(unsafe { std::ptr::read_unaligned(data.as_ptr() as *const D) })
     }
 
+    /// Finds the attribute index for a given name.
+    fn attr_index_by_name(&self, name: &str) -> Option<usize> {
+        self.layouts.iter().position(|(info, _)| match &info.name {
+            ATTRName::Custom(n) => n == name,
+            other => other.as_string() == name,
+        })
+    }
+
+    /// Updates a vertex attribute by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no attribute matches `name` or the type does not
+    /// match.
+    pub fn update_custom_vertex<D: DataType>(&self, index: u32, name: &str, value: D) -> OpticResult<()> {
+        let attr_index = self.attr_index_by_name(name)
+            .ok_or_else(|| OpticError::new(OpticErrorKind::Custom, &format!("vertex attribute \"{name}\" not found")))?;
+        self.update_vertex(index, attr_index, value)
+    }
+
+    /// Reads a vertex attribute by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no attribute matches `name` or the type does not
+    /// match.
+    pub fn custom_vertex<D: DataType>(&self, index: u32, name: &str) -> OpticResult<D> {
+        let attr_index = self.attr_index_by_name(name)
+            .ok_or_else(|| OpticError::new(OpticErrorKind::Custom, &format!("vertex attribute \"{name}\" not found")))?;
+        self.vertex(index, attr_index)
+    }
+
     /// Writes raw vertex data starting at `start_vertex`.
     ///
     /// `data` length must be a multiple of the vertex stride.
@@ -262,22 +314,40 @@ macro_rules! mesh_struct {
         /// Cloning is cheap — the handle shares the same GPU buffers.
         #[derive(Clone, Debug)]
         pub struct $mesh {
-            pub visibility: bool,
-            pub handle: MeshHandle,
-            pub shader: Option<Shader>,
-            pub transform: $transform,
-            pub draw_mode: DrawMode,
+            visibility: bool,
+            handle: MeshHandle,
+            shader: Option<Shader>,
+            transform: $transform,
+            draw_mode: DrawMode,
         }
 
         impl $mesh {
+            /// Creates a new mesh from a GPU handle with default settings.
+            pub fn new(handle: MeshHandle) -> Self {
+                Self {
+                    visibility: true,
+                    handle,
+                    shader: None,
+                    transform: <$transform>::default(),
+                    draw_mode: DrawMode::Triangles,
+                }
+            }
             /// Attaches a shader to this mesh.
             pub fn set_shader(&mut self, shader: Shader) { self.shader = Some(shader); }
             /// Detaches the current shader.
             pub fn remove_shader(&mut self) { self.shader = None; }
+            /// Returns a reference to the shader, if any.
+            pub fn shader(&self) -> Option<&Shader> { self.shader.as_ref() }
+            /// Returns a reference to the mesh handle.
+            pub fn handle(&self) -> &MeshHandle { &self.handle }
+            /// Returns a reference to the transform.
+            pub fn transform(&self) -> &$transform { &self.transform }
+            /// Returns a mutable reference to the transform.
+            pub fn transform_mut(&mut self) -> &mut $transform { &mut self.transform }
             /// Returns the current draw mode.
-            pub fn draw_mode(&self) -> DrawMode { self.handle.draw_mode }
+            pub fn draw_mode(&self) -> DrawMode { self.draw_mode }
             /// Sets the draw mode.
-            pub fn set_draw_mode(&mut self, draw_mode: DrawMode) { self.handle.draw_mode = draw_mode; }
+            pub fn set_draw_mode(&mut self, draw_mode: DrawMode) { self.draw_mode = draw_mode; }
             /// Returns the index count.
             pub fn index_count(&self) -> u32 { self.handle.index_count }
             /// Returns the vertex count.
@@ -339,7 +409,7 @@ impl Mesh3D {
 
         shader.bind_textures();
         shader.bind_storages();
-        self.handle.draw();
+        self.handle.draw_as(self.draw_mode);
     }
 }
 
@@ -379,7 +449,7 @@ impl Mesh2D {
 
         shader.bind_textures();
         shader.bind_storages();
-        self.handle.draw();
+        self.handle.draw_as(self.draw_mode);
     }
 }
 
@@ -484,8 +554,8 @@ pub fn fill_index_buffer(id: u32, data: &[u32]) {
 /// let data = ssbo.fetch();
 /// ```
 pub struct StorageBuffer {
-    pub id: u32,
-    pub size: usize,
+    pub(crate) id: u32,
+    pub(crate) size: usize,
 }
 
 impl StorageBuffer {
@@ -495,6 +565,11 @@ impl StorageBuffer {
         resize_storage_buffer(id, size);
         Self { id, size }
     }
+
+    /// Returns the GL buffer ID.
+    pub fn id(&self) -> u32 { self.id }
+    /// Returns the buffer byte size.
+    pub fn size(&self) -> usize { self.size }
 
     /// Resizes the buffer (contents become undefined if size changed).
     pub fn resize(&mut self, size: usize) {
@@ -613,7 +688,6 @@ mod tests {
     fn mesh_handle_fields() {
         let mh = MeshHandle {
             layouts: vec![],
-            draw_mode: DrawMode::Triangles,
             has_indices: false,
             vertex_count: 42,
             index_count: 0,
@@ -632,7 +706,6 @@ mod tests {
     fn mesh3d_default_state() {
         let mh = MeshHandle {
             layouts: vec![],
-            draw_mode: DrawMode::Triangles,
             has_indices: true,
             vertex_count: 3,
             index_count: 3,
@@ -663,7 +736,6 @@ mod tests {
     fn mesh3d_visibility_toggle() {
         let mh = MeshHandle {
             layouts: vec![],
-            draw_mode: DrawMode::Triangles,
             has_indices: false,
             vertex_count: 3,
             index_count: 0,
@@ -692,7 +764,6 @@ mod tests {
     fn mesh3d_set_draw_mode() {
         let mh = MeshHandle {
             layouts: vec![],
-            draw_mode: DrawMode::Triangles,
             has_indices: false,
             vertex_count: 3,
             index_count: 0,
@@ -718,7 +789,6 @@ mod tests {
     fn mesh3d_shader_management() {
         let mh = MeshHandle {
             layouts: vec![],
-            draw_mode: DrawMode::Triangles,
             has_indices: false,
             vertex_count: 3,
             index_count: 0,
@@ -749,7 +819,6 @@ mod tests {
     fn mesh3d_update_calc_matrix() {
         let mh = MeshHandle {
             layouts: vec![],
-            draw_mode: DrawMode::Triangles,
             has_indices: false,
             vertex_count: 3,
             index_count: 0,
@@ -778,7 +847,6 @@ mod tests {
     fn mesh3d_is_empty_true() {
         let mh = MeshHandle {
             layouts: vec![],
-            draw_mode: DrawMode::Triangles,
             has_indices: false,
             vertex_count: 0,
             index_count: 0,
@@ -804,7 +872,6 @@ mod tests {
     fn mesh2d_default_state() {
         let mh = MeshHandle {
             layouts: vec![],
-            draw_mode: DrawMode::Triangles,
             has_indices: true,
             vertex_count: 4,
             index_count: 6,

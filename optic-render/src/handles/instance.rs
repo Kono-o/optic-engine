@@ -1095,6 +1095,78 @@ impl InstanceBuffer {
         Ok(idx)
     }
 
+    /// Pushes a new instance with the given position and default values for all
+    /// other attributes (rotation = identity quaternion, scale = (1,1,1), etc.).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer has no position attribute.
+    pub fn push_position(&mut self, pos: Vector3<f32>) -> OpticResult<u32> {
+        if !self.kind.has_pos {
+            return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no position attribute"));
+        }
+        let stride = self.stride as usize;
+        let mut bytes = vec![0u8; stride];
+        let off = self.compute_attr_offset(0);
+        bytes[off..off + 12].copy_from_slice(&[
+            pos.x.to_le_bytes(),
+            pos.y.to_le_bytes(),
+            pos.z.to_le_bytes(),
+        ].concat());
+        self.push_raw(&bytes)
+    }
+
+    /// Pushes a new instance with position, rotation, and scale all set.
+    ///
+    /// Rotation is a quaternion stored as `[x, y, z, w]` (matching
+    /// [`set_rotation`](Self::set_rotation)).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the buffer lacks position, rotation, or scale
+    /// attributes.
+    pub fn push_transform(
+        &mut self,
+        pos: Vector3<f32>,
+        rot: Vector4<f32>,
+        scale: Vector3<f32>,
+    ) -> OpticResult<u32> {
+        if !self.kind.has_pos {
+            return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no position attribute"));
+        }
+        if !self.kind.has_rot {
+            return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no rotation attribute"));
+        }
+        if !self.kind.has_scale {
+            return Err(OpticError::new(OpticErrorKind::Custom, "instance buffer has no scale attribute"));
+        }
+        let stride = self.stride as usize;
+        let mut bytes = vec![0u8; stride];
+
+        let pos_off = self.compute_attr_offset(0);
+        let rot_off = self.compute_attr_offset(1);
+        let scale_off = self.compute_attr_offset(2);
+
+        bytes[pos_off..pos_off + 12].copy_from_slice(&[
+            pos.x.to_le_bytes(),
+            pos.y.to_le_bytes(),
+            pos.z.to_le_bytes(),
+        ].concat());
+        bytes[rot_off..rot_off + 16].copy_from_slice(&[
+            rot.x.to_le_bytes(),
+            rot.y.to_le_bytes(),
+            rot.z.to_le_bytes(),
+            rot.w.to_le_bytes(),
+        ].concat());
+        bytes[scale_off..scale_off + 12].copy_from_slice(&[
+            scale.x.to_le_bytes(),
+            scale.y.to_le_bytes(),
+            scale.z.to_le_bytes(),
+        ].concat());
+
+        self.push_raw(&bytes)
+    }
+
     /// Removes and returns the last instance (O(1)).
     ///
     /// # Errors
@@ -1332,6 +1404,60 @@ impl AsCount for CustomATTR {
         self.data.len() / (self.info.elem_count * self.info.byte_count)
     }
     fn is_empty(&self) -> bool { self.data.is_empty() }
+}
+
+// ── Text instance factory functions ────────────────────────────────────────
+
+/// Standard 2D instance layout used by text rendering.
+pub fn text_instance_desc_2d() -> InstanceDesc2D {
+    InstanceDesc2D {
+        pos_attr: Pos2DATTR::empty(),
+        scale_attr: Scale2DATTR::empty(),
+        col_attr: ColorATTR::empty(),
+        rot_attr: Rot2DATTR::empty(),
+        custom_attrs: vec![
+            CustomATTR::empty::<[f32; 4]>("iUVRect"),
+            CustomATTR::empty::<u32>("iStyleFlags"),
+            CustomATTR::empty::<f32>("iSoftness"),
+        ],
+    }
+}
+
+/// Standard layout for decoration quads (borders, underlines, etc.) in 2D text.
+pub fn decoration_instance_desc_2d() -> InstanceDesc2D {
+    InstanceDesc2D {
+        pos_attr: Pos2DATTR::empty(),
+        scale_attr: Scale2DATTR::empty(),
+        col_attr: ColorATTR::empty(),
+        rot_attr: Rot2DATTR::empty(),
+        custom_attrs: vec![],
+    }
+}
+
+/// Standard 3D instance layout for billboard text.
+pub fn text_instance_desc_3d() -> InstanceDesc3D {
+    InstanceDesc3D {
+        pos_attr: Pos3DATTR::empty(),
+        scale_attr: Scale3DATTR::empty(),
+        col_attr: ColorATTR::empty(),
+        rot_attr: Rot3DATTR::empty(),
+        custom_attrs: vec![
+            CustomATTR::empty::<[f32; 4]>("iUVRect"),
+            CustomATTR::empty::<u32>("iStyleFlags"),
+            CustomATTR::empty::<f32>("iSoftness"),
+        ],
+    }
+}
+
+/// 3D decoration layout.
+pub fn decoration_instance_desc_3d() -> InstanceDesc3D {
+    InstanceDesc3D {
+        pos_attr: Pos3DATTR::empty(),
+        scale_attr: Scale3DATTR::empty(),
+        col_attr: ColorATTR::empty(),
+        rot_attr: Rot3DATTR::empty(),
+        custom_attrs: vec![],
+    }
 }
 
 // ── Deserialize helper ─────────────────────────────────────────────────────

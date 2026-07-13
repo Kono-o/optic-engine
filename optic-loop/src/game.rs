@@ -133,8 +133,8 @@ impl Game {
             .ok_or_else(|| optic_core::OpticError::custom("failed to get raw display handle"))?;
 
         let mut gpu = GPU::new_windowed(handle, display_handle, actual_size)?;
-        gpu.ctx.set_vsync(true);
-        gpu.canvas_size = actual_size;
+        gpu.ctx().set_vsync(true);
+        gpu.set_canvas_size(actual_size);
         gpu.set_bg_color(bg_color);
         let surface_index = 0;
 
@@ -253,9 +253,9 @@ impl ApplicationHandler for Game {
 
         match &event {
             WindowEvent::Resized(_size) => {
-                self.renderer.ctx.resize_window(self.surface_index, self.window.size());
-                let _ = self.renderer.ctx.make_current(self.surface_index);
-                self.renderer.canvas_size = self.window.size();
+                self.renderer.ctx_mut().resize_window(self.surface_index, self.window.size());
+                let _ = self.renderer.ctx().make_current(self.surface_index);
+                self.renderer.set_canvas_size(self.window.size());
                 self.camera.set_size(self.window.size());
                 if !self.resized_once && (_size.width != self.requested_size.w || _size.height != self.requested_size.h) {
                     self.resized_once = true;
@@ -302,7 +302,7 @@ impl ApplicationHandler for Game {
             net.poll(&mut self.events.network);
         }
 
-        let _ = self.renderer.ctx.make_current(self.surface_index);
+        let _ = self.renderer.ctx().make_current(self.surface_index);
         self.renderer.clear();
         self.time.update();
 
@@ -320,7 +320,7 @@ impl ApplicationHandler for Game {
         runtime.update(self);
         self.runtime = Some(runtime);
 
-        let _ = self.renderer.ctx.swap_buffers(self.surface_index);
+        let _ = self.renderer.ctx().swap_buffers(self.surface_index);
         self.events.end_frame();
         self.window.request_redraw();
     }

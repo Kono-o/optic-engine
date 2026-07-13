@@ -9,8 +9,13 @@ use std::ptr;
 /// Created by [`RenderContext::new_windowed`] or [`RenderContext::attach_window`].
 /// Each surface corresponds to one native window.
 pub struct WindowSurface {
-    pub surface: egl::Surface,
-    pub size: Size2D,
+    pub(crate) surface: egl::Surface,
+    size: Size2D,
+}
+
+impl WindowSurface {
+    /// Returns the surface size.
+    pub fn size(&self) -> Size2D { self.size }
 }
 
 /// EGL + OpenGL 4.6 context with support for multiple window surfaces.
@@ -34,14 +39,14 @@ pub struct WindowSurface {
 /// Additional windows can be attached with [`attach_window`](RenderContext::attach_window)
 /// and made current with [`make_current`](RenderContext::make_current).
 pub struct RenderContext {
-    pub display: egl::Display,
-    pub context: egl::Context,
+    pub(crate) display: egl::Display,
+    pub(crate) context: egl::Context,
     config: egl::Config,
-    pub surfaces: Vec<WindowSurface>,
-    pub active_index: Option<usize>,
-    pub gl_ver: String,
-    pub glsl_ver: String,
-    pub device: String,
+    pub(crate) surfaces: Vec<WindowSurface>,
+    active_index: Option<usize>,
+    gl_ver: String,
+    glsl_ver: String,
+    device: String,
 }
 
 const GL_ATTRIBS: [i32; 7] = [
@@ -146,6 +151,17 @@ fn raw_handle_to_native(handle: RawWindowHandle) -> OpticResult<*mut c_void> {
 }
 
 impl RenderContext {
+    /// Returns the OpenGL version string.
+    pub fn gl_ver(&self) -> &str { &self.gl_ver }
+    /// Returns the GLSL version string.
+    pub fn glsl_ver(&self) -> &str { &self.glsl_ver }
+    /// Returns the GPU device name.
+    pub fn device(&self) -> &str { &self.device }
+    /// Returns the active surface index, if any.
+    pub fn active_index(&self) -> Option<usize> { self.active_index }
+    /// Returns a reference to the window surfaces.
+    pub fn surfaces(&self) -> &Vec<WindowSurface> { &self.surfaces }
+
     /// Creates a headless EGL context with a 1×1 pbuffer surface.
     ///
     /// This is useful for off-screen rendering or when no window is available.

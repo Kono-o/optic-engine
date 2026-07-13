@@ -31,6 +31,8 @@ pub const OSHDR: &str = "oshdr";
 pub const OMESH: &str = "omesh";
 /// Optic cached texture extension.
 pub const OTXTR: &str = "otxtr";
+/// Optic cached font extension.
+pub const OFONT: &str = "ofont";
 /// Optic cached sound extension.
 pub const OMUSIC: &str = "omusic";
 

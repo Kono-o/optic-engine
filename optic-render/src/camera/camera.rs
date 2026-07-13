@@ -69,31 +69,11 @@ impl Camera {
     /// Creates a camera at `(0, 0, 5)` with 75° FOV, default clip distances,
     /// and the given projection type.
     pub fn new(size: Size2D, proj: CamProj) -> Self {
-        let fov = 75.0;
-        let clip = ClipDist::default();
-        let pos = vec3(0.0, 0.0, 5.0);
-        let rot = vec3(0.0, -90.0, 0.0);
-
-        let pos_inverse = Matrix4::from_translation(vec3(-pos.x, -pos.y, -pos.z));
-        let rot_inverse = Matrix4::<f32>::from_angle_x(Rad::from(Deg(-rot.x)))
-            * Matrix4::<f32>::from_angle_y(Rad::from(Deg(-rot.y)))
-            * Matrix4::<f32>::from_angle_z(Rad::from(Deg(-rot.z)));
-
-        let view_matrix = pos_inverse * rot_inverse;
-
-        let mut transform = CamTransform {
-            pos,
-            rot,
-            fov,
-            clip,
-            size,
-            proj,
-            view_matrix,
-            ortho_scale: 2.0,
-            front: vec3(0.0, 0.0, -1.0),
-            persp_matrix: Matrix4::identity(),
-            ortho_matrix: Matrix4::identity(),
-        };
+        let mut transform = CamTransform::new(size, proj);
+        transform.set_fov(75.0);
+        transform.set_ortho_scale(2.0);
+        transform.pos = vec3(0.0, 0.0, 5.0);
+        transform.rot = vec3(0.0, -90.0, 0.0);
         transform.calc_matrices();
 
         Camera { transform }
@@ -110,38 +90,42 @@ impl Camera {
     }
 
     /// Returns the vertical field of view in degrees.
-    pub fn fov(&self) -> f32 { self.transform.fov }
+    pub fn fov(&self) -> f32 { self.transform.fov() }
+    /// Returns the camera position.
+    pub fn pos(&self) -> cgmath::Vector3<f32> { self.transform.pos }
+    /// Returns the forward direction vector.
+    pub fn front(&self) -> cgmath::Vector3<f32> { self.transform.front }
     /// Returns the orthographic scale factor.
-    pub fn ortho_scale(&self) -> f32 { self.transform.ortho_scale }
+    pub fn ortho_scale(&self) -> f32 { self.transform.ortho_scale() }
     /// Returns the current projection type.
-    pub fn proj(&self) -> CamProj { self.transform.proj }
+    pub fn proj(&self) -> CamProj { self.transform.proj() }
     /// Returns the near/far clip distances.
-    pub fn clip(&self) -> ClipDist { self.transform.clip }
+    pub fn clip(&self) -> ClipDist { self.transform.clip() }
 
     /// Sets both near and far clip distances at once.
-    pub fn set_clip(&mut self, clip: ClipDist) { self.transform.clip = clip; }
+    pub fn set_clip(&mut self, clip: ClipDist) { self.transform.set_clip(clip); }
     /// Sets the near clip plane distance.
-    pub fn set_clip_near(&mut self, near: f32) { self.transform.clip.near = near; }
+    pub fn set_clip_near(&mut self, near: f32) { self.transform.set_clip(ClipDist::new(near, self.transform.clip().far)); }
     /// Sets the far clip plane distance.
-    pub fn set_clip_far(&mut self, far: f32) { self.transform.clip.far = far; }
+    pub fn set_clip_far(&mut self, far: f32) { self.transform.set_clip(ClipDist::new(self.transform.clip().near, far)); }
     /// Sets the canvas/viewport size (used for aspect ratio calculation).
-    pub fn set_size(&mut self, size: Size2D) { self.transform.size = size; }
+    pub fn set_size(&mut self, size: Size2D) { self.transform.set_size(size); }
     /// Switches between perspective and orthographic projection.
-    pub fn set_proj(&mut self, proj: CamProj) { self.transform.proj = proj; }
+    pub fn set_proj(&mut self, proj: CamProj) { self.transform.set_proj(proj); }
 
     /// Sets the vertical field of view in degrees (clamped to ≥ 0.01).
     pub fn set_fov(&mut self, fov: f32) {
-        self.transform.fov = fov.max(0.01);
+        self.transform.set_fov(fov.max(0.01));
     }
     /// Adds `value` to the FOV (clamped to ≥ 0.01).
     pub fn add_fov(&mut self, value: f32) {
-        self.transform.fov = (self.transform.fov + value).max(0.01);
+        self.transform.set_fov((self.transform.fov() + value).max(0.01));
     }
 
     /// Sets the orthographic scale factor.
-    pub fn set_ortho_scale(&mut self, value: f32) { self.transform.ortho_scale = value; }
+    pub fn set_ortho_scale(&mut self, value: f32) { self.transform.set_ortho_scale(value); }
     /// Adds `value` to the orthographic scale factor.
-    pub fn add_ortho_scale(&mut self, value: f32) { self.transform.ortho_scale += value; }
+    pub fn add_ortho_scale(&mut self, value: f32) { self.transform.set_ortho_scale(self.transform.ortho_scale() + value); }
 
     /// Moves the camera forward (in the direction it faces).
     ///
@@ -295,8 +279,8 @@ mod tests {
     fn camera_set_size() {
         let mut cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
         cam.set_size(Size2D::new(800, 600));
-        assert_eq!(cam.transform.size.w, 800);
-        assert_eq!(cam.transform.size.h, 600);
+        assert_eq!(cam.transform.size().w, 800);
+        assert_eq!(cam.transform.size().h, 600);
     }
 
     #[test]

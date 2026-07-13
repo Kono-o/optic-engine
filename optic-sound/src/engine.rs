@@ -32,7 +32,7 @@ pub struct AudioEngine {
     manager: AudioManager<DefaultBackend>,
     listener: ListenerHandle,
     /// Master volume multiplier (0.0..1.0). Applied to all sounds.
-    pub master_volume: f32,
+    master_volume: f32,
 }
 
 fn amplitude_to_decibels(amplitude: f32) -> Decibels {
@@ -122,6 +122,9 @@ impl AudioEngine {
         Ok(Sound3D::new(handle, spatial_track, file.duration_secs))
     }
 
+    /// Returns the master volume (0.0..1.0).
+    pub fn master_volume(&self) -> f32 { self.master_volume }
+
     /// Sets the master volume (0.0..1.0).
     ///
     /// Uses kira's built-in volume control on the main mixer track.
@@ -161,8 +164,8 @@ impl AudioEngine {
     /// Call this once per frame, right after
     /// [`camera.pre_update()`](optic_render::Camera::pre_update).
     pub fn set_listener_from_camera(&mut self, camera: &optic_render::Camera) {
-        let pos = camera.transform.pos;
-        let front = camera.transform.front;
+        let pos = camera.pos();
+        let front = camera.front();
         let up = cgmath::Vector3::unit_y();
         self.set_listener(pos, front, up);
     }

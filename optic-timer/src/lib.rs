@@ -107,4 +107,113 @@ impl Timer {
         }
         finished
     }
+
+    /// Returns `true` if the timer is currently running.
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+
+    /// Activates the timer.
+    pub fn start(&mut self) {
+        self.active = true;
+    }
+
+    /// Deactivates the timer.
+    pub fn stop(&mut self) {
+        self.active = false;
+    }
+
+    /// Returns the total wait time.
+    pub fn wait_time(&self) -> f32 {
+        self.wait_time
+    }
+
+    /// Sets a new wait time and resets the remaining time to the new value.
+    pub fn set_wait_time(&mut self, wait_time: f32) {
+        let wt = wait_time.max(0.0);
+        self.wait_time = wt;
+        self.time_left = wt;
+    }
+}
+
+/// A collection of [`Timer`]s managed as a group.
+pub struct Timers {
+    timers: Vec<Timer>,
+}
+
+impl Timers {
+    /// Creates an empty timer collection.
+    pub fn new() -> Self {
+        Self { timers: Vec::new() }
+    }
+
+    /// Adds a timer to the collection.
+    pub fn add(&mut self, timer: Timer) {
+        self.timers.push(timer);
+    }
+
+    /// Removes the timer at the given index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is out of bounds.
+    pub fn remove(&mut self, index: usize) {
+        self.timers.remove(index);
+    }
+
+    /// Removes all timers.
+    pub fn clear(&mut self) {
+        self.timers.clear();
+    }
+
+    /// Returns the number of timers.
+    pub fn len(&self) -> usize {
+        self.timers.len()
+    }
+
+    /// Returns `true` if there are no timers.
+    pub fn is_empty(&self) -> bool {
+        self.timers.is_empty()
+    }
+
+    /// Returns a reference to the timer at the given index, or `None` if out of bounds.
+    pub fn get(&self, index: usize) -> Option<&Timer> {
+        self.timers.get(index)
+    }
+
+    /// Returns a mutable reference to the timer at the given index, or `None` if out of bounds.
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut Timer> {
+        self.timers.get_mut(index)
+    }
+
+    /// Ticks all active timers by `dt` seconds.
+    ///
+    /// Returns a vector of indices whose timers elapsed this frame.
+    pub fn tick_all(&mut self, dt: f32) -> Vec<usize> {
+        let mut elapsed = Vec::new();
+        for (i, timer) in self.timers.iter_mut().enumerate() {
+            if timer.tick(dt) {
+                elapsed.push(i);
+            }
+        }
+        elapsed
+    }
+
+    /// Ticks all active timers by `dt` seconds and emits a named signal for
+    /// each timer that elapsed.
+    pub fn tick_and_emit_all(&mut self, dt: f32, name: &str, events: &mut optic_window::Events) {
+        for timer in self.timers.iter_mut() {
+            timer.tick_and_emit(dt, name, events);
+        }
+    }
+
+    /// Returns an iterator over all timers.
+    pub fn iter(&self) -> impl Iterator<Item = &Timer> {
+        self.timers.iter()
+    }
+
+    /// Returns a mutable iterator over all timers.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Timer> {
+        self.timers.iter_mut()
+    }
 }

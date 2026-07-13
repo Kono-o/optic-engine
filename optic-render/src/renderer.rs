@@ -1,9 +1,8 @@
-use optic_core::{log_info, ColorInfo, CullFace, DrawMode, Gradient, PolygonMode, RGBA, Size2D};
+use optic_core::{log_info, ColorInfo, CullFace, Gradient, OpticResult, PolygonMode, RGBA, Size2D};
 
 use crate::context::RenderContext;
 use crate::glraw::GL;
-use crate::handles::{Canvas, Mesh2D, Mesh3D, RenderTarget, Shader, Texture2D};
-use crate::util::{Transform2D, Transform3D};
+use crate::handles::{Canvas, FontFamily, Mesh2D, Mesh3D, RenderTarget, Shader, Text2D, Text3D, Texture2D};
 use crate::{asset, Camera};
 
 /// The primary renderer — owns the GL context, fallback assets, and global
@@ -47,22 +46,32 @@ use crate::{asset, Camera};
 /// gpu.log_backend_info();
 /// // → "BACKEND: 4.6.0 NVIDIA ... (GLSL 4.60)"
 /// ```
+pub struct Viewport {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
 pub struct GPU {
-    pub ctx: RenderContext,
-    pub poly_mode: PolygonMode,
-    pub cull_face: CullFace,
-    pub bg_color: RGBA,
-    pub msaa: bool,
-    pub msaa_samples: u32,
-    pub culling: bool,
-    pub fallback_shader2d: Shader,
-    pub fallback_shader3d: Shader,
-    pub fallback_texture: Texture2D,
-    pub canvas_size: Size2D,
+    pub(crate) ctx: RenderContext,
+    poly_mode: PolygonMode,
+    cull_face: CullFace,
+    bg_color: RGBA,
+    msaa: bool,
+    msaa_samples: u32,
+    culling: bool,
+    fallback_shader2d: Shader,
+    fallback_shader3d: Shader,
+    fallback_texture: Texture2D,
+    fallback_font: FontFamily,
+    canvas_size: Size2D,
     pub(crate) current_target_size: Size2D,
     pub(crate) max_color_attachments: i32,
     pub(crate) max_draw_buffers: i32,
     pub(crate) max_samples: i32,
+    fallback_shader_text2d: Shader,
+    fallback_shader_text3d: Shader,
 }
 
 impl GPU {
@@ -128,11 +137,14 @@ impl GPU {
             fallback_shader2d: Shader::new(0, false),
             fallback_shader3d: Shader::new(0, false),
             fallback_texture: Texture2D::new(0, Size2D::zero(), optic_core::ImgFormat::RGBA(8), optic_core::ImgFilter::Closest, optic_core::ImgWrap::Repeat),
+            fallback_font: FontFamily::default(),
             canvas_size,
             current_target_size: canvas_size,
             max_color_attachments,
             max_draw_buffers,
             max_samples,
+            fallback_shader_text2d: Shader::new(0, false),
+            fallback_shader_text3d: Shader::new(0, false),
         };
 
         if let Ok(fallback_tex) = asset::TextureFile::fallback() {
@@ -156,6 +168,16 @@ impl GPU {
                 gpu.fallback_shader2d = s;
             }
         }
+        if let Ok(shader_asset) = asset::ShaderFile::from_disk("assets/shdr/fallback_text2d.glsl", asset::ShaderType::Pipeline) {
+            if let Ok(shader) = gpu.upload_shader(&shader_asset) {
+                gpu.fallback_shader_text2d = shader;
+            }
+        }
+        if let Ok(shader_asset) = asset::ShaderFile::from_disk("assets/shdr/fallback_text3d.glsl", asset::ShaderType::Pipeline) {
+            if let Ok(shader) = gpu.upload_shader(&shader_asset) {
+                gpu.fallback_shader_text3d = shader;
+            }
+        }
 
         gpu.set_msaa(true);
         gpu.set_culling(true);
@@ -168,17 +190,17 @@ impl GPU {
     // ── Backend info ─────────────────────────────────────────────────────
 
     /// Returns the OpenGL version string, e.g. `"4.6.0 NVIDIA 545.84"`.
-    pub fn version(&self) -> &str { &self.ctx.gl_ver }
+    pub fn version(&self) -> &str { self.ctx.gl_ver() }
 
     /// Returns the GLSL version string, e.g. `"4.60"`.
-    pub fn lang_version(&self) -> &str { &self.ctx.glsl_ver }
+    pub fn lang_version(&self) -> &str { self.ctx.glsl_ver() }
 
     /// Returns the GPU device name, e.g. `"GeForce RTX 3080"`.
-    pub fn name(&self) -> &str { &self.ctx.device }
+    pub fn name(&self) -> &str { self.ctx.device() }
 
     /// Logs the OpenGL and GLSL version at the `INFO` level.
     pub fn log_backend_info(&self) {
-        log_info!("BACKEND: {} (GLSL {})", self.ctx.gl_ver, self.ctx.glsl_ver);
+        log_info!("BACKEND: {} (GLSL {})", self.ctx.gl_ver(), self.ctx.glsl_ver());
     }
 
     /// Logs the current pipeline configuration (polygon mode, culling, MSAA)
@@ -251,8 +273,9 @@ impl GPU {
         }
         if mask != 0 {
             unsafe { gl::Clear(mask); }
+            }
         }
-    }
+
 
     // ── Pipeline state ───────────────────────────────────────────────────
 
@@ -351,6 +374,27 @@ impl GPU {
         GL::set_cull_face(self.cull_face);
     }
 
+    /// Returns the background clear colour.
+    pub fn bg_color(&self) -> &RGBA { &self.bg_color }
+    /// Returns the polygon rasterization mode.
+    pub fn poly_mode(&self) -> PolygonMode { self.poly_mode }
+    /// Returns `true` if MSAA is enabled.
+    pub fn msaa(&self) -> bool { self.msaa }
+    /// Returns the MSAA sample count.
+    pub fn msaa_samples(&self) -> u32 { self.msaa_samples }
+    /// Returns `true` if back-face culling is enabled.
+    pub fn culling(&self) -> bool { self.culling }
+    /// Returns which face is culled.
+    pub fn cull_face(&self) -> CullFace { self.cull_face }
+    /// Returns a reference to the render context.
+    pub fn ctx(&self) -> &RenderContext { &self.ctx }
+    /// Returns a mutable reference to the render context.
+    pub fn ctx_mut(&mut self) -> &mut RenderContext { &mut self.ctx }
+    /// Returns a reference to the fallback texture.
+    pub fn fallback_texture(&self) -> &Texture2D { &self.fallback_texture }
+    /// Returns the logical canvas size.
+    pub fn canvas_size(&self) -> Size2D { self.canvas_size }
+
     // ─── Canvas / viewport ───────────────────────────────────────────────
 
     /// Sets the logical canvas size (defines the 2D orthographic projection).
@@ -370,15 +414,15 @@ impl GPU {
     }
 
     /// Returns the current OpenGL viewport rect.
-    pub fn viewport(&self) -> (i32, i32, i32, i32) {
+    pub fn viewport(&self) -> Viewport {
         let mut vp = [0i32; 4];
         unsafe { gl::GetIntegerv(gl::VIEWPORT, vp.as_mut_ptr()); }
-        (vp[0], vp[1], vp[2], vp[3])
+        Viewport { x: vp[0], y: vp[1], width: vp[2], height: vp[3] }
     }
 
     /// Sets the OpenGL viewport rect.
-    pub fn set_viewport(&self, x: i32, y: i32, w: i32, h: i32) {
-        unsafe { gl::Viewport(x, y, w, h); }
+    pub fn set_viewport(&self, vp: Viewport) {
+        unsafe { gl::Viewport(vp.x, vp.y, vp.width, vp.height); }
     }
 
     /// Flushes OpenGL commands (non-blocking).
@@ -437,25 +481,43 @@ impl GPU {
     /// gpu.render3d(&mesh, &camera);
     /// ```
     pub fn upload_mesh3d(&self, file: &asset::Mesh3DFile) -> Mesh3D {
-        Mesh3D {
-            visibility: true,
-            handle: file.upload(),
-            shader: Some(self.fallback_shader3d()),
-            transform: Transform3D::default(),
-            draw_mode: DrawMode::Triangles,
-        }
+        let mut mesh = Mesh3D::new(file.upload());
+        mesh.set_shader(self.fallback_shader3d());
+        mesh
     }
 
     /// Uploads a [`Mesh2DFile`](asset::Mesh2DFile) to the GPU and returns a
     /// [`Mesh2D`] with the fallback 2D shader attached.
     pub fn upload_mesh2d(&self, file: &asset::Mesh2DFile) -> Mesh2D {
-        Mesh2D {
-            visibility: true,
-            handle: file.upload(),
-            shader: Some(self.fallback_shader2d()),
-            transform: Transform2D::default(),
-            draw_mode: DrawMode::Triangles,
-        }
+        let mut mesh = Mesh2D::new(file.upload());
+        mesh.set_shader(self.fallback_shader2d());
+        mesh
+    }
+
+    /// Uploads a [`FontFamilyFile`] to the GPU and returns a [`FontFamily`].
+    ///
+    /// This uploads the MSDF atlas textures for each populated style variant,
+    /// making the font ready for use with [`Text2D`] or [`Text3D`].
+    pub fn upload_font_family(&self, file: &asset::FontFamilyFile) -> OpticResult<FontFamily> {
+        FontFamily::new(file)
+    }
+
+    /// Returns a clone of the fallback font, used by [`Text2D`] / [`Text3D`]
+    /// when no explicit font is set.
+    pub fn fallback_font(&self) -> FontFamily {
+        self.fallback_font.clone()
+    }
+
+    /// Returns a clone of the fallback 2D text shader.
+    pub fn fallback_shader_text2d(&self) -> Shader {
+        let mut sh = self.fallback_shader_text2d.clone();
+        sh.attach_texture(&self.fallback_texture);
+        sh
+    }
+
+    /// Returns a clone of the fallback 3D text shader.
+    pub fn fallback_shader_text3d(&self) -> Shader {
+        self.fallback_shader_text3d.clone()
     }
 
     /// Compiles a [`ShaderFile`](asset::ShaderFile) into a usable [`Shader`].
@@ -627,5 +689,24 @@ impl GPU {
         };
         let proj = cgmath::ortho(-aspect, aspect, -1.0, 1.0, -1.0, 1.0);
         mesh.render(&proj);
+    }
+
+    /// Draws a [`Text2D`] using the same orthographic projection as
+    /// [`render2d`](Self::render2d).
+    pub fn render_text2d(&self, text: &mut Text2D) {
+        let aspect = if self.canvas_size.w > 0 && self.canvas_size.h > 0 {
+            self.canvas_size.w as f32 / self.canvas_size.h as f32
+        } else {
+            1.0
+        };
+        let proj = cgmath::ortho(-aspect, aspect, -1.0, 1.0, -1.0, 1.0);
+        text.render(&proj);
+    }
+
+    /// Draws a [`Text3D`] through the given camera.
+    pub fn render_text3d(&self, text: &mut Text3D, camera: &Camera) {
+        let view = camera.transform.view_matrix();
+        let proj = camera.transform.proj_matrix();
+        text.render(&view, &proj);
     }
 }

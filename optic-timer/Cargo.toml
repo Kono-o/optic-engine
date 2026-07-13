@@ -1,0 +1,8 @@
+[package]
+name = "optic-timer"
+version = "0.0.3"
+edition = "2021"
+
+[dependencies]
+optic-core = { path = "../optic-core" }
+optic-window = { path = "../optic-window" }

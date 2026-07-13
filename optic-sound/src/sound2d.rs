@@ -17,12 +17,10 @@ use kira::{
 /// ```
 pub struct Sound2D {
     handle: Option<StaticSoundHandle>,
-    /// Volume level (0.0..1.0).
-    pub volume: f32,
-    /// Playback rate multiplier (1.0 = normal).
-    pub pitch: f32,
-    /// Whether the sound loops.
-    pub looping: bool,
+    volume: f32,
+    pitch: f32,
+    looping: bool,
+    pan: f32,
     duration_secs: f32,
 }
 
@@ -33,9 +31,19 @@ impl Sound2D {
             volume: 1.0,
             pitch: 1.0,
             looping: false,
+            pan: 0.0,
             duration_secs,
         }
     }
+
+    /// Returns the volume (0.0..1.0).
+    pub fn volume(&self) -> f32 { self.volume }
+    /// Returns the pitch multiplier.
+    pub fn pitch(&self) -> f32 { self.pitch }
+    /// Returns whether the sound loops.
+    pub fn looping(&self) -> bool { self.looping }
+    /// Returns the stereo pan position (-1.0 left, 0.0 centre, 1.0 right).
+    pub fn pan(&self) -> f32 { self.pan }
 
     /// Starts or restarts playback.
     pub fn play(&mut self) {
@@ -73,6 +81,14 @@ impl Sound2D {
     /// Returns `true` if the sound is paused.
     pub fn is_paused(&self) -> bool {
         self.handle.as_ref().map_or(false, |h| h.state() == kira::sound::PlaybackState::Paused)
+    }
+
+    /// Sets the stereo pan position (-1.0 = full left, 1.0 = full right).
+    pub fn set_pan(&mut self, pan: f32) {
+        self.pan = pan.clamp(-1.0, 1.0);
+        if let Some(ref mut h) = self.handle {
+            let _ = h.set_panning(self.pan, Tween::default());
+        }
     }
 
     /// Sets the volume (0.0..1.0).

@@ -8,11 +8,11 @@ use crate::GL;
 /// Created by [`create_texture`] or via [`TextureFile::upload`](crate::asset::TextureFile::upload).
 #[derive(Clone, Debug)]
 pub struct Texture2D {
-    pub id: u32,
-    pub size: Size2D,
-    pub fmt: ImgFormat,
-    pub filter: ImgFilter,
-    pub wrap: ImgWrap,
+    pub(crate) id: u32,
+    pub(crate) size: Size2D,
+    pub(crate) fmt: ImgFormat,
+    pub(crate) filter: ImgFilter,
+    pub(crate) wrap: ImgWrap,
 }
 
 impl Texture2D {
@@ -27,8 +27,12 @@ impl Texture2D {
         Self { id, size, fmt, filter, wrap }
     }
 
+    /// Returns the GL texture ID.
+    pub fn id(&self) -> u32 { self.id }
     /// Returns the texture dimensions.
     pub fn size(&self) -> Size2D { self.size }
+    /// Returns the pixel format.
+    pub fn fmt(&self) -> ImgFormat { self.fmt }
     /// Returns the current wrap mode.
     pub fn wrap(&self) -> ImgWrap { self.wrap }
     /// Overrides the stored wrap mode.

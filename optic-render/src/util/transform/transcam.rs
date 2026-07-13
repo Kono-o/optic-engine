@@ -9,20 +9,65 @@ use cgmath::*;
 /// any field.
 #[derive(Clone, Debug)]
 pub struct CamTransform {
-    pub pos: Vector3<f32>,
-    pub rot: Vector3<f32>,
-    pub fov: f32,
-    pub clip: ClipDist,
-    pub size: Size2D,
-    pub proj: CamProj,
-    pub view_matrix: Matrix4<f32>,
-    pub ortho_scale: f32,
-    pub front: Vector3<f32>,
-    pub persp_matrix: Matrix4<f32>,
-    pub ortho_matrix: Matrix4<f32>,
+    pub(crate) pos: Vector3<f32>,
+    pub(crate) rot: Vector3<f32>,
+    fov: f32,
+    clip: ClipDist,
+    size: Size2D,
+    proj: CamProj,
+    pub(crate) view_matrix: Matrix4<f32>,
+    ortho_scale: f32,
+    pub(crate) front: Vector3<f32>,
+    pub(crate) persp_matrix: Matrix4<f32>,
+    pub(crate) ortho_matrix: Matrix4<f32>,
 }
 
 impl CamTransform {
+    /// Creates a new camera transform with default values.
+    pub fn new(size: Size2D, proj: CamProj) -> Self {
+        Self {
+            pos: Vector3::new(0.0, 0.0, 0.0),
+            rot: Vector3::new(0.0, 0.0, 0.0),
+            fov: 60.0,
+            clip: ClipDist::new(0.1, 1000.0),
+            size,
+            proj,
+            view_matrix: Matrix4::identity(),
+            ortho_scale: 1.0,
+            front: Vector3::new(0.0, 0.0, -1.0),
+            persp_matrix: Matrix4::identity(),
+            ortho_matrix: Matrix4::identity(),
+        }
+    }
+
+    /// Returns the camera position.
+    pub fn pos(&self) -> Vector3<f32> { self.pos }
+    /// Returns the camera rotation (pitch, yaw, roll) in degrees.
+    pub fn rot(&self) -> Vector3<f32> { self.rot }
+    /// Returns the field of view in degrees.
+    pub fn fov(&self) -> f32 { self.fov }
+    /// Returns the clip distances (near, far).
+    pub fn clip(&self) -> ClipDist { self.clip }
+    /// Returns the viewport size.
+    pub fn size(&self) -> Size2D { self.size }
+    /// Returns the projection type.
+    pub fn proj(&self) -> CamProj { self.proj }
+    /// Returns the orthographic scale.
+    pub fn ortho_scale(&self) -> f32 { self.ortho_scale }
+    /// Returns the forward direction vector.
+    pub fn front(&self) -> Vector3<f32> { self.front }
+
+    /// Sets the field of view in degrees.
+    pub fn set_fov(&mut self, fov: f32) { self.fov = fov; }
+    /// Sets the clip distances.
+    pub fn set_clip(&mut self, clip: ClipDist) { self.clip = clip; }
+    /// Sets the viewport size.
+    pub fn set_size(&mut self, size: Size2D) { self.size = size; }
+    /// Sets the projection type.
+    pub fn set_proj(&mut self, proj: CamProj) { self.proj = proj; }
+    /// Sets the orthographic scale.
+    pub fn set_ortho_scale(&mut self, scale: f32) { self.ortho_scale = scale; }
+
     /// Recalculates view, perspective, and orthographic matrices.
     ///
     /// Also updates the `front` direction vector used for fly-through movement.

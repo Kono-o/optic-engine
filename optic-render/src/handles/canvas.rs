@@ -432,7 +432,7 @@ impl Canvas {
     }
 
     /// Deletes all GL resources (FBOs, RBOs, textures).
-    pub fn delete(&mut self) {
+    pub fn delete(self) {
         unsafe {
             gl::DeleteFramebuffers(1, &self.fbo_id);
             if self.resolve_fbo_id != 0 {
@@ -445,10 +445,10 @@ impl Canvas {
                 gl::DeleteRenderbuffers(1, &self.depth_stencil_rbo);
             }
         }
-        for tex in std::mem::take(&mut self.color_texs) {
+        for tex in self.color_texs {
             tex.delete();
         }
-        if let Some(tex) = self.depth_tex.take() {
+        if let Some(tex) = self.depth_tex {
             tex.delete();
         }
     }

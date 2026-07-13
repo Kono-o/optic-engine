@@ -16,3 +16,5 @@ gl.workspace = true
 image.workspace = true
 flate2.workspace = true
 raw-window-handle.workspace = true
+ttf-parser.workspace = true
+rustybuzz.workspace = true

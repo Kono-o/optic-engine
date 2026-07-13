@@ -29,7 +29,7 @@
 //! the cache directly for faster startup.
 
 use optic_core::consts::{OPTIC_CACHE_VERSION, OPTIC_MAGIC};
-use optic_core::{DrawMode, OpticError, OpticErrorKind, OpticResult};
+use optic_core::{OpticError, OpticErrorKind, OpticResult};
 use cgmath::Vector2;
 use std::collections::HashMap;
 
@@ -1256,7 +1256,6 @@ fn create_mesh3d_handle(mesh: &Mesh3DFile) -> MeshHandle {
 
     MeshHandle {
         layouts,
-        draw_mode: DrawMode::Triangles,
         has_indices,
         vertex_count: vert_count,
         index_count: ind_count,
@@ -1344,7 +1343,6 @@ fn create_mesh2d_handle(mesh: &Mesh2DFile) -> MeshHandle {
 
     MeshHandle {
         layouts,
-        draw_mode: DrawMode::Triangles,
         has_indices,
         vertex_count: vert_count,
         index_count: ind_count,

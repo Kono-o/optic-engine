@@ -15,13 +15,17 @@
 //! | [`instance`] | [`InstanceBuffer`], [`InstanceDesc3D`], [`InstanceDesc2D`] |
 
 pub mod canvas;
+pub mod font;
 pub mod instance;
 pub mod mesh;
 pub mod shader;
+pub mod text;
 pub mod texture;
 
 pub use canvas::*;
+pub use font::*;
 pub use instance::*;
 pub use mesh::*;
 pub use shader::*;
+pub use text::*;
 pub use texture::*;

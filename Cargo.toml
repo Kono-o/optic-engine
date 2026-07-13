@@ -9,6 +9,8 @@ members = [
     "optic-loop",
     "optic-online",
     "optic-sound",
+    "optic-timer",
+    "optic-signals",
     "optic",
 ]
 
@@ -30,6 +32,8 @@ image = "0.25.8"
 flate2 = "1.1.2"
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "io-util", "macros"] }
 kira = "0.12"
+ttf-parser = "0.24"
+rustybuzz = "0.18"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
