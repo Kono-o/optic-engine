@@ -2300,12 +2300,12 @@ Caching happens transparently inside each type's `from_disk()` constructor.
 │                  Debug Build                                 │
 │                                                              │
 │  Source file ──parse/bake──▶ CPU data ──save──▶ Binary cache │
-│  (PNG/OBJ/GLSL/TTF/OGG)                   (optc/*.otxtr…)  │
+│  (PNG/OBJ/GLSL/TTF/OGG)                   (optc/*.otxtr…)    │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
 │                  Release Build                               │
 │                                                              │
-│  Binary cache ──load directly──▶ CPU data                   │
+│  Binary cache ──load directly──▶ CPU data                    │
 │  (optc/*.otxtr…)                                             │
 │  Source file is never touched                                │
 │                                                              │
@@ -3347,7 +3347,7 @@ pub struct Text3D {
 The engine runs a three-phase frame: **Physics → Update → Render**. Each phase runs at its own independently configurable rate.
 
 ```
-┌─────────────────────────────────────────────┐
+┌──────────────────────────────────────────────┐
 │  Frame                                       │
 │                                              │
 │  Physics (fixed timestep, default 60 Hz)     │
@@ -3362,7 +3362,7 @@ The engine runs a three-phase frame: **Physics → Update → Render**. Each pha
 │    └ render()                                │
 │                                              │
 │  FPS limiter (VSync / Limited / Uncapped)    │
-└─────────────────────────────────────────────┘
+└──────────────────────────────────────────────┘
 ```
 
 ### Runtime Trait
