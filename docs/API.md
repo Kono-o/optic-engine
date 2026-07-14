@@ -1338,6 +1338,112 @@ pub struct ScreenInfo {
 
 ## 4. Renderer (`optic_render`)
 
+### Rendering Pipeline Overview
+
+Optic is a **forward renderer** built on OpenGL 4.6. Every frame, the engine
+clears the screen, iterates over meshes, and issues draw calls through a
+shader-programmed vertex-to-fragment pipeline.
+
+#### Draw Call Flow
+
+```text
+gpu.render3d(&mesh, &camera)
+  │
+  ├─ 1. Visibility check (skip if hidden/empty)
+  ├─ 2. Shader bind (glUseProgram)
+  ├─ 3. Uniform upload (uView, uProj, uTfm)
+  ├─ 4. Texture bind (glActiveTexture + glBindTexture per slot)
+  ├─ 5. SSBO bind (glBindBufferBase per slot)
+  └─ 6. Draw call (glDrawElements / glDrawArrays / *Instanced)
+```
+
+For 2D meshes, `gpu.render2d(&mesh)` uses an orthographic projection derived
+from the canvas size, and additionally sets a `uLayer` uniform for z-ordering.
+
+#### Mesh Buffer Lifecycle (VAO/VBO/IBO)
+
+When a mesh is uploaded from an asset type to the GPU:
+
+1. **Create VAO** — `glGenVertexArrays` produces a vertex array object
+2. **Create VBO** — `glGenBuffers` produces a vertex buffer object
+3. **Upload data** — `glBufferData` fills the VBO with interleaved vertex
+   data (positions, normals, UVs, colours)
+4. **Configure attributes** — `glVertexAttribPointer` +
+   `glEnableVertexAttribArray` for each attribute in the layout
+5. **Create IBO** (if indexed) — `glGenBuffers` + `glBufferData` for the
+   element array buffer
+
+```text
+Mesh3DFile (CPU)          GPU Buffers
+┌──────────────┐         ┌──────────────────────────────┐
+│ positions[]  │ ──────▶ │ VBO (interleaved)            │
+│ normals[]    │         │  [pos|nrm|uv|col|...] × N    │
+│ uvs[]        │         │                              │
+│ colours[]    │         │  VAO references VBO + layout │
+│ indices[]    │ ──────▶ │ IBO (element array)          │
+└──────────────┘         └──────────────────────────────┘
+```
+
+#### Shader Compilation
+
+Shaders are compiled from GLSL source. Pipeline shaders use comment markers
+(`// V`, `// F`, `// VERT`, `// FRAG`, etc.) to delimit vertex and fragment
+sections in a single `.glsl` file. Compute shaders use the entire file.
+
+```text
+.glsl source → compile_shader(vert) + compile_shader(frag)
+             → link_program(v, f) → GL program ID
+             → Shader { id, bound_textures[16], bound_storages[16] }
+```
+
+Each shader maintains 16 texture slots and 16 SSBO slots. Textures are
+auto-assigned via `attach_texture` or explicitly placed via
+`bind_texture(tex, Slot::S3)` to match `layout(binding = 3)` in GLSL.
+
+#### Instanced Rendering
+
+For drawing many copies of the same mesh, Optic uses GPU instancing. An
+`InstanceBuffer` holds per-instance data (position, rotation, scale, colour,
+custom attributes) interleaved in a single VBO with `glVertexAttribDivisor(1)`.
+
+```text
+Single draw call renders N instances:
+  MeshHandle
+    ├─ vertex VBO (shared geometry)
+    ├─ IBO (shared indices)
+    └─ instance VBO (per-instance transforms, divisor=1)
+         │
+         ▼
+  glDrawElementsInstanced(TRIANGLES, count, UNSIGNED_INT, null, N)
+```
+
+The `InstanceBuffer` maintains a CPU mirror for instant reads and partial
+writes without GPU round-trips.
+
+#### Canvas (Render-to-Texture)
+
+The `Canvas` type wraps OpenGL FBOs for off-screen rendering. Supports
+multiple colour attachments (MRT), depth/stencil, MSAA resolve, pixel
+readback, and disk export.
+
+```text
+gpu.set_render_target(&RenderTarget::Canvas(&canvas))?;
+gpu.clear();
+gpu.render3d(&mesh, &camera);
+canvas.blit_to_screen(window_size);  // present to screen
+```
+
+#### GL State Defaults
+
+| State | Default | Controlled by |
+|---|---|---|
+| Depth testing | Enabled | `GL::enable_depth()` |
+| Alpha blending | Enabled (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) | `GL::enable_alpha()` |
+| Back-face culling | Enabled (counter-clockwise) | `gpu.set_culling()` |
+| MSAA | Enabled (4 samples) | `gpu.set_msaa()` |
+| Polygon mode | Filled | `gpu.set_poly_mode()` |
+| Clear colour | Grey (0.5) | `gpu.set_bg_color()` |
+
 ### GPU
 
 Derives:
@@ -2180,6 +2286,121 @@ pub fn fill_index_buffer(id: u32, data: &[u32]);
 ---
 
 ## 5. Asset Types (`optic_render::asset`)
+
+### Asset Handling Overview
+
+Optic uses **runtime binary caching** — not build-time asset compilation. There
+are no `build.rs` scripts, no CLI baking tools, and no asset manifest files.
+Caching happens transparently inside each type's `from_disk()` constructor.
+
+#### How It Works
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                  Debug Build                                 │
+│                                                              │
+│  Source file ──parse/bake──▶ CPU data ──save──▶ Binary cache │
+│  (PNG/OBJ/GLSL/TTF/OGG)                   (optc/*.otxtr…)  │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│                  Release Build                               │
+│                                                              │
+│  Binary cache ──load directly──▶ CPU data                   │
+│  (optc/*.otxtr…)                                             │
+│  Source file is never touched                                │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- **Debug builds**: `from_disk(path)` re-parses the source file and overwrites
+  the binary cache. Editing source assets takes effect on next run.
+- **Release builds**: `from_disk(path)` loads directly from the binary cache.
+  The source file is never read. If the cache is missing, loading fails.
+
+#### Cache Path Convention
+
+All asset types use `optic_file::cached_path(source, ext)` to compute cache
+locations. Cache files live in an `optc/` subdirectory next to the source:
+
+| Source file | Cache file |
+|---|---|
+| `assets/tex/foo.png` | `assets/tex/optc/foo.otxtr` |
+| `models/cube.obj` | `models/optc/cube.omesh` |
+| `shaders/main.glsl` | `shaders/optc/main.oshdr` |
+| `fonts/arial.ttf` | `fonts/optc/arial.ofont` |
+| `sound/bgm.ogg` | `sound/optc/bgm.omusic` |
+
+#### Binary Cache Format
+
+Every binary cache file shares a common header:
+
+| Offset | Size | Field | Description |
+|---|---|---|---|
+| 0 | 8 | Magic | `b"/0PTIC_x"` — never changes |
+| 8 | 2 | Version | `OPTIC_CACHE_VERSION` (currently `1`, u16 LE) |
+| 10+ | varies | Payload | Asset-specific data |
+
+The version field allows the cache format to evolve without breaking old caches.
+If the version doesn't match, the cache is rejected and (in debug) regenerated.
+
+#### Asset Types Summary
+
+| Type | Source formats | Cache ext | Cache contents |
+|---|---|---|---|
+| `TextureFile` | `.png`, `.jpg`, … | `.otxtr` | Raw pixels + dimensions + format + filter + wrap |
+| `Mesh3DFile` | `.obj`, `.stl`, procedural | `.omesh` | Vertex arrays + index buffer |
+| `Mesh2DFile` | procedural | `.omesh` | 2D vertices + indices + layer |
+| `ShaderFile` | `.glsl` | `.oshdr` | Vertex + fragment source strings |
+| `FontFamilyFile` | `.ttf`, `.otf` | `.ofont` | MSDF atlas + glyph metrics + TTF bytes |
+| `SoundFile` | `.ogg`, … | `.omusic` | Interleaved PCM samples |
+
+#### Font Baking Pipeline (MSDF)
+
+Fonts are the most complex asset type. When a TTF/OTF font is loaded for the
+first time, the engine performs a multi-step baking process:
+
+1. **Parse** — `ttf_parser::Face::parse()` reads the TrueType font data.
+2. **Extract edges** — For each codepoint (default: ASCII 32..126),
+   `extract_glyph_edges` converts the glyph outline into `Contour`s made of
+   `EdgeSegment`s (line, quadratic bezier, cubic bezier).
+3. **Bake MSDF** — `bake_msdf` rasterises each glyph into a **multi-channel
+   signed distance field** — a 3-channel (RGB) texture where each channel stores
+   signed distance classified by the nearest edge's normal direction. This
+   preserves sharp corners at any scale.
+4. **Pack atlas** — Individual glyph textures are packed into a 512×512 atlas
+   grid. `GlyphMetrics` record the UV rect, size, bearing, and advance.
+5. **Cache** — The assembled `FontFamilyFile` is saved as a `.ofont` binary
+   containing atlas textures, glyph metric tables, font metrics, and the raw
+   TTF source bytes (needed by rustybuzz for text shaping).
+
+For **bitmap fonts**, `bake_sdf_from_bitmap` converts a binary sprite sheet
+into a single-channel SDF atlas using distance transform.
+
+#### GPU Upload
+
+CPU-side asset types are uploaded to the GPU via the `GPU` renderer:
+
+```ignore
+let tex_file = TextureFile::from_disk("assets/grass.png")?;
+let tex: Texture2D = gpu.upload_texture(&tex_file);
+
+let cube = Mesh3DFile::cube(2.0);
+let mesh: Mesh3D = gpu.upload_mesh3d(&cube);
+```
+
+The `GPU` loads fallback assets on construction — built-in shaders, a
+checkerboard texture, and an 8×8 bitmap font — so rendering works immediately
+without any custom assets.
+
+#### Fallback Assets
+
+| Asset | Source | Behaviour |
+|---|---|---|
+| 2D shader | `optic/assets/shdr/fallback2d.glsl` | Used by `upload_mesh2d` |
+| 3D shader | `optic/assets/shdr/fallback3d.glsl` | Used by `upload_mesh3d` |
+| Text shaders | `assets/shdr/fallback_text{2d,3d}.glsl` | Used by `Text2D`/`Text3D` |
+| Texture | `optic/assets/txtr/fallback.png` | Checkerboard pattern |
+| Font | Hardcoded 8×8 bitmap | ASCII 32–126, always available |
 
 ### ShaderFile
 

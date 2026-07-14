@@ -49,17 +49,188 @@
 //! });
 //! ```
 //!
-//! # Execution model
+//! # How the Game Runtime Works
 //!
-//! Each frame executes in three independent phases:
+//! The Optic game loop is a **three-phase, fixed-timestep frame scheduler**
+//! built on top of winit's event loop. Each frame is divided into three
+//! independent phases that run at their own configurable rates:
 //!
-//! 1. **Physics** — fixed-timestep simulation (default 60 Hz)
-//! 2. **Update** — gameplay logic (default: once per frame)
-//! 3. **Render** — draw calls, presented once per frame
+//! ```text
+//! ┌──────────────────────────────────────────────────────────────┐
+//! │  winit Event Loop                                            │
+//! │                                                              │
+//! │  ┌─── about_to_wait() ───────────────────────────────────┐  │
+//! │  │                                                        │  │
+//! │  │  1. Record frame start time                           │  │
+//! │  │  2. Drain gamepad events (gilrs)                      │  │
+//! │  │  3. Poll network events (if online feature enabled)   │  │
+//! │  │  4. Make GL context current                           │  │
+//! │  │  5. Clear GPU                                         │  │
+//! │  │  6. Advance time (delta, FPS, elapsed)                │  │
+//! │  │  7. Update window frame state (cursor delta, loopback)│  │
+//! │  │  8. Recalculate camera matrices                       │  │
+//! │  │                                                        │  │
+//! │  │  ┌─ FIRST FRAME ONLY ─────────────────────────────┐  │  │
+//! │  │  │  • runtime.start(game)                          │  │  │
+//! │  │  │  • Make window visible                          │  │  │
+//! │  │  │  • Center window on screen                      │  │  │
+//! │  │  └─────────────────────────────────────────────────┘  │  │
+//! │  │                                                        │  │
+//! │  │  ┌─ Three-Phase Frame ────────────────────────────┐   │  │
+//! │  │  │                                                │   │  │
+//! │  │  │  Physics (fixed timestep, default 60 Hz)       │   │  │
+//! │  │  │    ├ physics()  ← constant dt = 1/hz          │   │  │
+//! │  │  │    ├ physics()  ← catch-up if frame was slow   │   │  │
+//! │  │  │    └ physics()                                  │   │  │
+//! │  │  │                                                │   │  │
+//! │  │  │  Update (optional fixed timestep)              │   │  │
+//! │  │  │    └ update()     ← once per frame by default  │   │  │
+//! │  │  │                                                │   │  │
+//! │  │  │  Render (once per presented frame)             │   │  │
+//! │  │  │    └ render()     ← all draw calls go here     │   │  │
+//! │  │  │                                                │   │  │
+//! │  │  └────────────────────────────────────────────────┘   │  │
+//! │  │                                                        │  │
+//! │  │  9. Swap buffers (present to screen)                  │  │
+//! │  │ 10. Clear input events for next frame                 │  │
+//! │  │ 11. Request redraw                                    │  │
+//! │  │ 12. Sleep if FPS-limited                              │  │
+//! │  │                                                        │  │
+//! │  └────────────────────────────────────────────────────────┘  │
+//! │                                                              │
+//! └──────────────────────────────────────────────────────────────┘
+//! ```
 //!
-//! Each phase runs at its own independently configurable rate via
-//! [`Time::set_target_physics_rate`], [`Time::set_target_tps`], and
-//! [`Time::set_fps_limit`].
+//! ## Frame Lifecycle
+//!
+//! Each rendered frame follows this exact sequence:
+//!
+//! 1. **Frame start** — the engine records the current wall-clock time
+//!    for delta computation and FPS limiting.
+//!
+//! 2. **Event processing** — winit window events (resize, cursor, close)
+//!    and gilrs gamepad events are drained into the [`Events`] collector.
+//!    Network events are polled if the `online` feature is enabled.
+//!
+//! 3. **Time update** — [`Time::update`] computes `delta` (seconds since
+//!    last frame), `elapsed` (total seconds), and smoothed `fps` from a
+//!    32-frame rolling average.
+//!
+//! 4. **First-frame setup** — on the very first frame only, the engine
+//!    calls [`Runtime::start`], makes the window visible, and centers it
+//!    on the monitor. This is where you load assets and configure rates.
+//!
+//! 5. **Three-phase execution** — [`Game::run_frame`] drives the three
+//!    phases:
+//!
+//!    - **Physics** — [`Time::advance_physics`] determines how many
+//!      fixed-timestep steps to run. Each step invokes
+//!      [`Runtime::physics`] with a constant delta (`1/physics_rate`).
+//!      At 60 Hz, this is ~16.67 ms per step. If a frame takes 50 ms,
+//!      three physics steps execute to catch up.
+//!
+//!    - **Update** — [`Time::advance_update`] determines how many update
+//!      steps to run. By default (`None` TPS), this is exactly one step
+//!      per frame. If you set a fixed TPS, multiple updates can run per
+//!      frame, similar to physics.
+//!
+//!    - **Render** — [`Runtime::render`] is called exactly once. All draw
+//!      calls belong here. Use [`Time::physics_alpha`] to interpolate
+//!      between previous and current simulation state for smooth visuals
+//!      when physics runs slower than rendering.
+//!
+//! 6. **Presentation** — the engine swaps buffers (presents to screen),
+//!    clears the input event state for the next frame, and requests a
+//!    redraw from winit.
+//!
+//! 7. **FPS limiting** — if [`FpsLimit::Limited`] is active, the engine
+//!    sleeps for the remaining frame time to approximate the target FPS.
+//!    VSync pacing is handled by the swap interval. Uncapped mode does
+//!    no sleeping.
+//!
+//! ## Rate Configuration
+//!
+//! Each phase has an independently configurable rate:
+//!
+//! ```ignore
+//! fn start(&mut self, game: &mut Game) {
+//!     // Physics: 120 Hz fixed timestep (default: 60 Hz)
+//!     game.time.set_target_physics_rate(120.0);
+//!
+//!     // Update: 20 Hz fixed timestep (default: once per frame)
+//!     game.time.set_target_tps(Some(20.0));
+//!
+//!     // Render: 144 FPS cap (default: VSync)
+//!     game.time.set_fps_limit(FpsLimit::Limited(144.0));
+//! }
+//! ```
+//!
+//! - **Physics rate** (`set_target_physics_rate`): controls how many
+//!   simulation steps run per second. Each step uses a constant delta,
+//!   making physics deterministic regardless of frame rate.
+//!
+//! - **Update rate** (`set_target_tps`): `None` means once per frame
+//!   (the default). `Some(hz)` enables a fixed update timestep, useful
+//!   for decoupling gameplay logic from render rate.
+//!
+//! - **FPS limit** (`set_fps_limit`): `VSync` syncs to monitor refresh,
+//!   `Limited(fps)` sleeps to approximate a target, `Uncapped` renders
+//!   as fast as possible.
+//!
+//! Rate changes take effect immediately — the next scheduler invocation
+//! observes the new rate. Existing accumulator contents are preserved.
+//!
+//! ## Spiral-of-Death Protection
+//!
+//! If a frame takes too long (e.g. a garbage collection pause), the
+//! physics/update accumulators could grow without bound, causing
+//! ever-longer frames. The engine caps each phase at **240 steps per
+//! frame**. Excess backlog is discarded with phase preservation
+//! (`accumulator %= fixed_dt`) and a warning is logged. This prevents
+//! the "spiral of death" where the game becomes permanently unresponsive.
+//!
+//! ## Interpolation
+//!
+//! When physics runs at a different rate than rendering, objects may
+//! appear to stutter. The engine provides [`Time::physics_alpha`], a
+//! value in `[0, 1)` that represents how far between the previous and
+//! current physics step we are. Use it to lerp visual positions:
+//!
+//! ```ignore
+//! fn render(&mut self, game: &mut Game) {
+//!     let alpha = game.time.physics_alpha();
+//!     let display_x = prev_x + (curr_x - prev_x) * alpha;
+//!     // draw at (display_x, display_y)
+//! }
+//! ```
+//!
+//! The engine performs **no automatic interpolation** — you control
+//! exactly how interpolation is applied.
+//!
+//! ## Ownership and Borrowing
+//!
+//! The engine uses a `take/replace` pattern to satisfy Rust's borrow
+//! checker: the [`Runtime`] trait object is temporarily removed from
+//! [`Game`] before each callback, then returned after. This means you
+//! can borrow `game` mutably inside your callbacks without conflicts:
+//!
+//! ```ignore
+//! fn update(&mut self, game: &mut Game) {
+//!     // game is fully borrowed here — access any subsystem
+//!     game.events.key(KeyCode::Space, Is::Pressed);
+//!     game.renderer.set_bg_color(RED);
+//!     game.audio.set_master_volume(0.8);
+//! }
+//! ```
+//!
+//! ## Shutdown
+//!
+//! The game exits when:
+//! - [`Game::exit`] is called from any callback
+//! - The window close button is pressed
+//!
+//! On shutdown, the engine calls [`Runtime::end`], then disconnects
+//! networking (if enabled), and exits the process with code 0.
 
 mod game;
 mod runtime;

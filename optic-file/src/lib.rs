@@ -1,17 +1,46 @@
 //! Sanitary file I/O and cached-path resolution for the Optic engine.
 //!
-//! All fallible functions return [`OpticResult`] wrapping [`OpticErrorKind::File`]
-//! errors with descriptive messages.
+//! This crate provides the file-system foundation for the Optic asset pipeline.
+//! It handles reading, writing, and path resolution — but never parsing or
+//! encoding. All fallible functions return [`OpticResult`] wrapping
+//! [`OpticErrorKind::File`] errors with descriptive messages.
 //!
-//! # Cache path convention
+//! # Cache Path Convention
 //!
-//! Assets are cached alongside the source file in an `optc/` subdirectory:
+//! Optic uses runtime binary caching for all asset types. Cache files are placed
+//! in an `optc/` subdirectory adjacent to the source file, with the original
+//! extension replaced by the optic cache extension:
 //!
 //! ```text
-//! assets/tex/foo.png     → assets/tex/optc/foo.otxtr
-//! models/cube.obj        → models/optc/cube.omesh
-//! shaders/main.glsl      → shaders/optc/main.oshdr
+//! Source file                  Cache file
+//! ──────────────────────────   ──────────────────────────
+//! assets/tex/foo.png     →     assets/tex/optc/foo.otxtr
+//! models/cube.obj        →     models/optc/cube.omesh
+//! shaders/main.glsl      →     shaders/optc/main.oshdr
+//! fonts/arial.ttf        →     fonts/optc/arial.ofont
+//! sound/bgm.ogg          →     sound/optc/bgm.omusic
 //! ```
+//!
+//! The [`cached_path`] function computes these paths. Every asset type
+//! (`TextureFile`, `Mesh3DFile`, `ShaderFile`, `FontFamilyFile`, `SoundFile`)
+//! calls `cached_path` inside its `from_disk()` constructor to locate the
+//! cache.
+//!
+//! # Debug vs. Release Behaviour
+//!
+//! - **Debug builds** (`#[cfg(debug_assertions)]`): `from_disk()` always
+//!   re-parses the source file and overwrites the binary cache. This means
+//!   editing source assets takes effect on next run — no manual rebuild step.
+//!
+//! - **Release builds** (`#[cfg(not(debug_assertions))]`): `from_disk()` loads
+//!   directly from the binary cache. The source file is never read. If the
+//!   cache does not exist, loading fails.
+//!
+//! # Directory Management
+//!
+//! [`create_dir`] creates a directory and all parent directories (like
+//! `mkdir -p`). Asset types call this before writing cache files to ensure the
+//! `optc/` subdirectory exists.
 
 use optic_core::{OpticError, OpticErrorKind, OpticResult};
 use std::fs;
