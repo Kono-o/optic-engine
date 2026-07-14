@@ -13,21 +13,11 @@ use crate::file::SoundFile;
 use crate::sound2d::Sound2D;
 use crate::sound3d::Sound3D;
 
-/// The audio engine — the GPU-equivalent for sound.
+/// The audio subsystem wrapping Kira, managing sound uploads, volume, and 3D listener position.
 ///
-/// Owns the kira audio manager, a listener for 3D spatial audio, and provides
-/// factory methods for creating playable sound handles.
-///
-/// # Example
-///
-/// ```ignore
-/// use optic_sound::{AudioEngine, SoundFile};
-///
-/// let mut audio = AudioEngine::new()?;
-/// let sfx = SoundFile::from_disk("sounds/hello.wav")?;
-    /// let mut sound = audio.upload_sound2d(&sfx)?;
-/// sound.play();
-/// ```
+/// Owns the Kira audio manager and a spatial listener. Provides factory methods for creating
+/// playable Sound2D and Sound3D handles from SoundFile assets. Every Game has one — use it to
+/// upload sounds, set master volume, and position the 3D audio listener each frame.
 pub struct AudioEngine {
     manager: AudioManager<DefaultBackend>,
     listener: ListenerHandle,

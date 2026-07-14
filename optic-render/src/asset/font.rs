@@ -5,9 +5,10 @@ use optic_core::consts::{OPTIC_CACHE_VERSION, OPTIC_MAGIC, OFONT};
 use crate::asset::img::TextureFile;
 use crate::asset::msdf::{bake_msdf, bake_sdf_from_bitmap, extract_glyph_edges};
 
-/// Metrics for a single glyph in the atlas texture.
+/// Per-glyph atlas lookup data for text layout.
 ///
-/// Stored per glyph-ID in [`BakedFont::glyphs`].
+/// Stores the UV rectangle into the atlas texture along with the glyph's size, bearing, and
+/// horizontal advance. The engine uses this to position and render individual glyphs.
 #[derive(Clone, Debug)]
 pub struct GlyphMetrics {
     /// UV rectangle `[u0, v0, u1, v1]` into the atlas texture.
@@ -47,10 +48,10 @@ impl GlyphMetrics {
     }
 }
 
-/// A single baked font style — atlas texture + glyph metrics + edge softness.
+/// A single baked font style containing the atlas texture, glyph metrics, and edge softness.
 ///
-/// One `BakedFont` exists per style variant (regular, bold, italic, bold-italic)
-/// within a [`FontFamilyFile`].
+/// One instance exists per style variant (regular, bold, italic, bold-italic) within a
+/// FontFamilyFile. The engine uses this to look up glyph UVs and dimensions during text layout.
 pub struct BakedFont {
     /// Atlas texture containing all baked glyphs.
     pub atlas: TextureFile,
@@ -60,10 +61,10 @@ pub struct BakedFont {
     pub edge_softness: f32,
 }
 
-/// Complete font family file — metrics, style variants, and optional TTF source.
+/// Complete font family asset with metrics, style variants, optional TTF bytes, and baked MSDF atlas data.
 ///
-/// Load from disk with [`FontFamilyFile::from_disk`], or construct manually
-/// from TTF bytes or a bitmap layout.
+/// The central font type holding line height, ascent/descent, up to four style variants, and the
+/// raw TrueType source for text shaping. Use from_disk() or from_ttf_file() to create one.
 pub struct FontFamilyFile {
     /// Line height in font units (TTF) or pixels (bitmap).
     pub line_height: f32,
@@ -85,7 +86,10 @@ pub struct FontFamilyFile {
     pub is_bitmap: bool,
 }
 
-/// Describes a bitmap font layout for [`FontFamilyFile::from_bitmap_layout`].
+/// Configuration for constructing a font from a bitmap tile grid.
+///
+/// Specifies the source texture, tile size, grid dimensions, codepoint-to-tile mapping, and
+/// advance width. Use this for pixel-art or retro fonts where glyphs come from a sprite sheet.
 pub struct BitmapFontLayout {
     /// Source texture containing the glyph tiles.
     pub texture: TextureFile,

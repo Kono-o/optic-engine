@@ -1,9 +1,12 @@
 use cgmath::*;
 
-/// A 3D transform with position, rotation (Euler angles in degrees), and scale.
+/// 3D transform (position, rotation, scale) used by Mesh3D and Text3D.
 ///
-/// The transform maintains a 4×4 TRS matrix (translate × rotate × scale). Call
-/// [`calc_matrix`](Transform3D::calc_matrix) after mutating to recompute it.
+/// Stores world-space position, Euler rotation in degrees, and non-uniform scale,
+/// maintaining a 4×4 TRS (translate × rotate × scale) matrix. The engine uses
+/// `Transform3D` as the spatial component of every 3D mesh and text object — call
+/// [`calc_matrix`](Transform3D::calc_matrix) after mutating to recompute the matrix
+/// consumed by the rendering pipeline.
 ///
 /// # Operations
 ///

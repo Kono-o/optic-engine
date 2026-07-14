@@ -21,6 +21,12 @@ use crate::convert::{hsv_to_rgba, rgba_to_hsv};
 use crate::{channel_lerp, HSV, RGBA, ToRgba};
 
 /// A single control point in a gradient.
+///
+/// Pairs a position on the 0..1 gradient axis with the color at that point.
+/// Gradients are defined as a sorted list of stops; the evaluator
+/// interpolates between adjacent stops when sampling. A developer creates
+/// these when building a [`Gradient`] manually, or they are generated
+/// internally by helpers like [`Gradient::from_colors`].
 #[derive(Copy, Clone, Debug)]
 pub struct GradientStop {
     /// Position on the 0..1 gradient axis.
@@ -67,9 +73,12 @@ pub enum GradientWrap {
 
 /// A configurable color gradient evaluator.
 ///
-/// `Gradient` maps a normalized position `t` (0..1) to an [`RGBA`] color
-/// by interpolating between control points (stops). It supports multiple
-/// interpolation modes, color spaces, and wrap modes.
+/// Maps a normalized position `t` (0..1) to an [`RGBA`] color by
+/// interpolating between control points (stops). Useful for procedural
+/// textures, particle color ramps, heatmaps, and any effect that needs a
+/// smooth color transition defined by a small number of key colors.
+///
+/// Supports multiple interpolation modes, color spaces, and wrap modes.
 ///
 /// # Construction
 ///

@@ -19,7 +19,10 @@
 
 /// ANSI terminal escape pair for colored output.
 ///
-/// Used with the [`log_color!`](crate::log_color) macro.
+/// Represents an SGR escape sequence pair used to produce colored terminal
+/// output in the engine's logging system. Each constant wraps a prefix that
+/// begins a color and a suffix that resets terminal attributes. Use with the
+/// [`log_color!`](crate::log_color) macro or directly with `print!`/`eprint!`.
 ///
 /// Each constant combines a SGR prefix (e.g. `\x1b[31m` for red foreground)
 /// and a reset suffix (`\x1b[0m`).

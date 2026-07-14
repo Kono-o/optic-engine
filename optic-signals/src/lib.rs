@@ -33,36 +33,12 @@
 use optic_core::ATTRType;
 use optic_render::asset::attr::DataType;
 
-/// A value wrapper with dirty-flag tracking for incremental GPU updates.
+/// A dirty-flagged value wrapper for incremental GPU updates via custom instance attributes.
 ///
-/// `Signal<T>` stores a value of type `T` and a boolean dirty flag. The flag
-/// is set automatically on construction and whenever [`set`](Signal::set) is
-/// called, signalling to the instance-buffer system that this slot needs to
-/// be re-uploaded to the GPU.
-///
-/// `T` must implement [`DataType`] so the value can be serialised to bytes
-/// for the instance buffer.
-///
-/// # Examples
-///
-/// ```ignore
-/// use optic_signals::Signal;
-///
-/// let mut health: Signal<f32> = Signal::new(100.0);
-/// assert!(health.is_dirty());
-///
-/// // Simulate the GPU upload loop:
-/// // if signal.is_dirty() {
-/// //     instance_buffer.write(slot, signal.value().u8ify());
-/// //     signal.clear_dirty();
-/// // }
-///
-/// health.set(80.0);
-/// assert!(health.is_dirty());
-///
-/// health.clear_dirty();
-/// assert!(!health.is_dirty());
-/// ```
+/// Wraps any DataType-compatible value and tracks whether it was modified since the last time the
+/// dirty flag was cleared. The instance-buffer system uses this to skip unchanged per-instance
+/// attributes, avoiding redundant GPU uploads. Use Signal when most instances don't change every
+/// frame but you still want fine-grained per-frame updates for those that do.
 pub struct Signal<T> {
     value: T,
     dirty: bool,

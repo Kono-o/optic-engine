@@ -19,12 +19,12 @@ use winit::event::{ElementState, MouseButton, MouseScrollDelta, TouchPhase, Wind
 use winit::keyboard::{ModifiersState, PhysicalKey};
 pub use winit::keyboard::KeyCode;
 
-/// Per-button state machine.
+/// Per-button state machine tracking the pressed/released lifecycle of a single input.
 ///
-/// Tracks press/release frame numbers so callers can distinguish the exact
-/// frame a button was pressed or released, independent of polling order.
-///
-/// Used internally by [`Events`] for keyboard, mouse, and gamepad buttons.
+/// Records the frame number at which a button was pressed and released, allowing
+/// the engine to distinguish exact-frame transitions (press edge, release edge, held)
+/// independent of polling order. Used internally by [`Events`] for every keyboard key,
+/// mouse button, and gamepad button the engine tracks.
 #[derive(Copy, Clone)]
 pub struct ButtonState {
     pub held: bool,

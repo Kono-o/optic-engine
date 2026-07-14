@@ -97,12 +97,12 @@ pub(crate) struct InstanceKind {
 
 // ── InstanceDesc3D ────────────────────────────────────────────────────────
 
-/// Descriptor for preparing 3D instance data before uploading it to the GPU.
+/// Builder for constructing 3D instance buffers from positions, transforms, or matrices.
 ///
-/// An instance buffer packs per-instance attributes (position, rotation, scale,
-/// colour, and custom attributes) into a single interleaved GPU buffer. This
-/// type collects attribute data on the CPU side and interleaves them when
-/// [`upload`](InstanceDesc3D::upload) is called.
+/// Collects per-instance attribute data (position, rotation, scale, colour, and custom
+/// attributes) on the CPU side and interleaves them into a single GPU buffer when
+/// [`upload`](InstanceDesc3D::upload) is called. Use this to prepare instanced draws of
+/// [`Mesh3D`] — for example, rendering thousands of objects with a single draw call.
 ///
 /// # Attribute layout
 ///
@@ -418,11 +418,12 @@ impl InstanceDesc3D {
 
 // ── InstanceDesc2D ────────────────────────────────────────────────────────
 
-/// Descriptor for preparing 2D instance data before uploading it to the GPU.
+/// Builder for constructing 2D instance buffers from per-instance attributes.
 ///
-/// Like [`InstanceDesc3D`], but uses 2-element vectors for position and scale
-/// and single-precision scalars for rotation (angle in radians). The same
-/// interleaving, validation, and upload semantics apply.
+/// Like [`InstanceDesc3D`], but uses 2-element vectors for position and scale and a
+/// single-precision scalar for rotation (angle in radians). Use this to prepare
+/// instanced draws of [`Mesh2D`](crate::handles::Mesh2D) for efficient batch rendering
+/// of 2D sprites, tiles, or UI elements.
 ///
 /// # Attribute layout
 ///
@@ -569,13 +570,13 @@ impl InstanceDesc2D {
 
 // ── InstanceBuffer ────────────────────────────────────────────────────────
 
-/// A GPU buffer of interleaved per-instance attributes with a CPU-side mirror
-/// for random access.
+/// GPU buffer for instanced rendering, storing per-instance transforms, colors, and custom attributes with a CPU mirror for readback.
 ///
-/// Created by [`InstanceDesc3D::upload`] or [`InstanceDesc2D::upload`]. Each
-/// instance is a single packed row of attributes (position, rotation, scale,
-/// colour, and custom data). The buffer is designed for use with
-/// `glDrawArraysInstanced` / `glDrawElementsInstanced`.
+/// Created by [`InstanceDesc3D::upload`] or [`InstanceDesc2D::upload`]. Each instance is a
+/// single packed row of interleaved attributes (position, rotation, scale, colour, and
+/// custom data) designed for use with `glDrawArraysInstanced` / `glDrawElementsInstanced`.
+/// The engine binds an `InstanceBuffer` to a [`MeshHandle`](crate::handles::MeshHandle) to
+/// render thousands of objects in a single draw call.
 ///
 /// # CPU mirror
 ///

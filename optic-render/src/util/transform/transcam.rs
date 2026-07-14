@@ -1,12 +1,13 @@
 use optic_core::{CamProj, ClipDist, Size2D};
 use cgmath::*;
 
-/// Camera transform state with pre-computed view and projection matrices.
+/// Camera-specific transform storing view/projection matrices, FOV, and clip distances.
 ///
-/// Holds position, Euler rotation, FOV, clip distances, viewport size, and
-/// projection type. Call [`calc_matrices`](CamTransform::calc_matrices) to
-/// recompute the view, perspective, and orthographic matrices after mutating
-/// any field.
+/// Holds the camera's position, Euler rotation, field of view, near/far clip planes,
+/// viewport aspect ratio, and projection mode (perspective or orthographic). The engine
+/// uses `CamTransform` inside [`Camera`](crate::Camera) to pre-compute the view and
+/// projection matrices consumed by `GPU::render3d` and `GPU::render_text3d`. Call
+/// [`calc_matrices`](CamTransform::calc_matrices) after mutating any field.
 #[derive(Clone, Debug)]
 pub struct CamTransform {
     pub(crate) pos: Vector3<f32>,

@@ -9,7 +9,10 @@
 
 /// Polygon rasterization mode.
 ///
-/// Controls how triangles (or other primitives) are rendered on screen.
+/// Controls how triangles (or other primitives) are rasterized on screen.
+/// Switching to `Points` or `WireFrame` is useful during debugging to
+/// inspect geometry, while `Filled` is the standard mode for production
+/// rendering.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum PolygonMode {
     /// Render each vertex as a point. Useful for particle systems or
@@ -27,7 +30,9 @@ pub enum PolygonMode {
 ///
 /// Determines which side of a triangle is considered "back-facing" and
 /// therefore hidden. Back-face culling improves performance by skipping
-/// triangles the viewer cannot see.
+/// triangles the viewer cannot see. A developer sets this to match the
+/// winding order convention used by their 3D models — the wrong setting
+/// will cause faces to disappear from the wrong side.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum CullFace {
     /// Cull faces with clockwise winding order.
@@ -38,7 +43,10 @@ pub enum CullFace {
 
 /// Primitive topology for draw calls.
 ///
-/// Defines how vertex data is interpreted when issuing a draw call.
+/// Defines how vertex data is interpreted when issuing a draw call. The
+/// most common choice is `Triangles`; `Strip` reduces vertex redundancy
+/// for connected geometry, while `Lines` and `Points` are used for debug
+/// visualizations or particle effects.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub enum DrawMode {
     /// Individual, unconnected vertices.
@@ -55,6 +63,11 @@ pub enum DrawMode {
 }
 
 /// Texture image format, encoding channel count and bit depth.
+///
+/// Describes the pixel layout of a texture or framebuffer attachment.
+/// Choose the appropriate variant when loading image assets or creating
+/// render targets — using fewer channels saves memory when alpha or color
+/// is not needed (e.g. a greyscale heightmap only needs `R`).
 ///
 /// Each variant carries the per-channel bit depth (e.g. `RGBA(8)` = 4×8-bit).
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -107,7 +120,10 @@ impl ImgFormat {
 
 /// Texture filter (minification/magnification) mode.
 ///
-/// Determines how texels are sampled when a texel does not map 1:1 to a pixel.
+/// Determines how texels are sampled when a texel does not map 1:1 to a
+/// pixel. Choose `Closest` for pixel-art or retro aesthetics where you
+/// want sharp edges, or `Linear` for smooth, photographic textures. This
+/// is set per-texture when configuring material properties.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ImgFilter {
     /// Nearest-neighbor filtering — picks the closest texel. Produces
@@ -121,7 +137,9 @@ pub enum ImgFilter {
 /// Texture wrap (addressing) mode.
 ///
 /// Controls what happens when texture coordinates fall outside the
-/// normalised [0, 1] range.
+/// normalised [0, 1] range. `Repeat` is the default for tiled surfaces
+/// like floors and walls, `Extend` for HUD elements and skyboxes, and
+/// `Clip` for decals that should fade to transparent at their edges.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ImgWrap {
     /// Tile the texture by repeating it at integer boundaries. The default
@@ -140,7 +158,9 @@ pub enum ImgWrap {
 ///
 /// Specifies the component type for vertex buffer data (positions, normals,
 /// UVs, etc.). The GPU reads attributes according to this type when
-/// interpreting raw vertex buffer bytes.
+/// interpreting raw vertex buffer bytes. A developer selects the appropriate
+/// variant when defining vertex layouts — e.g. `F32` for positions, `U8`
+/// for bone weights, or `U16` for compressed indices.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ATTRType {
     /// Unsigned 8-bit integer (0–255).

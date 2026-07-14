@@ -2,11 +2,10 @@ use optic_core::ATTRType;
 
 use crate::asset::attr::DataType;
 
-/// Discriminated name for a vertex or instance attribute.
+/// Identifies a standard or custom vertex/instance attribute by name.
 ///
-/// Built-in names cover the standard attributes used by Optic's mesh and instance
-/// system. The [`Custom`](ATTRName::Custom) variant allows user-defined names for
-/// shader-specific data.
+/// Built-in variants (Position2D, Color, UVMap, etc.) cover the standard attributes in Optic's
+/// mesh and instance system. The Custom variant allows user-defined names for shader-specific data.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ATTRName {
     Custom(String),
@@ -41,10 +40,10 @@ impl ATTRName {
     }
 }
 
-/// Describes a single vertex or instance attribute: name, GL type, byte size, element count.
+/// Metadata describing a vertex or instance attribute (name, type, byte size, element count).
 ///
-/// Used internally to configure VAO attribute pointers and to validate type matches
-/// at runtime (e.g. in [`MeshHandle::update_vertex`](crate::handles::MeshHandle::update_vertex)).
+/// Used internally to configure VAO attribute pointers and validate type matches at runtime.
+/// The engine creates an ATTRInfo for every built-in and custom attribute in a mesh or instance.
 #[derive(Clone, Debug)]
 pub struct ATTRInfo {
     pub name: ATTRName,

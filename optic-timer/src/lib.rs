@@ -142,7 +142,10 @@ impl Timer {
     }
 }
 
-/// A collection of [`Timer`]s managed as a group.
+/// A managed collection of timers that can be ticked as a group.
+///
+/// Provides batch operations for ticking all timers at once, emitting signals, and adding/removing
+/// individual timers by index. Use this when you need to track many timed events in your game.
 pub struct Timers {
     timers: Vec<Timer>,
 }

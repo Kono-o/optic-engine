@@ -44,11 +44,12 @@ use crate::glraw::GL;
 use crate::handles::{Canvas, FontFamily, Mesh2D, Mesh3D, RenderTarget, Shader, Text2D, Text3D, Texture2D};
 use crate::{asset, Camera};
 
-/// A rectangular sub-region of the OpenGL viewport.
+/// A rectangular region of the render target, measured in pixels from the lower-left corner.
 ///
-/// Used by [`GPU::viewport`] and [`GPU::set_viewport`] to query or set the
-/// window-area that GL renders into, measured in pixels from the
-/// lower-left corner.
+/// Describes the viewport or scissor rectangle that the OpenGL pipeline uses to map
+/// NDC coordinates to window pixels. Used by [`GPU::viewport`] and [`GPU::set_viewport`]
+/// to restrict rendering to a sub-area of the canvas, and by canvases to set renderable
+/// regions for split-screen or picture-in-picture effects.
 pub struct Viewport {
     /// Horizontal offset from the left edge of the window, in pixels.
     pub x: i32,

@@ -2,9 +2,12 @@ use optic_core::{ImgFilter, ImgFormat, ImgWrap, OpticError, OpticErrorKind, Opti
 
 use crate::handles::texture::{Texture2D, delete_texture};
 
-/// Describes the format and structure of an off-screen framebuffer (canvas).
+/// Configuration for creating a [`Canvas`] — size, colour formats, MSAA, depth, and stencil.
 ///
-/// Pass to [`Canvas::new`] to create the GPU framebuffer.
+/// Defines the structure of an off-screen framebuffer before it is created on the GPU.
+/// Use this to specify resolution, multi-render-target formats, MSAA sample count,
+/// and depth/stencil attachments. Pass to [`Canvas::new`] or
+/// [`GPU::upload_canvas`](crate::GPU::upload_canvas) to allocate the framebuffer.
 #[derive(Clone, Debug)]
 pub struct CanvasDesc {
     pub size: Size2D,
@@ -34,10 +37,12 @@ impl Default for CanvasDesc {
     }
 }
 
-/// An off-screen render target (framebuffer object) with optional MSAA.
+/// Offscreen framebuffer with optional MSAA, depth, and stencil attachments for render-to-texture workflows.
 ///
-/// Supports multiple colour attachments, depth/stencil, and MSAA resolve.
-/// Created via [`Canvas::new`] or [`GPU::upload_canvas`](crate::GPU::upload_canvas).
+/// Wraps one or more OpenGL FBOs and their associated colour/depth textures or renderbuffers.
+/// `Canvas` is the engine's render-to-texture primitive — use it for post-processing
+/// pipelines, shadow maps, UI layers, or any scenario where rendering must target a texture
+/// rather than the screen directly. Supports MSAA resolve, pixel readback, and disk export.
 ///
 /// # Example
 ///

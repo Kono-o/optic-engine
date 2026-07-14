@@ -8,6 +8,12 @@ use crate::RGBA;
 
 /// RGB color with three 0..1 float channels.
 ///
+/// An alpha-less color type for cases where opacity is not needed — for
+/// example light colors in deferred rendering, or vertex colors on opaque
+/// geometry. Conversions to and from [`RGBA`] are lossless; use
+/// [`to_rgba`](RGB::to_rgba) to supply a custom alpha when bridging to APIs
+/// that require `RGBA`.
+///
 /// This is a tuple struct with public fields:
 ///
 /// | Field | Range  | Description  |

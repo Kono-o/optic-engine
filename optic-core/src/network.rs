@@ -11,6 +11,12 @@
 
 /// Unique identifier for a connected peer.
 ///
+/// Assigned by the host during connection, a `PeerId` tags every packet and
+/// connection event so the game logic can identify which remote player or
+/// client an event belongs to. The host itself always has [`PeerId::SERVER`]
+/// (0). Use this to look up player state, route messages, or enforce
+/// per-player game rules.
+///
 /// Peer IDs are assigned by the host during connection. The host itself
 /// always has [`PeerId::SERVER`] (0).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -22,6 +28,11 @@ impl PeerId {
 }
 
 /// Whether a [`NetworkConfig`] acts as a host or client.
+///
+/// Selects the role of the local machine in a multiplayer session. `Host`
+/// binds to a port and accepts incoming connections, while `Client` connects
+/// to a remote host. This is set once during engine initialization and
+/// cannot be changed at runtime.
 #[derive(Clone, Debug)]
 pub enum NetworkMode {
     /// Bind and listen on a port, accepting incoming connections.
@@ -31,6 +42,11 @@ pub enum NetworkMode {
 }
 
 /// Configuration for the networking subsystem.
+///
+/// Bundles the network role (host or client) and connection limits into a
+/// single struct that is passed to `GameBuilder::with_network`. Use the
+/// convenience constructors [`host`](Self::host) and [`client`](Self::client)
+/// for the common cases, or build the struct manually for full control.
 ///
 /// Used with `GameBuilder::with_network` (see [`optic_loop`](https://docs.rs/optic-loop)).
 #[derive(Clone, Debug)]
@@ -64,9 +80,10 @@ impl NetworkConfig {
 
 /// Per-frame network events, drained from the background network thread.
 ///
-/// These vectors are populated once per frame by `NetworkHandle::poll()`
-/// and auto-cleared at the start of the next poll cycle. This mirrors the
-/// one-frame lifecycle of button press/release events.
+/// Collected once per frame by `NetworkHandle::poll()` and auto-cleared at
+/// the start of the next poll cycle. Game logic should iterate these vectors
+/// each frame to detect new connections, disconnections, and incoming
+/// packets — they are only valid for the single frame in which they appear.
 #[derive(Clone, Debug, Default)]
 pub struct NetworkEvents {
     /// Peers that connected this frame.

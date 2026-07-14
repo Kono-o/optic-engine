@@ -15,7 +15,13 @@ use winit::window::{CursorGrabMode, CursorIcon, Fullscreen, Window as WinitWindo
 
 use crate::ScreenInfo;
 
-/// A winit window wrapper with frame-tracking and cursor management.
+/// The engine's window abstraction — a winit wrapper with frame-tracking and cursor management.
+///
+/// `Window` is the central interface between the engine and the operating system's
+/// windowing layer. It wraps a winit window handle and adds frame-based cursor delta
+/// tracking, cursor mode management (grab, confine, loopback), and cached window state
+/// (size, position, fullscreen) so the game loop can query window properties without
+/// repeated OS calls.
 ///
 /// Owns an optional `Arc<WinitWindow>`. When closed, the inner handle is
 /// set to `None` and all methods become no-ops returning default values.

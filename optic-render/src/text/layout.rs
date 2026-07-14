@@ -10,7 +10,11 @@ use crate::text::bbcode::{
 
 const DEFAULT_COLOR: RGBA = WHITE;
 
-/// A shaped glyph with positioning offsets relative to the run origin.
+/// A single glyph after text shaping, with positional offsets and advance.
+///
+/// Produced by rustybuzz (for TTF fonts) containing the glyph ID, cluster start, offset from the
+/// run origin, and horizontal advance. The text layout engine converts these into positioned
+/// LayoutGlyphs for rendering.
 #[derive(Clone, Debug)]
 pub struct ShapedGlyph {
     /// Glyph ID (unicode codepoint for bitmap fonts, ttf glyph index for TTF).
@@ -25,7 +29,10 @@ pub struct ShapedGlyph {
     pub x_advance: f32,
 }
 
-/// A glyph positioned in layout space, ready for instanced rendering.
+/// A fully positioned glyph ready for instanced rendering, with UV coords and style.
+///
+/// Contains final pixel position, size, atlas UV rectangle, color, style flags, and MSDF softness.
+/// The engine converts these into instance descriptors for GPU draw calls.
 #[derive(Clone, Debug)]
 pub struct LayoutGlyph {
     /// Glyph ID.
@@ -54,7 +61,10 @@ pub struct LayoutGlyph {
     pub style: TextStyle,
 }
 
-/// A decorative element (background, underline, strikethrough).
+/// A background, underline, or strikethrough rectangle for a text span.
+///
+/// Stores position, dimensions, color, and decoration kind. The engine renders these as quads
+/// behind or over the text glyphs.
 #[derive(Clone, Debug)]
 pub struct LayoutDecoration {
     /// X position in pixels.
@@ -77,7 +87,9 @@ pub struct LayoutDecoration {
     pub kind: DecorationKind,
 }
 
-/// Type of text decoration.
+/// Type of text decoration: background, underline, or strikethrough.
+///
+/// Determines how a LayoutDecoration quad is positioned and styled relative to the glyph run.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DecorationKind {
     /// Solid background behind the glyph run.
@@ -88,11 +100,10 @@ pub enum DecorationKind {
     Strikethrough,
 }
 
-/// Complete layout result from [`layout_text`].
+/// Complete text layout result containing positioned glyphs, decorations, and dimensions.
 ///
-/// Contains positioned glyphs, decoration quads, and dimensions.
-/// Pass to [`build_glyph_desc_2d`] / [`build_glyph_desc_3d`] to
-/// produce instance buffers for the GPU.
+/// Produced by layout_text() from a BBCode string and a FontFamily. Pass this to
+/// build_glyph_desc_2d()/build_glyph_desc_3d() to generate GPU instance buffers for rendering.
 #[derive(Clone, Debug)]
 pub struct TextLayout {
     /// The parsed BBCode source.

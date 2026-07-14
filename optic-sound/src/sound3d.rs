@@ -6,23 +6,11 @@ use kira::{
 
 use optic_render::Transform3D;
 
-/// A handle to a playing 3D sound with spatial audio.
+/// Handle to a playing 3D spatial sound with position-based attenuation and listener-relative panning.
 ///
-/// Positioned in 3D space relative to the listener. Created by
-/// [`AudioEngine::upload_sound3d`](crate::AudioEngine::upload_sound3d).
-///
-/// Call [`update`](Sound3D::update) each frame to keep the emitter position
-/// in sync with the game object it's attached to.
-///
-/// # Example
-///
-/// ```ignore
-    /// let mut sound = audio.upload_sound3d(&sfx)?;
-/// sound.transform.set_position(10.0, 0.0, 5.0);
-/// sound.play();
-/// // each frame:
-/// sound.update();
-/// ```
+/// Created by AudioEngine::upload_sound3d(). The emitter is positioned in world space and the audio
+/// backend computes panning and volume based on distance to the listener. Call update() each frame
+/// to keep the emitter position in sync, and set_min_max_distance() to control attenuation range.
 pub struct Sound3D {
     handle: Option<StaticSoundHandle>,
     spatial_track: Option<SpatialTrackHandle>,

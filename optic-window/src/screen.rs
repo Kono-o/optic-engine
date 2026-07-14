@@ -6,10 +6,13 @@
 
 use optic_core::{Coord2D, Size2D};
 
-/// Information about a connected monitor/screen.
+/// Information about a connected display monitor.
 ///
-/// A platform-agnostic snapshot obtained via
-/// [`Window::screen_info`](crate::Window::screen_info).
+/// Provides a platform-agnostic snapshot of a monitor's native resolution, DPI
+/// scale factor, refresh rate, and desktop position. Obtained via
+/// [`Window::screen_info`](crate::Window::screen_info) and used by the engine
+/// to adapt rendering resolution, choose display modes, or position the window
+/// on a specific monitor.
 #[derive(Debug, Clone)]
 pub struct ScreenInfo {
     /// Human-readable monitor name (e.g. `"DP-1"`).

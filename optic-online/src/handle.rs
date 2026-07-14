@@ -11,11 +11,11 @@ use tokio::sync::mpsc as tokio_mpsc;
 use crate::channels::{inbound_data_channel, lifecycle_channel, outbound_channel, LifecycleEvent, TransportCommand};
 use crate::transport::run_transport;
 
-/// Main-thread handle to the network subsystem.
+/// Owns the networking thread and channels, providing non-blocking send/receive for multiplayer.
 ///
-/// Spawns a background thread running a tokio runtime on construction.
-/// All send methods are non-blocking (`try_send` on an unbounded channel).
-/// `poll()` is the only way to drain received data into `NetworkEvents`.
+/// Spawns a background tokio runtime thread on construction. All send operations are non-blocking
+/// via unbounded channels. Call poll() each frame to drain received data and lifecycle events into
+/// NetworkEvents. Enable via Game::enable_networking() or construct directly with NetworkConfig.
 pub struct NetworkHandle {
     thread: Option<JoinHandle<()>>,
     inbound_data_rx: tokio_mpsc::UnboundedReceiver<(PeerId, Vec<u8>)>,

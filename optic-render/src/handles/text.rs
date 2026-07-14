@@ -34,11 +34,12 @@ fn build_quad_mesh() -> crate::handles::MeshHandle {
     desc.upload()
 }
 
-/// Screen-space (HUD / UI) text rendered with instanced quads.
+/// Screen-space text renderer using BBCode markup, MSDF atlas fonts, and instanced quad drawing.
 ///
-/// Each glyph is an instanced quad sampling from the font's MSDF atlas.
-/// Text supports BBCode markup, word wrapping, and dynamic effects
-/// (wave, shake, rainbow, pulse).
+/// Each glyph is an instanced quad sampling from the font's MSDF atlas texture.
+/// `Text2D` is the engine's HUD/UI text primitive — use it for score displays, dialogue,
+/// menus, and any screen-aligned text. Supports BBCode markup, word wrapping, and dynamic
+/// effects (wave, shake, rainbow, pulse) animated via a time value.
 ///
 /// # Rendering
 ///
@@ -272,11 +273,12 @@ impl Text2D {
     }
 }
 
-/// World-space billboard text rendered via instanced quads.
+/// World-space billboard text renderer, same API as Text2D but with 3D positioning.
 ///
-/// Same API as [`Text2D`] but renders in 3D space with a view matrix.
-/// The text is positioned by the [`Transform3D`] and rendered as
-/// camera-facing quads.
+/// Renders text as camera-facing quads in 3D space using the same MSDF instanced
+/// pipeline as [`Text2D`]. Position and orient the text via its [`Transform3D`] and
+/// render through a camera's view/projection matrices. Use for floating labels,
+/// damage numbers, or any text that must exist in the 3D scene.
 pub struct Text3D {
     raw_text: String,
     font: FontFamily,

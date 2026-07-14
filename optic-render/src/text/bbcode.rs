@@ -7,7 +7,10 @@ pub const FAUX_ITALIC: u32 = 1 << 1;
 /// Style flag: border/outline pass.
 pub const BORDER: u32 = 1 << 2;
 
-/// Sine-wave vertical displacement effect.
+/// Parameters for a sine-wave vertical displacement effect on text.
+///
+/// Applies a periodic vertical offset to each glyph, creating a wavy appearance. Used via the
+/// [wave] BBCode tag. Controls amplitude, horizontal frequency, and animation speed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WaveEffect {
     /// Displacement amplitude in pixels.
@@ -18,7 +21,10 @@ pub struct WaveEffect {
     pub speed: f32,
 }
 
-/// Random shake displacement effect.
+/// Parameters for a random shake displacement effect on text.
+///
+/// Applies a pseudo-random horizontal and vertical offset to each glyph. Used via the [shake]
+/// BBCode tag. Controls displacement amplitude and animation speed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShakeEffect {
     /// Displacement amplitude in pixels.
@@ -27,14 +33,20 @@ pub struct ShakeEffect {
     pub speed: f32,
 }
 
-/// HSV rainbow color-cycling effect.
+/// Parameters for a cycling rainbow color effect on text.
+///
+/// Rotates each glyph's hue over time, producing a rainbow animation. Used via the [rainbow]
+/// BBCode tag. The speed parameter controls full hue cycles per second.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RainbowEffect {
     /// Hue rotation speed (full cycles per second).
     pub speed: f32,
 }
 
-/// Sine-wave scale pulse effect.
+/// Parameters for a pulsing scale effect on text.
+///
+/// Applies a sinusoidal scale oscillation to each glyph, making it grow and shrink. Used via the
+/// [pulse] BBCode tag. Controls scale amplitude and animation speed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PulseEffect {
     /// Scale amplitude (0.2 = ±20% size variation).
@@ -43,10 +55,11 @@ pub struct PulseEffect {
     pub speed: f32,
 }
 
-/// Resolved style for a single span of text.
+/// Resolved text styling applied to a span of text.
 ///
-/// Created by the BBCode parser; fields represent the cumulative
-/// effect of all open tags at a given point in the markup.
+/// Represents the cumulative effect of all open BBCode tags at a given point, including color,
+/// size, bold, italic, and dynamic effects (wave, shake, rainbow, pulse). Created by the BBCode
+/// parser and consumed during text layout.
 #[derive(Clone, Debug, Default)]
 pub struct TextStyle {
     pub bold: bool,
@@ -91,7 +104,10 @@ impl TextStyle {
     }
 }
 
-/// A contiguous run of text sharing the same [`TextStyle`].
+/// A segment of text with an associated style, produced by BBCode parsing.
+///
+/// Each span carries the raw text content and the resolved TextStyle inherited from all open
+/// BBCode tags. The text layout engine consumes these spans to shape and position glyphs.
 #[derive(Clone, Debug)]
 pub struct StyledSpan {
     /// The raw text content (no BBCode tags).
@@ -100,7 +116,10 @@ pub struct StyledSpan {
     pub style: TextStyle,
 }
 
-/// Result of parsing a BBCode string into styled spans.
+/// The result of parsing a BBCode string into styled spans with dynamic effect detection.
+///
+/// Contains the ordered list of StyledSpans and a flag indicating whether any span uses a
+/// dynamic effect (wave/shake/rainbow/pulse). This is the input to the text layout system.
 #[derive(Clone, Debug)]
 pub struct ParsedText {
     /// Ordered list of styled text spans.

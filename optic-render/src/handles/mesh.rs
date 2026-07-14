@@ -12,11 +12,12 @@ use crate::asset::attr::DataType;
 use crate::handles::instance::InstanceBuffer;
 use crate::handles::Shader;
 
-/// Low-level OpenGL mesh handle wrapping VAO, VBO, IBO, and instance state.
+/// GPU handle to an uploaded mesh, providing draw calls and per-vertex/per-instance mutation.
 ///
-/// Created by [`Mesh3DFile::upload`](crate::asset::Mesh3DFile::upload) or
-/// [`Mesh2DFile::upload`](crate::asset::Mesh2DFile::upload). Contains the vertex
-/// layouts, index state, and instance buffer binding.
+/// Wraps the raw OpenGL VAO, VBO, IBO, and optional instance buffer binding state.
+/// `MeshHandle` is the low-level backing for [`Mesh3D`] and [`Mesh2D`] — it issues
+/// the actual `glDrawArrays` / `glDrawElements` calls and supports per-vertex attribute
+/// updates, raw range writes, and instance buffer attachment for instanced rendering.
 #[derive(Clone, Debug)]
 pub struct MeshHandle {
     pub(crate) layouts: Vec<(ATTRInfo, u32)>,

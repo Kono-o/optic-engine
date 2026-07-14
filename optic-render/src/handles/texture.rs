@@ -2,10 +2,13 @@ use optic_core::{ImgFilter, ImgFormat, ImgWrap, Size2D};
 
 use crate::GL;
 
-/// A handle to an OpenGL 2D texture object.
+/// GPU handle to an uploaded 2D texture, used for materials, fonts, and render targets.
 ///
-/// Stores the GL texture ID, size, pixel format, filtering, and wrap mode.
-/// Created by [`create_texture`] or via [`TextureFile::upload`](crate::asset::TextureFile::upload).
+/// Stores the GL texture ID along with its dimensions, pixel format, filtering, and
+/// wrap mode metadata. Created via [`GPU::upload_texture`](crate::GPU::upload_texture)
+/// or by canvas/framebuffer internals. The engine attaches `Texture2D`s to shaders as
+/// sampler uniforms or image bindings for materials, MSDF font atlases, and render-to-texture
+/// workflows.
 #[derive(Clone, Debug)]
 pub struct Texture2D {
     pub(crate) id: u32,

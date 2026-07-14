@@ -8,6 +8,12 @@ use crate::{RGBA, ToRgba};
 
 /// HSL color.
 ///
+/// An alternative perceptual color model similar to [`HSV`] but using
+/// lightness instead of value. Lightness maps more directly to perceptual
+/// brightness, making HSL a natural choice when adjusting brightness is the
+/// primary goal — for example, generating hover-state variants of UI
+/// colors or computing accessible contrast ratios.
+///
 /// | Field | Range | Description |
 /// |-------|-------|-------------|
 /// | `h`   | 0..360 | Hue angle (wraps at 360) |

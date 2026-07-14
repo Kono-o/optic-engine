@@ -30,10 +30,12 @@ use raw_window_handle::RawWindowHandle;
 use std::ffi::c_void;
 use std::ptr;
 
-/// An EGL window surface and its dimensions.
+/// An EGL surface bound to a native window, used for buffer swapping and presentation.
 ///
-/// Created by [`RenderContext::new_windowed`] or [`RenderContext::attach_window`].
-/// Each surface corresponds to one native window.
+/// Wraps an EGL `Surface` and its pixel dimensions. Each `WindowSurface` corresponds
+/// to one OS window and is managed by [`RenderContext`], which uses it for
+/// `eglMakeCurrent` and `eglSwapBuffers` calls. The engine creates one surface per
+/// visible window and tracks it for vsync and resize operations.
 pub struct WindowSurface {
     pub(crate) surface: egl::Surface,
     size: Size2D,
@@ -44,7 +46,13 @@ impl WindowSurface {
     pub fn size(&self) -> Size2D { self.size }
 }
 
-/// EGL + OpenGL 4.6 context with support for multiple window surfaces.
+/// Manages the EGL display/context lifecycle, surface creation, and vsync control.
+///
+/// Owns the EGL display, OpenGL 4.6 core-profile context, and one or more
+/// [`WindowSurface`]s. This is the low-level graphics backend that [`GPU`] wraps —
+/// it handles platform-specific display initialisation (X11, Wayland, Win32), context
+/// creation, `make_current` switching, and buffer swapping. Most users interact with
+/// [`GPU`] instead of calling `RenderContext` directly.
 ///
 /// # Initialisation
 ///

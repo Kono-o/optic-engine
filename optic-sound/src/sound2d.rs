@@ -3,18 +3,11 @@ use kira::{
     Decibels, PlaybackRate, Tween,
 };
 
-/// A handle to a playing 2D sound.
+/// Handle to a playing 2D (stereo/mono) sound with volume, pitch, looping, and pan controls.
 ///
-/// Controls playback of a single sound instance. Created by
-/// [`AudioEngine::upload_sound2d`](crate::AudioEngine::upload_sound2d).
-///
-/// # Example
-///
-/// ```ignore
-    /// let mut sound = audio.upload_sound2d(&sfx)?;
-/// sound.set_looping(true);
-/// sound.play();
-/// ```
+/// Created by AudioEngine::upload_sound2d(). Controls a single sound instance — call play(),
+/// pause(), stop(), set_volume(), set_pan(), set_pitch(), or set_looping() to manipulate playback.
+/// Destroy with delete() to release backend resources.
 pub struct Sound2D {
     handle: Option<StaticSoundHandle>,
     volume: f32,

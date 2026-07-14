@@ -4,9 +4,11 @@ use optic_core::{OpticResult, Size2D};
 use crate::asset::{FontFamilyFile, GlyphMetrics};
 use crate::Texture2D;
 
-/// Font style variant — regular, bold, italic, or bold-italic.
+/// Font style variant (Regular, Bold, Italic, BoldItalic) used to select the correct atlas.
 ///
-/// Used to select the correct atlas and glyph table from a [`FontFamily`].
+/// Each variant maps to a dedicated MSDF atlas texture within a [`FontFamily`]. When a
+/// requested style is missing, the engine falls back to Regular and optionally applies
+/// faux bold/italic via the shader.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FontStyle {
     Regular,
@@ -39,11 +41,13 @@ impl FontStyle {
     }
 }
 
-/// GPU-uploaded font family with atlas textures and glyph metrics.
+/// GPU-uploaded font family with per-style atlas textures and glyph metrics for text rendering.
 ///
-/// Created from a [`FontFamilyFile`] via [`FontFamily::new`]. Holds one
-/// atlas texture per style variant (regular, bold, italic, bold-italic)
-/// and the corresponding glyph metric tables.
+/// Created from a [`FontFamilyFile`] via [`FontFamily::new`]. Holds one MSDF atlas texture
+/// per populated style variant (regular, bold, italic, bold-italic) together with the
+/// corresponding glyph metric tables. The engine uses `FontFamily` instances with
+/// [`Text2D`](crate::handles::Text2D) and [`Text3D`](crate::handles::Text3D) to render
+/// high-quality text at any scale.
 ///
 /// Use [`FontFamily::fallback_bitmap`] for a built-in 8×8 bitmap font
 /// when no TTF is available.

@@ -5,25 +5,11 @@ use std::sync::Arc;
 use kira::sound::static_sound::StaticSoundData;
 use kira::Frame;
 
-/// A decoded sound file loaded from disk or cache.
+/// Decoded audio file loaded from disk or cache.
 ///
-/// Stores raw interleaved PCM samples in memory, analogous to how
-/// [`TextureFile`](optic_render::asset::TextureFile) stores decoded pixel data.
-///
-/// # Loading
-///
-/// ```ignore
-/// use optic_sound::SoundFile;
-///
-/// let sfx = SoundFile::from_disk("sounds/explosion.wav")?;
-/// // sfx.duration_secs, sfx.sample_rate, sfx.channels, sfx.samples
-/// ```
-///
-/// # Caching
-///
-/// In debug builds, `from_disk` decodes the source file and writes a binary
-/// cache (`.omusic`). In release builds, it reads the cache directly for
-/// faster startup.
+/// Stores interleaved PCM samples, sample rate, channel count, and duration. Analogous to
+/// TextureFile for images. Load one via SoundFile::from_disk() and upload it to the AudioEngine
+/// to get a playable Sound2D or Sound3D handle.
 pub struct SoundFile {
     /// Interleaved PCM samples (one frame = `channels` consecutive samples).
     pub samples: Vec<f32>,

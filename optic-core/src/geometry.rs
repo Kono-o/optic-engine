@@ -61,6 +61,11 @@ pub fn componentwise_max<T: PartialOrd + Copy, C: Components<T, N>, const N: usi
 
 /// A 2D size with non-negative integer dimensions.
 ///
+/// Represents pixel-level dimensions for windows, viewports, render targets,
+/// and textures throughout the engine. Used whenever you need to describe a
+/// rectangular area in integer pixels, such as setting the window resolution
+/// or allocating a framebuffer attachment.
+///
 /// ```
 /// use optic_core::*;
 ///
@@ -204,8 +209,10 @@ impl Size2D {
 
 /// A 3D size with non-negative integer dimensions.
 ///
-/// Stores width, height, and depth as `u32` values. Useful for describing
-/// 3D textures, voxel grids, and volume render targets.
+/// Represents the dimensions of volumetric data such as 3D textures, voxel
+/// grids, and layered render targets. Use this when a 2D size is not
+/// sufficient — for example when allocating a 3D texture for volumetric
+/// lighting, or describing the extent of a chunk in a voxel world.
 ///
 /// ```ignore
 /// let vol = Size3D::new(256, 256, 128);
@@ -298,9 +305,11 @@ impl Size3D {
 
 /// Near/far clip plane distances for a camera.
 ///
-/// Defines the depth range that is visible to the camera. Objects closer
-/// than `near` or farther than `far` are clipped. The default range is
-/// 0.01 to 1000.0, which works well for most scene scales.
+/// Controls which objects are visible by defining the near and far clipping
+/// planes of a camera's view frustum. Objects closer than `near` or farther
+/// than `far` are discarded during rendering. Tuning these values is
+/// important for avoiding z-fighting and maximising depth precision in the
+/// depth buffer.
 ///
 /// ```ignore
 /// let clips = ClipDist::new(0.1, 500.0);
@@ -332,7 +341,11 @@ impl ClipDist {
 
 /// Camera projection mode.
 ///
-/// Determines how 3D world coordinates are mapped to 2D screen space.
+/// Selects between orthographic and perspective projection when mapping 3D
+/// world coordinates to 2D screen space. Orthographic preserves parallel
+/// lines and uniform sizing, while perspective foreshortens distant objects.
+/// A developer chooses this when setting up a camera — ortho for 2D games
+/// or UI overlays, perspective for 3D scenes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CamProj {
     /// Orthographic projection — parallel projection where objects maintain

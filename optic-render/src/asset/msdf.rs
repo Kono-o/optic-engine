@@ -23,11 +23,11 @@
 
 use ttf_parser::Face;
 
-/// A single edge segment within a glyph contour.
+/// A single edge of an MSDF glyph contour.
 ///
-/// Edges are the building blocks of MSDF generation. Each variant stores the
-/// control points needed to evaluate the exact signed distance from any point
-/// to the curve.
+/// Edges are the building blocks of MSDF generation, representing each segment (line, quadratic
+/// bezier, or cubic bezier) of a glyph outline. The engine uses these to evaluate signed distances
+/// when baking font atlas textures.
 #[derive(Clone, Debug)]
 pub enum EdgeSegment {
     Line { from: (f32, f32), to: (f32, f32) },
@@ -35,22 +35,21 @@ pub enum EdgeSegment {
     Cubic { from: (f32, f32), ctrl1: (f32, f32), ctrl2: (f32, f32), to: (f32, f32) },
 }
 
-/// A closed contour (outline) composed of consecutive edge segments.
+/// A closed contour of edges forming a glyph shape.
 ///
-/// A glyph outline is typically made of one or more contours. Each contour's
-/// edges form a closed loop — the last edge's endpoint connects back to the
-/// first edge's start point.
+/// A glyph outline consists of one or more closed contours. Each contour's edges form a loop
+/// with the last edge's endpoint connecting back to the first. The engine processes contours
+/// when extracting glyph outlines for MSDF atlas baking.
 #[derive(Clone, Debug)]
 pub struct Contour {
     /// The ordered edge segments forming this contour.
     pub edges: Vec<EdgeSegment>,
 }
 
-/// Full outline data for a single glyph, extracted from a TrueType face.
+/// Extracted edge data for a single glyph, ready for MSDF baking.
 ///
-/// Contains the contours (closed outlines) as well as the horizontal advance
-/// and bearing measurements needed for typesetting. All coordinates are in
-/// normalised font units (divided by `units_per_em`).
+/// Contains the closed contours plus advance and bearing measurements in normalised font units.
+/// Produced by extract_glyph_edges() and consumed by bake_msdf() to generate atlas textures.
 pub struct GlyphEdges {
     /// Closed contours making up the glyph outline.
     pub contours: Vec<Contour>,

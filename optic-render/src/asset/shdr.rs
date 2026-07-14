@@ -3,7 +3,11 @@ use optic_core::{OpticError, OpticErrorKind, OpticResult};
 
 use crate::handles::shader::{link_compute_program, link_program, Shader};
 
-/// Whether a shader source is a vertex+fragment pipeline or a compute shader.
+/// Selects between pipeline and compute shader types.
+///
+/// Pipeline shaders consist of a vertex+fragment pair for standard rendering, while
+/// compute shaders are used for GPU-side general-purpose computation. Use this when
+/// loading a shader file to indicate the target stage.
 pub enum ShaderType {
     /// Vertex + fragment shader pair.
     Pipeline,
@@ -75,32 +79,11 @@ impl GLSL {
     }
 }
 
-/// A shader loaded from disk (or cache), ready to compile.
+/// Decoded shader source ready for GPU compilation.
 ///
-/// # Loading
-///
-/// ```ignore
-/// use optic_render::asset::{ShaderFile, ShaderType};
-///
-/// let sf = ShaderFile::from_disk("shaders/example.glsl", ShaderType::Pipeline)?;
-/// let shader = sf.compile()?; // returns a Shader handle
-/// ```
-///
-/// # Shader format
-///
-/// Pipeline shaders use comment markers to separate vertex and fragment stages
-/// within a single `.glsl` file:
-///
-/// ```glsl
-/// // V
-/// void main() {
-///     gl_Position = vec4(0.0);
-/// }
-/// // F
-/// void main() {
-///     outColor = vec4(1.0);
-/// }
-/// ```
+/// Contains vertex and fragment source strings (or just vertex for compute) parsed from a
+/// .glsl file or loaded from a binary cache. The engine uses this to compile and link a
+/// Shader handle. Use this when you need to load, cache, or compile GLSL shader code.
 pub struct ShaderFile {
     pub v_src: String,
     pub f_src: String,

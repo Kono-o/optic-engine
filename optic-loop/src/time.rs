@@ -125,15 +125,11 @@ impl FixedStepper {
 // FpsLimit
 // ---------------------------------------------------------------------------
 
-/// Rendering frame-rate policy.
+/// Rendering frame-rate policy controlling how the engine paces presented frames.
 ///
-/// Controls how the engine paces presented frames after rendering.
-///
-/// | Variant | Behaviour |
-/// |---|---|
-/// | [`Uncapped`](FpsLimit::Uncapped) | Render as fast as possible |
-/// | [`VSync`](FpsLimit::VSync) | Swap interval determines pacing |
-/// | [`Limited(f64)`](FpsLimit::Limited) | Sleep to approximate the given FPS |
+/// Select Uncapped for maximum throughput, VSync for tear-free display at monitor refresh, or
+/// Limited(fps) to target a specific frame rate via sleep-based pacing. Set this via
+/// Time::set_fps_limit() to control performance and power usage.
 pub enum FpsLimit {
     /// No frame-rate cap. Render as fast as the platform allows.
     Uncapped,

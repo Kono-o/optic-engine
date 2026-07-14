@@ -218,6 +218,11 @@ impl OBJ {
 /// // Or generate procedurally
 /// let cube = Mesh3DFile::cube(2.0);
 /// ```
+/// Decoded 3D mesh geometry loaded from OBJ/STL or generated procedurally.
+///
+/// Stores vertex attributes (positions, normals, UVs, colors) and indices in separate typed
+/// arrays ready for GPU upload. Used whenever the engine needs to render a 3D model — you
+/// interact with this when calling from_disk() or one of the procedural generators (cube, sphere, etc).
 pub struct Mesh3DFile {
     pub pos_attr: Pos3DATTR,
     pub col_attr: ColorATTR,
@@ -961,6 +966,11 @@ impl Mesh3DFile {
 /// | [`circle`](Mesh2DFile::circle) | Approximated by a regular polygon |
 /// | [`polygon`](Mesh2DFile::polygon) | Regular polygon (same as circle) |
 /// | [`ring`](Mesh2DFile::ring) | Annulus (donut) shape |
+/// Decoded 2D mesh data for sprites, UI elements, and 2D primitives.
+///
+/// Stores 2D vertex positions, layer for draw-order sorting, and aspect-aware scaling.
+/// The engine uses this to render all non-3D geometry. You interact with this when creating
+/// sprites, UI elements, or procedural 2D shapes.
 pub struct Mesh2DFile {
     pub pos_attr: Pos2DATTR,
     pub layer: u8,
@@ -971,10 +981,10 @@ pub struct Mesh2DFile {
     pub custom_attrs: Vec<CustomATTR>,
 }
 
-/// Controls how 2D mesh positions are offset relative to their centre.
+/// Pivot point preset for 2D mesh generation and positioning.
 ///
-/// Used when calling [`Mesh2DFile::set_center`] or when constructing
-/// primitive meshes.
+/// Controls how the mesh's center aligns relative to its position, offering TopLeft, Center,
+/// BottomRight, or Custom offset. Used when constructing primitives or setting anchor points.
 pub enum Center {
     TopLeft, TopRight, BottomLeft, BottomRight, Middle, Custom(f32, f32),
 }

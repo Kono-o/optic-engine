@@ -14,23 +14,11 @@ use optic_online::NetworkHandle;
 
 use crate::{FpsLimit, Runtime, Time};
 
-/// The primary game object — aggregates the renderer, camera, window, events,
-/// timing, gamepad, audio, and user-provided [`Runtime`].
+/// The top-level engine struct that owns the renderer, window, camera, audio, and event loop.
 ///
-/// Create via [`Game::new`] and start via [`Game::run`]. All fields are public
-/// so that [`Runtime`] methods can access them directly.
-///
-/// # Execution model
-///
-/// Each frame executes in three independent phases:
-///
-/// 1. **Physics** — fixed-timestep simulation (default 60 Hz)
-/// 2. **Update** — gameplay logic (default: once per frame)
-/// 3. **Render** — draw calls, presented once per frame
-///
-/// Each phase runs at its own independently configurable rate via
-/// [`Time::set_target_physics_rate`], [`Time::set_target_tps`], and
-/// [`Time::set_fps_limit`].
+/// Aggregates all engine subsystems and runs the three-phase frame loop (physics, update, render)
+/// at independently configurable rates. You implement the Runtime trait and pass it to Game::run()
+/// to start your application. All fields are public so Runtime methods can access subsystems directly.
 pub struct Game {
     pub renderer: GPU,
     pub camera: Camera,

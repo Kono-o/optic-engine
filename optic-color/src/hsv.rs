@@ -9,6 +9,12 @@ use crate::{RGBA, ToRgba};
 
 /// HSV color.
 ///
+/// A perceptual color model that maps naturally to human color intuition:
+/// pick a hue, then control how vivid and bright it is. The engine uses
+/// HSV internally for operations like `lighten`, `darken`, `saturate`, and
+/// `desaturate` because adjusting value and saturation in HSV space
+/// produces more predictable visual results than doing so in RGB.
+///
 /// | Field | Range | Description |
 /// |-------|-------|-------------|
 /// | `h`   | 0..360 | Hue angle (wraps at 360) |

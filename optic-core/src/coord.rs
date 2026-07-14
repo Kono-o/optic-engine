@@ -17,6 +17,11 @@ use crate::{componentwise_min, componentwise_max, Components, Size2D};
 
 /// A 2D point in continuous space.
 ///
+/// Represents an absolute position in either screen or world space. Use
+/// `Coord2D` whenever you need to locate something — a mouse cursor on
+/// the screen, an entity's position in the world, or the origin of a UI
+/// element. Subtracting two points yields a [`CoordOffset`].
+///
 /// `Coord2D` represents a position. Subtracting two points yields a
 /// [`CoordOffset`] (vector). Adding a vector to a point yields a new point.
 ///
@@ -104,6 +109,13 @@ impl Coord2D {
 }
 
 /// A 2D vector/displacement.
+///
+/// Represents a directional offset, velocity, or displacement rather than
+/// an absolute position. Use `CoordOffset` for movement vectors, surface
+/// normals in 2D, and any quantity where direction and magnitude matter but
+/// absolute location does not. It supports vector arithmetic: addition,
+/// subtraction, scalar multiplication, negation, normalization, and dot
+/// products.
 ///
 /// `CoordOffset` represents the difference between two [`Coord2D`] points.
 /// It supports vector arithmetic: addition, subtraction, scalar multiplication,

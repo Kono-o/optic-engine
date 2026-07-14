@@ -78,11 +78,10 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::WindowId;
 
-/// A single window and its associated event sink and GPU surface index.
+/// Pairs a Window with its Events collector and GPU surface index for the game loop.
 ///
-/// Used by [`GameLoop`] to manage multiple windows. Each `WindowState`
-/// owns a [`Window`], an [`Events`] collector, and the index of its
-/// surface within the GPU's context.
+/// Used by GameLoop to manage multiple windows. Each WindowState owns the window handle, the
+/// event buffer for that window, and the index of its surface within the GPU context.
 pub struct WindowState {
     pub window: Window,
     pub events: Events,
@@ -115,10 +114,10 @@ impl WindowState {
     }
 }
 
-/// A snapshot of per-frame mutable state, passed to the user's closure.
+/// Borrowed bundle of engine state passed to per-frame closures.
 ///
-/// Contains borrows of the engine subsystems that the user may access
-/// during a frame callback in the [`GameLoop`] API.
+/// Contains borrows of Time, windows, GPU, and Camera that the user's closure accesses during
+/// each frame callback in the GameLoop API. This avoids cloning or wrapping individual subsystems.
 pub struct FrameState<'a> {
     pub time: &'a Time,
     pub windows: &'a mut [WindowState],
@@ -126,15 +125,11 @@ pub struct FrameState<'a> {
     pub camera: &'a mut Camera,
 }
 
-/// A low-level game loop that drives a closure once per frame.
+/// Low-level closure-based game loop for single or multi-window applications.
 ///
-/// Owns the event loop, one or more windows, the GPU, a camera, timing,
-/// and gamepad state. The user provides a `FnMut(&mut FrameState)` closure
-/// that is invoked every frame.
-///
-/// This is the lower-level alternative to [`Game`] + [`Runtime`]. Use it
-/// when you want more control over the setup process or need multiple
-/// windows.
+/// Owns the event loop, windows, GPU, camera, and timing. Takes a FnMut(&mut FrameState) closure
+/// invoked every frame. This is the lower-level alternative to Game + Runtime, useful when you
+/// need more control over setup or multiple windows.
 pub struct GameLoop<F: FnMut(&mut FrameState)> {
     event_loop: Option<EventLoop<()>>,
     windows: Vec<WindowState>,

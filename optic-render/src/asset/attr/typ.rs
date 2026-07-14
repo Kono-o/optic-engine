@@ -1,24 +1,10 @@
 use optic_core::ATTRType;
 
-/// Trait for types that can be used as vertex or instance attribute data.
+/// Trait for types that can be stored as GPU vertex or instance attributes.
 ///
-/// Implemented for `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `f32`, `f64` and
-/// their fixed-size arrays `[T; 2]`, `[T; 3]`, `[T; 4]`.
-///
-/// # Constants
-///
-/// * [`DataType::ATTR_FORMAT`] — the GL attribute type enum
-/// * [`DataType::BYTE_COUNT`] — size of one scalar element in bytes
-/// * [`DataType::ELEM_COUNT`] — number of scalar elements (1 for scalars, N for arrays)
-///
-/// # Example
-///
-/// ```
-/// use optic_render::asset::attr::DataType;
-///
-/// assert_eq!(<f32 as DataType>::BYTE_COUNT, 4);
-/// assert_eq!(<[f32; 3] as DataType>::ELEM_COUNT, 3);
-/// ```
+/// Implemented for i8/u8/i16/u16/i32/u32/f32/f64 and their fixed-size arrays [T;2], [T;3], [T;4].
+/// Each implementation provides the GL attribute format, byte size, element count, and serialisation
+/// to raw bytes for GPU upload. The engine requires this trait on all vertex and instance attribute types.
 pub trait DataType {
     const ATTR_FORMAT: ATTRType;
     const BYTE_COUNT: usize;

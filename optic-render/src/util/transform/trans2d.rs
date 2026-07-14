@@ -1,13 +1,12 @@
 use cgmath::*;
 
-/// A 2D transform with position, rotation, scale, layer, and aspect ratio.
+/// 2D affine transform (position, rotation, scale) used by Mesh2D and Text2D.
 ///
-/// The position is expressed in normalized coordinates (0–1 across the screen).
-/// The aspect ratio corrects the horizontal component so that a square sprite
-/// appears square regardless of the viewport dimensions.
-///
-/// Call [`calc_matrix`](Transform2D::calc_matrix) after mutating to recompute
-/// the 4×4 matrix used for rendering.
+/// Stores position in normalised screen coordinates, rotation in degrees around the Z
+/// axis, non-uniform scale, draw-order layer, and aspect ratio. The engine uses
+/// `Transform2D` as the spatial component of every 2D mesh and text object — call
+/// [`calc_matrix`](Transform2D::calc_matrix) after mutating to recompute the 4×4 matrix
+/// consumed by the rendering pipeline.
 ///
 /// # Coordinate system
 ///

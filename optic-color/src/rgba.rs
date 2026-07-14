@@ -14,8 +14,11 @@ use crate::{ColorInfo, FromRgba, HSV, RGB, ToRgba};
 
 /// RGBA color with four 0..1 float channels.
 ///
-/// This is the primary color type in Optic. Most engine APIs accept or
-/// return [`RGBA`] directly. All other color types convert through it.
+/// The engine's primary color type, used everywhere colors appear — material
+/// parameters, clear values, light colors, UI tints, and more. All other
+/// color types ([`RGB`], [`HSV`], [`HSL`]) convert through `RGBA`, so it
+/// serves as the common interchange format. Prefer this over raw tuples
+/// whenever an alpha channel is needed.
 ///
 /// | Field | Range | Description |
 /// |-------|-------|-------------|

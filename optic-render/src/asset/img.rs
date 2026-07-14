@@ -4,22 +4,11 @@ use optic_core::{ImgFilter, ImgFormat, ImgWrap, OpticError, OpticErrorKind, Opti
 
 use crate::handles::texture::{create_texture, Texture2D};
 
-/// A texture loaded from disk (or cache) with metadata.
+/// Decoded image data loaded from PNG or generated as a fallback texture.
 ///
-/// # Loading
-///
-/// ```ignore
-/// use optic_render::asset::TextureFile;
-///
-/// let tex = TextureFile::from_disk("textures/wood.png")?;
-/// let gpu_tex = tex.upload(); // uploads to GPU
-/// ```
-///
-/// # Caching
-///
-/// In debug builds, `from_disk` loads the source image and writes a binary
-/// cache (`.otxtr`). In release builds, it reads the cache directly for
-/// faster startup.
+/// Stores raw pixel bytes together with dimensions, format, filter, and wrap metadata. The
+/// engine uploads this to the GPU via upload() to produce a Texture2D handle. Use this when
+/// you need to load, cache, or generate textures for rendering.
 pub struct TextureFile {
     pub bytes: Vec<u8>,
     pub size: Size2D,

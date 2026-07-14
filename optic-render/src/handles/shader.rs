@@ -8,9 +8,11 @@ use std::ptr;
 use crate::handles::{StorageBuffer, Texture2D};
 use crate::GL;
 
-/// A texture or storage-buffer binding slot (0–15).
+/// Enumerates texture/SSBO binding slots (S0–S15) for shader resource binding.
 ///
-/// Provides named variants for readability at call sites.
+/// Each variant maps to a `layout(binding = N)` index in GLSL. Use `Slot` with
+/// [`Shader::bind_texture`](Shader::bind_texture) or [`Shader::bind_storage`](Shader::bind_storage)
+/// to assign resources to specific binding points that match the shader's declared layout.
 #[derive(Clone, Debug)]
 pub enum Slot {
     S0, S1, S2, S3, S4, S5, S6, S7,
@@ -31,9 +33,11 @@ impl Slot {
     pub fn total_slots() -> usize { 16 }
 }
 
-/// Work-group dimensions for compute shader dispatch.
+/// Compute shader work-group dimensions for dispatch.
 ///
-/// Used by [`Shader::compute`] to call `glDispatchCompute`.
+/// Stores the X, Y, and Z work-group counts passed to `glDispatchCompute` when
+/// [`Shader::compute`](Shader::compute) is called. Configure these to match the
+/// compute shader's `layout(local_size_x/y/z)` declarations before dispatching.
 #[derive(Clone, Debug)]
 pub struct Workers {
     group_x: u32,
@@ -66,11 +70,12 @@ impl Workers {
     pub fn set_group_z(&mut self, z: u32) { self.group_z = z; }
 }
 
-/// A handle to an OpenGL shader program.
+/// GPU handle to a compiled shader program, supporting uniform setting, texture binding, and compute dispatch.
 ///
-/// Supports both pipeline (vertex+fragment) and compute shaders.
-/// Manages texture and storage-buffer bindings for automatic binding
-/// during rendering or compute dispatch.
+/// Wraps an OpenGL program object for both pipeline (vertex+fragment) and compute shaders.
+/// `Shader` manages the binding of textures and SSBOs to numbered slots, so they are
+/// automatically bound before draw calls or compute dispatches. The engine uses shaders
+/// to define material appearance, post-processing effects, and GPU compute pipelines.
 ///
 /// # Uniform setters
 ///
