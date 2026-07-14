@@ -236,6 +236,15 @@ impl RenderContext {
     /// Supports X11 (with optional visual ID matching), Wayland, and Win32
     /// platforms. Falls back to the default EGL display if platform-specific
     /// display creation fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticError`](optic_core::OpticError) with kind
+    /// [`OpenGL`](optic_core::OpticErrorKind::OpenGL) if:
+    /// - The raw window handle represents an unsupported platform.
+    /// - EGL display initialisation, config selection, or context creation fails.
+    /// - The native window surface cannot be created.
+    /// - `eglMakeCurrent` fails to bind the surface.
     pub fn new_windowed(
         raw_handle: RawWindowHandle,
         display_handle: raw_window_handle::RawDisplayHandle,
@@ -375,6 +384,13 @@ impl RenderContext {
     ///
     /// Returns the index of the new surface, which can be used with
     /// [`make_current`](RenderContext::make_current).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticError`](optic_core::OpticError) with kind
+    /// [`OpenGL`](optic_core::OpticErrorKind::OpenGL) if:
+    /// - The raw window handle represents an unsupported platform.
+    /// - EGL window surface creation fails.
     pub fn attach_window(
         &mut self,
         raw_handle: RawWindowHandle,

@@ -147,6 +147,13 @@ pub struct GameLoop<F: FnMut(&mut FrameState)> {
 
 impl<F: FnMut(&mut FrameState)> GameLoop<F> {
     /// Constructs a new game loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticError`](optic_core::OpticError) if:
+    /// - Any window's raw handle cannot be obtained.
+    /// - Attaching a window surface to the GPU context fails.
+    /// - The gamepad subsystem (`gilrs`) fails to initialise.
     pub fn new(
         el: EventLoop<()>,
         mut gpu: GPU,

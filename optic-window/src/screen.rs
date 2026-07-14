@@ -7,12 +7,20 @@
 use optic_core::{Coord2D, Size2D};
 
 /// Information about a connected monitor/screen.
+///
+/// A platform-agnostic snapshot obtained via
+/// [`Window::screen_info`](crate::Window::screen_info).
 #[derive(Debug, Clone)]
 pub struct ScreenInfo {
+    /// Human-readable monitor name (e.g. `"DP-1"`).
     pub name: String,
+    /// Native resolution in pixels.
     pub size: Size2D,
+    /// Refresh rate in Hz.
     pub refresh_rate: u32,
+    /// OS scaling factor (e.g. `1.0` = 100%, `2.0` = 200%).
     pub scale_factor: f64,
+    /// Top-left corner position in desktop coordinates.
     pub position: Coord2D,
 }
 

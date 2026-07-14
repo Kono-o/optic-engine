@@ -62,12 +62,32 @@ pub struct Camera {
 
 impl Camera {
     /// Creates a camera sized to match the given canvas dimensions.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use optic_core::CamProj;
+    /// use optic_render::Camera;
+    ///
+    /// // canvas is some Canvas handle obtained elsewhere
+    /// let cam = Camera::match_canvas_size(&canvas, CamProj::Persp);
+    /// ```
     pub fn match_canvas_size(canvas: &crate::handles::Canvas, proj: CamProj) -> Self {
         Self::new(canvas.size(), proj)
     }
 
     /// Creates a camera at `(0, 0, 5)` with 75° FOV, default clip distances,
     /// and the given projection type.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use optic_core::{CamProj, Size2D};
+    /// use optic_render::Camera;
+    ///
+    /// let cam = Camera::new(Size2D::new(1920, 1080), CamProj::Persp);
+    /// assert_eq!(cam.fov(), 75.0);
+    /// ```
     pub fn new(size: Size2D, proj: CamProj) -> Self {
         let mut transform = CamTransform::new(size, proj);
         transform.set_fov(75.0);

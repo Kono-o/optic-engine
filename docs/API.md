@@ -139,6 +139,21 @@ pub fn componentwise_max<T: PartialOrd + Copy, C: Components<T, N>, const N: usi
 
 `Components` is implemented for `Size2D`, `Size3D`, and `CoordOffset` (via macro), providing array/tuple conversion and generic min/max operations.
 
+#### Size2D
+
+Derives:
+- Copy
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- Components
+- From
+- Add
+- Sub
+- Mul
+
 ```rust
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Size2D {
@@ -152,7 +167,24 @@ impl From<(u32, u32)> for Size2D {}
 impl Add for Size2D { /* saturating */ }
 impl Sub for Size2D { /* saturating */ }
 impl Mul<f32> for Size2D {}
+```
 
+#### Size3D
+
+Derives:
+- Copy
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- Components
+- From
+- Add
+- Sub
+- Mul
+
+```rust
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Size3D {
     pub w: u32,
@@ -166,14 +198,39 @@ impl From<(u32, u32, u32)> for Size3D {}
 impl Add for Size3D { /* saturating */ }
 impl Sub for Size3D { /* saturating */ }
 impl Mul<f32> for Size3D {}
+```
 
+#### ClipDist
+
+Derives:
+- Clone
+- Copy
+- Debug
+
+Implements:
+- Default
+
+```rust
 #[derive(Clone, Copy, Debug)]
 pub struct ClipDist {
     pub near: f32,
     pub far: f32,
 }
 impl Default for ClipDist { /* near: 0.01, far: 1000.0 */ }
+```
 
+#### CamProj
+
+Derives:
+- Clone
+- Copy
+- Debug
+- PartialEq
+
+Implements:
+- None
+
+```rust
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CamProj {
     Ortho,
@@ -228,6 +285,19 @@ pub enum CamProj {
 
 ### Coordinate Types
 
+#### Coord2D
+
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- Components
+- From
+- Sub
+- Add
+
 ```rust
 #[derive(Copy, Clone, Debug)]
 pub struct Coord2D {
@@ -241,7 +311,24 @@ impl From<(f64, f64)> for Coord2D {}
 impl Sub for Coord2D { type Output = CoordOffset; }
 impl Add<CoordOffset> for Coord2D { type Output = Coord2D; }
 impl Sub<CoordOffset> for Coord2D { type Output = Coord2D; }
+```
 
+#### CoordOffset
+
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- Components
+- From
+- Add
+- Sub
+- Mul
+- Neg
+
+```rust
 #[derive(Copy, Clone, Debug)]
 pub struct CoordOffset {
     pub x: f64,
@@ -281,6 +368,83 @@ impl Neg for CoordOffset {}
 
 ### Enums
 
+#### PolygonMode
+
+Derives:
+- Copy
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- None
+
+#### CullFace
+
+Derives:
+- Copy
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- None
+
+#### DrawMode
+
+Derives:
+- Copy
+- Clone
+- Debug
+- Default
+- PartialEq
+
+Implements:
+- None
+
+#### ImgFormat
+
+Derives:
+- Copy
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- None
+
+#### ImgFilter
+
+Derives:
+- Debug
+- Clone
+- Copy
+- PartialEq
+
+Implements:
+- None
+
+#### ImgWrap
+
+Derives:
+- Debug
+- Clone
+- Copy
+- PartialEq
+
+Implements:
+- None
+
+#### ATTRType
+
+Derives:
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- None
+
 ```rust
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum PolygonMode { Points, WireFrame, Filled }
@@ -314,6 +478,25 @@ pub enum ATTRType { U8, I8, U16, I16, U32, I32, F32, F64 }
 | `pub fn from(channels: u8, bit_depth: u8) -> ImgFormat` | Construct from channel count and bit depth |
 
 ### Error Types
+
+#### OpticErrorKind
+
+Derives:
+- Debug
+- Clone
+- PartialEq
+
+Implements:
+- None
+
+#### OpticError
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- Display
 
 ```rust
 #[derive(Debug, Clone, PartialEq)]
@@ -386,6 +569,14 @@ log_fatal!("fmt", ...)                  // "[FATAL] ..." then end_error()
 ```
 
 ### ANSI Terminal Colors
+
+#### ANSI
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 pub struct ANSI {
@@ -464,6 +655,22 @@ use optic_color::{RGBA, RGB, HSV, HSL, Gradient, ToRgba, FromRgba, ColorInfo, ch
 
 ### RGBA
 
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- ToRgba
+- FromRgba
+- ColorInfo
+- ChannelArray
+- Add
+- Sub
+- Mul
+- Div
+- From
+
 ```rust
 #[derive(Copy, Clone, Debug)]
 pub struct RGBA(pub f32, pub f32, pub f32, pub f32);
@@ -506,6 +713,22 @@ Implements `ToRgba`, `FromRgba`, `ColorInfo`, `channel_lerp`, `Add`, `Sub`, `Mul
 
 ### RGB
 
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- ToRgba
+- FromRgba
+- ColorInfo
+- ChannelArray
+- Add
+- Sub
+- Mul
+- Div
+- From
+
 ```rust
 #[derive(Copy, Clone, Debug)]
 pub struct RGB(pub f32, pub f32, pub f32);
@@ -530,6 +753,17 @@ Implements `ToRgba`, `FromRgba`, `ColorInfo`, `channel_lerp`, `Add`, `Sub`, `Mul
 
 ### HSV
 
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- ToRgba
+- FromRgba
+- ColorInfo
+- From
+
 ```rust
 #[derive(Copy, Clone, Debug)]
 pub struct HSV {
@@ -552,6 +786,17 @@ Implements `ToRgba`, `FromRgba`, `ColorInfo`, `From<RGBA>`.
 
 ### HSL
 
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- ToRgba
+- FromRgba
+- ColorInfo
+- From
+
 ```rust
 #[derive(Copy, Clone, Debug)]
 pub struct HSL {
@@ -570,6 +815,46 @@ Same arithmetic caveat as HSV. Implements `ToRgba`, `FromRgba`, `ColorInfo`, `Fr
 
 ### Gradient
 
+#### GradientStop
+
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- None
+
+#### GradientInterp
+
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- None
+
+#### GradientColorSpace
+
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- None
+
+#### GradientWrap
+
+Derives:
+- Copy
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Copy, Clone, Debug)]
 pub struct GradientStop {
@@ -585,6 +870,16 @@ pub enum GradientColorSpace { Rgb, Hsv }
 
 #[derive(Copy, Clone, Debug)]
 pub enum GradientWrap { Clamp, Repeat, PingPong }
+
+```
+
+#### Gradient
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — contains gradient configuration.
@@ -692,6 +987,12 @@ Channel operators (`Add`, `Sub`, `Mul`, `Div` with `f32`) are generated by the
 ## 3. Window (`optic_window`)
 
 ### Window
+
+Derives:
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Debug)]
@@ -836,6 +1137,13 @@ pub struct Window {
 
 #### SignalPayload
 
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
 ```rust
 #[derive(Debug, Clone)]
 pub enum SignalPayload {
@@ -847,6 +1155,12 @@ pub enum SignalPayload {
 A value carried by a named custom signal — either empty (`None`) or raw bytes (`Bytes`).
 
 #### Events
+
+Derives:
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Debug)]
@@ -866,7 +1180,18 @@ pub struct Events {
     pub network: NetworkEvents,
     pub signals: HashMap<String, Vec<SignalPayload>>,
 }
+```
 
+#### ButtonState
+
+Derives:
+- Copy
+- Clone
+
+Implements:
+- None
+
+```rust
 #[derive(Copy, Clone)]
 pub struct ButtonState {
     pub held: bool,
@@ -876,6 +1201,44 @@ pub struct ButtonState {
 ```
 
 #### Enums
+
+##### Is
+
+Derives:
+- Debug
+- Clone
+- Copy
+
+Implements:
+- None
+
+##### Mouse
+
+Derives:
+- Debug
+- Clone
+- PartialEq
+
+Implements:
+- None
+
+##### GamepadButton
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+##### GamepadAxis
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
 
 ```rust
 #[derive(Debug, Clone, Copy)]
@@ -945,6 +1308,13 @@ Signals persist for the current frame and are cleared at `end_frame`. Use them f
 
 ### ScreenInfo
 
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct ScreenInfo {
@@ -969,6 +1339,12 @@ pub struct ScreenInfo {
 ## 4. Renderer (`optic_render`)
 
 ### GPU
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns GL resources.
@@ -1067,6 +1443,12 @@ pub struct GPU {
 
 ### RenderContext
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — owns EGL resources.
 pub struct RenderContext {
@@ -1093,6 +1475,14 @@ pub struct RenderContext {
 | `pub fn set_vsync(&self, enable: bool)` | Enable/disable vsync |
 | `pub fn set_clear_color(&self, color: RGBA)` | Set clear color |
 
+#### WindowSurface
+
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — owns EGL surface.
 pub struct WindowSurface {
@@ -1102,6 +1492,14 @@ pub struct WindowSurface {
 ```
 
 ### GL Static Methods
+
+#### GL
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — unit struct, all methods are associated functions.
@@ -1135,6 +1533,12 @@ pub struct GL;
 | `pub fn unbind_ssbo()` | Unbind SSBO |
 
 ### Camera
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns transform state.
@@ -1173,6 +1577,13 @@ pub struct Camera {
 
 ### CamTransform
 
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct CamTransform {
@@ -1197,6 +1608,13 @@ pub struct CamTransform {
 | `pub fn proj_matrix(&self) -> Matrix4<f32>` | Current projection matrix |
 
 ### Mesh3D
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug)]
@@ -1229,6 +1647,13 @@ pub struct Mesh3D {
 
 ### Mesh2D
 
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct Mesh2D {
@@ -1247,6 +1672,13 @@ Same methods as Mesh3D, plus:
 | `pub fn render(&self, proj: &Matrix4<f32>)` | Render with explicit projection matrix |
 
 ### MeshHandle
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug)]
@@ -1277,6 +1709,12 @@ pub struct MeshHandle {
 
 ### InstanceDesc3D
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — describes GPU instance layout.
 pub struct InstanceDesc3D {
@@ -1298,6 +1736,12 @@ pub struct InstanceDesc3D {
 
 ### InstanceDesc2D
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — describes GPU instance layout.
 pub struct InstanceDesc2D {
@@ -1316,6 +1760,12 @@ pub struct InstanceDesc2D {
 | `pub fn upload(&self) -> OpticResult<InstanceBuffer>` | Upload to GPU |
 
 ### InstanceBuffer
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns GPU buffer.
@@ -1362,6 +1812,13 @@ pub struct InstanceBuffer {
 
 ### Shader
 
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct Shader {
@@ -1407,6 +1864,13 @@ pub struct Shader {
 
 ### Texture2D
 
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct Texture2D {
@@ -1430,6 +1894,12 @@ pub struct Texture2D {
 
 ### StorageBuffer
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — owns GPU buffer.
 pub struct StorageBuffer {
@@ -1448,6 +1918,13 @@ pub struct StorageBuffer {
 | `pub fn delete(self)` | Delete buffer |
 
 ### Transform2D
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- Default
 
 ```rust
 #[derive(Clone, Debug)]
@@ -1489,6 +1966,13 @@ impl Default for Transform2D { /* identity transform */ }
 | `pub fn set_scale_y(&mut self, y: f32)` | Set scale Y |
 
 ### Transform3D
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- Default
 
 ```rust
 #[derive(Clone, Debug)]
@@ -1537,6 +2021,12 @@ impl Default for Transform3D {}
 
 ### Canvas
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — owns GL framebuffer resources.
 pub struct Canvas {
@@ -1571,6 +2061,13 @@ pub struct Canvas {
 
 ### CanvasDesc
 
+Derives:
+- Clone
+- Debug
+
+Implements:
+- Default
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct CanvasDesc {
@@ -1590,6 +2087,12 @@ pub struct CanvasDesc {
 
 ### RenderTarget
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — borrows Canvas.
 pub enum RenderTarget<'a> {
@@ -1599,6 +2102,13 @@ pub enum RenderTarget<'a> {
 ```
 
 ### Slot
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug)]
@@ -1614,6 +2124,13 @@ pub enum Slot {
 | `pub fn total_slots() -> usize` | Always 16 |
 
 ### Workers
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug)]
@@ -1666,6 +2183,12 @@ pub fn fill_index_buffer(id: u32, data: &[u32]);
 
 ### ShaderFile
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — contains shader source strings.
 pub struct ShaderFile {
@@ -1687,6 +2210,12 @@ pub struct ShaderFile {
 
 ### ShaderType
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — used as a parameter only.
 pub enum ShaderType {
@@ -1700,6 +2229,12 @@ pub enum ShaderType {
 | `pub fn is_compute(&self) -> bool` | Is this a compute shader? |
 
 ### Mesh3DFile
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — contains raw mesh data.
@@ -1733,6 +2268,12 @@ pub struct Mesh3DFile {
 | `pub fn upload(&self) -> MeshHandle` | Upload to GPU and get a handle |
 
 ### Mesh2DFile
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — contains raw mesh data.
@@ -1768,6 +2309,12 @@ pub struct Mesh2DFile {
 
 ### TextureFile
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — contains raw image data.
 pub struct TextureFile {
@@ -1790,6 +2337,104 @@ pub struct TextureFile {
 | `pub fn save_cached(&self, path: &str) -> OpticResult<()>` | Save to binary cache (`.otxtr`) |
 
 ### Attribute Types
+
+#### Pos3DATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### Pos2DATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### ColorATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### UVMapATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### NormalATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### Rot2DATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### Rot3DATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### Scale2DATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### Scale3DATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### IndicesATTR
+
+Derives:
+- Debug
+- Clone
+
+Implements:
+- None
+
+#### CustomATTR
+
+Derives:
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Debug, Clone)]
@@ -1840,6 +2485,13 @@ All `*ATTR` structs share these methods via macro:
 
 #### ATTRInfo
 
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct ATTRInfo {
@@ -1856,6 +2508,14 @@ pub struct ATTRInfo {
 | `pub fn fmt_as_string(&self) -> String` | Formatted as `"{name}:{typ}:{byte_count}:{elem_count}"` |
 
 #### ATTRName
+
+Derives:
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug, PartialEq)]
@@ -1885,6 +2545,12 @@ Implemented for: `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `f32`, `f64` (scalar) a
 
 ### Center
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — pivot point for 2D mesh generation.
 pub enum Center {
@@ -1902,6 +2568,12 @@ Text rendering uses BBCode markup, MSDF atlas fonts, and instanced quad drawing.
 ### FontFamilyFile
 
 Asset-level font family — metrics, style variants, and optional TTF source bytes.
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — contains baked font data and optional TTF bytes.
@@ -1935,6 +2607,12 @@ pub struct FontFamilyFile {
 
 Single baked font style — atlas texture + glyph metrics.
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — contains GPU-ready texture data.
 pub struct BakedFont {
@@ -1947,6 +2625,13 @@ pub struct BakedFont {
 ### GlyphMetrics
 
 Per-glyph atlas lookup data.
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug)]
@@ -1969,6 +2654,12 @@ pub struct GlyphMetrics {
 
 Describes a bitmap font tile grid for `FontFamilyFile::from_bitmap_layout`.
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — contains texture data.
 pub struct BitmapFontLayout {
@@ -1983,6 +2674,13 @@ pub struct BitmapFontLayout {
 ### FontFamily (GPU)
 
 GPU-uploaded font family — one atlas per style variant.
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug)]
@@ -2026,6 +2724,17 @@ pub struct FontFamily {
 
 ### FontStyle
 
+Derives:
+- Clone
+- Copy
+- Debug
+- PartialEq
+- Eq
+- Hash
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FontStyle {
@@ -2049,6 +2758,16 @@ pub const FAUX_ITALIC: u32;   // 1 << 1
 pub const BORDER: u32;        // 1 << 2
 ```
 
+TextStyle:
+
+Derives:
+- Clone
+- Debug
+- Default
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug, Default)]
 pub struct TextStyle {
@@ -2070,6 +2789,16 @@ pub struct TextStyle {
 }
 ```
 
+WaveEffect:
+
+Derives:
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug, PartialEq)]
 pub struct WaveEffect {
@@ -2078,17 +2807,50 @@ pub struct WaveEffect {
     pub speed: f32,
 }
 
+ShakeEffect:
+
+Derives:
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- None
+
+```rust
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShakeEffect {
     pub amp: f32,
     pub speed: f32,
 }
 
+RainbowEffect:
+
+Derives:
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- None
+
+```rust
 #[derive(Clone, Debug, PartialEq)]
 pub struct RainbowEffect {
     pub speed: f32,
 }
 
+PulseEffect:
+
+Derives:
+- Clone
+- Debug
+- PartialEq
+
+Implements:
+- None
+
+```rust
 #[derive(Clone, Debug, PartialEq)]
 pub struct PulseEffect {
     pub amp: f32,
@@ -2096,12 +2858,30 @@ pub struct PulseEffect {
 }
 ```
 
+StyledSpan:
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct StyledSpan {
     pub text: String,
     pub style: TextStyle,
 }
+
+ParsedText:
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 #[derive(Clone, Debug)]
 pub struct ParsedText {
@@ -2120,6 +2900,15 @@ pub struct ParsedText {
 
 ### Layout Types
 
+ShapedGlyph:
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct ShapedGlyph {
@@ -2130,6 +2919,15 @@ pub struct ShapedGlyph {
     pub x_advance: f32,
 }
 ```
+
+LayoutGlyph:
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug)]
@@ -2149,6 +2947,15 @@ pub struct LayoutGlyph {
 }
 ```
 
+LayoutDecoration:
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct LayoutDecoration {
@@ -2164,6 +2971,17 @@ pub struct LayoutDecoration {
 }
 ```
 
+DecorationKind:
+
+Derives:
+- Clone
+- Copy
+- Debug
+- PartialEq
+
+Implements:
+- None
+
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DecorationKind {
@@ -2172,6 +2990,15 @@ pub enum DecorationKind {
     Strikethrough,
 }
 ```
+
+TextLayout:
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug)]
@@ -2197,6 +3024,12 @@ pub struct TextLayout {
 ### Text2D
 
 Screen-space (HUD / UI) text rendered with instanced quads.
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns GPU instance buffers and layout state.
@@ -2240,6 +3073,12 @@ pub struct Text2D {
 ### Text3D
 
 World-space billboard text. Same API as Text2D, plus a 3D transform.
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns GPU instance buffers and layout state.
@@ -2331,6 +3170,12 @@ pub trait Runtime {
 
 Rendering frame-rate policy.
 
+Derives:
+- None
+
+Implements:
+- Default
+
 ```rust
 // No derives — defines frame-rate policy.
 pub enum FpsLimit {
@@ -2348,6 +3193,12 @@ impl Default for FpsLimit { /* VSync */ }
 | `Limited(fps)` | Sleep to approximate the given frame rate |
 
 ### Game
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns engine subsystems.
@@ -2379,6 +3230,12 @@ pub struct Game {
 | `#[cfg(feature = "online")] pub fn enable_networking(&mut self, config: NetworkConfig) -> OpticResult<()>` | Start networking |
 
 ### Time
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns timing state.
@@ -2438,6 +3295,12 @@ pub struct Time {
 
 A countdown timer polled explicitly each frame.
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — mutable countdown state.
 pub struct Timer {
@@ -2468,6 +3331,12 @@ Repeating timers auto-reset on completion. Use `tick_and_emit` to bridge with th
 
 A collection of timers managed as a group.
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — owns timer instances.
 pub struct Timers {
@@ -2492,6 +3361,12 @@ pub struct Timers {
 
 ### FrameState
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — temporary borrow bundle passed to closures.
 pub struct FrameState<'a> {
@@ -2503,6 +3378,12 @@ pub struct FrameState<'a> {
 ```
 
 ### WindowState
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns window and event state.
@@ -2523,6 +3404,12 @@ pub struct WindowState {
 ### GameLoop
 
 Low-level game loop that drives a closure once per frame. FPS limiting applies via `time.fps_limit()`.
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns event loop and engine subsystems.
@@ -2602,6 +3489,13 @@ game.network().unwrap().send_all(b"hello");
 
 ### NetworkConfig
 
+Derives:
+- Clone
+- Debug
+
+Implements:
+- Default
+
 ```rust
 #[derive(Clone, Debug)]
 pub struct NetworkConfig {
@@ -2611,6 +3505,13 @@ pub struct NetworkConfig {
 ```
 
 ### NetworkMode
+
+Derives:
+- Clone
+- Debug
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug)]
@@ -2626,6 +3527,17 @@ pub enum NetworkMode {
 
 ### PeerId
 
+Derives:
+- Copy
+- Clone
+- Debug
+- PartialEq
+- Eq
+- Hash
+
+Implements:
+- None
+
 ```rust
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PeerId(pub u64);
@@ -2636,6 +3548,14 @@ pub struct PeerId(pub u64);
 | `PeerId::SERVER` | `PeerId(0)` — sentinel for server in client mode |
 
 ### NetworkEvents
+
+Derives:
+- Clone
+- Debug
+- Default
+
+Implements:
+- None
 
 ```rust
 #[derive(Clone, Debug, Default)]
@@ -2650,6 +3570,12 @@ Cleared at the end of each frame in `Events::end_frame()`. Poll the `NetworkHand
 to populate this struct — the game loop does this automatically when networking is enabled.
 
 ### NetworkHandle
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns network thread and channels.
@@ -2699,6 +3625,12 @@ field (no feature gate — always compiled).
 
 ### AudioEngine
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — owns Kira audio manager.
 pub struct AudioEngine {
@@ -2721,6 +3653,12 @@ pub struct AudioEngine {
 
 A decoded sound file loaded from disk or cache.
 
+Derives:
+- None
+
+Implements:
+- None
+
 ```rust
 // No derives — contains decoded audio samples.
 pub struct SoundFile {
@@ -2740,6 +3678,12 @@ pub struct SoundFile {
 ### Sound2D
 
 A handle to a playing 2D sound.
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns playback state.
@@ -2773,6 +3717,12 @@ pub struct Sound2D {
 ### Sound3D
 
 A handle to a playing 3D sound with spatial audio.
+
+Derives:
+- None
+
+Implements:
+- None
 
 ```rust
 // No derives — owns playback and spatial state.
@@ -2819,6 +3769,12 @@ pub struct Sound3D {
 A dirty-flagged value wrapper that implements `DataType` for use as a custom instance attribute.
 
 ### Signal
+
+Derives:
+- None
+
+Implements:
+- DataType
 
 ```rust
 // No derives — generic over T.

@@ -35,7 +35,9 @@ pub enum NetworkMode {
 /// Used with `GameBuilder::with_network` (see [`optic_loop`](https://docs.rs/optic-loop)).
 #[derive(Clone, Debug)]
 pub struct NetworkConfig {
+    /// Whether to act as host or client.
     pub mode: NetworkMode,
+    /// Maximum number of simultaneous peer connections.
     pub max_peers: u32,
 }
 
@@ -67,7 +69,10 @@ impl NetworkConfig {
 /// one-frame lifecycle of button press/release events.
 #[derive(Clone, Debug, Default)]
 pub struct NetworkEvents {
+    /// Peers that connected this frame.
     pub peers_connected: Vec<PeerId>,
+    /// Peers that disconnected this frame.
     pub peers_disconnected: Vec<PeerId>,
+    /// Raw packets received this frame, tagged with the sender's ID.
     pub packets: Vec<(PeerId, Vec<u8>)>,
 }

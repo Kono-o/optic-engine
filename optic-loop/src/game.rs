@@ -121,16 +121,26 @@ impl Game {
         self.running = false;
     }
 
+    /// Returns a read-only reference to the [`NetworkHandle`], if networking
+    /// has been enabled.
     #[cfg(feature = "online")]
     pub fn network(&self) -> Option<&NetworkHandle> {
         self.network.as_ref()
     }
 
+    /// Returns a mutable reference to the [`NetworkHandle`], if networking
+    /// has been enabled.
     #[cfg(feature = "online")]
     pub fn network_mut(&mut self) -> Option<&mut NetworkHandle> {
         self.network.as_mut()
     }
 
+    /// Initialises the networking subsystem with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticError`](optic_core::OpticError) if the underlying
+    /// [`NetworkHandle`] fails to create (e.g. bind or connect failure).
     #[cfg(feature = "online")]
     pub fn enable_networking(&mut self, config: optic_core::NetworkConfig) -> OpticResult<()> {
         let handle = NetworkHandle::new(config)?;
