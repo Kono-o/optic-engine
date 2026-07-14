@@ -1,3 +1,9 @@
+//! Monitor / display information.
+//!
+//! Provides [`ScreenInfo`], a platform-agnostic snapshot of a connected
+//! monitor's resolution, refresh rate, scale factor, and desktop position.
+//! Obtained via [`Window::screen_info`](crate::Window::screen_info).
+
 use optic_core::{Coord2D, Size2D};
 
 /// Information about a connected monitor/screen.

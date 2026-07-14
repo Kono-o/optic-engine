@@ -86,6 +86,12 @@ impl Text2D {
         }
     }
 
+    /// Sets the BBCode text and rebuilds the layout.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the BBCode is malformed or GPU instance buffers
+    /// fail to upload.
     pub fn set_text(&mut self, text: &str) -> OpticResult<()> {
         self.raw_text = text.to_string();
         self.rebuild_layout()
@@ -97,6 +103,11 @@ impl Text2D {
     }
 
     /// Replaces the font and rebuilds the layout.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the BBCode is malformed or GPU instance buffers
+    /// fail to upload.
     pub fn set_font(&mut self, font: FontFamily) -> OpticResult<()> {
         self.font = font;
         self.rebuild_layout()
@@ -118,12 +129,22 @@ impl Text2D {
     }
 
     /// Sets the base font size in pixels and rebuilds the layout.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the BBCode is malformed or GPU instance buffers
+    /// fail to upload.
     pub fn set_base_size(&mut self, size: f32) -> OpticResult<()> {
         self.base_size = size;
         self.rebuild_layout()
     }
 
     /// Sets the word-wrap width in pixels. `0` disables wrapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the BBCode is malformed or GPU instance buffers
+    /// fail to upload.
     pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()> {
         self.wrap_width = width;
         self.rebuild_layout()
@@ -143,6 +164,10 @@ impl Text2D {
     ///
     /// Call this each frame with `game.time.elapsed()` to animate effects.
     /// No-op for static text.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if GPU instance buffers fail to upload.
     pub fn update(&mut self, time: f32) -> OpticResult<()> {
         self.time = time;
         if !self.is_dynamic {
@@ -291,6 +316,11 @@ impl Text3D {
     }
 
     /// Sets the BBCode text and rebuilds the layout.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the BBCode is malformed or GPU instance buffers
+    /// fail to upload.
     pub fn set_text(&mut self, text: &str) -> OpticResult<()> {
         self.raw_text = text.to_string();
         self.rebuild_layout()
@@ -302,6 +332,11 @@ impl Text3D {
     }
 
     /// Replaces the font and rebuilds the layout.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the BBCode is malformed or GPU instance buffers
+    /// fail to upload.
     pub fn set_font(&mut self, font: FontFamily) -> OpticResult<()> {
         self.font = font;
         self.rebuild_layout()
@@ -323,12 +358,22 @@ impl Text3D {
     }
 
     /// Sets the base font size in pixels and rebuilds the layout.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the BBCode is malformed or GPU instance buffers
+    /// fail to upload.
     pub fn set_base_size(&mut self, size: f32) -> OpticResult<()> {
         self.base_size = size;
         self.rebuild_layout()
     }
 
     /// Sets the word-wrap width in pixels. `0` disables wrapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the BBCode is malformed or GPU instance buffers
+    /// fail to upload.
     pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()> {
         self.wrap_width = width;
         self.rebuild_layout()
@@ -345,6 +390,10 @@ impl Text3D {
     }
 
     /// Updates dynamic effects with the given time value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if GPU instance buffers fail to upload.
     pub fn update(&mut self, time: f32) -> OpticResult<()> {
         self.time = time;
         if !self.is_dynamic {

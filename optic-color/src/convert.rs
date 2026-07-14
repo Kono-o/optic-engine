@@ -1,3 +1,15 @@
+//! Color space conversions and the conversion traits.
+//!
+//! This module defines the two core conversion traits:
+//!
+//! - [`ToRgba`] — lossless conversion *to* [`RGBA`].
+//! - [`FromRgba`] — construction *from* [`RGBA`].
+//!
+//! Every color type ([`RGB`], [`HSV`], [`HSL`]) implements both traits, and
+//! the corresponding [`From`] impls are provided so that `.into()` works in
+//! both directions. Internal conversion functions (e.g. `hsv_to_rgba`) are
+//! `pub(crate)` and not part of the public API.
+
 use crate::{HSL, HSV, RGB, RGBA};
 
 /// Trait for types that can be converted to RGBA losslessly.
@@ -28,6 +40,7 @@ pub trait ToRgba: Copy {
 ///
 /// Implemented for [`RGBA`], [`RGB`], [`HSV`], [`HSL`].
 pub trait FromRgba: Sized {
+    /// Construct this color type from an [`RGBA`].
     fn from_rgba(rgba: RGBA) -> Self;
 }
 

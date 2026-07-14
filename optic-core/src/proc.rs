@@ -1,3 +1,9 @@
+//! Process lifecycle helpers for clean shutdown.
+//!
+//! Provides convenience functions that log a final message and terminate
+//! the process with a well-known exit code. Use [`end`] when you have an
+//! arbitrary code, or call [`end_success`] / [`end_error`] directly.
+
 use crate::{log_fatal, log_info, log_warn};
 use std::process;
 

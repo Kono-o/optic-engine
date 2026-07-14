@@ -1,3 +1,29 @@
+//! EGL display, context, and surface management for OpenGL 4.6 rendering.
+//!
+//! [`RenderContext`] wraps the EGL lifecycle — display initialisation,
+//! OpenGL 4.6 core-profile context creation, window-surface binding, and
+//! vsync control. It supports two construction modes:
+//!
+//! | Constructor | Surface | Use case |
+//! |-------------|---------|----------|
+//! | [`new_headless`](RenderContext::new_headless) | 1×1 PBuffer | Off-screen / compute |
+//! | [`new_windowed`](RenderContext::new_windowed) | Native window | On-screen rendering |
+//!
+//! Additional windows can be attached at runtime via
+//! [`attach_window`](RenderContext::attach_window), making the context
+//! suitable for multi-window applications.
+//!
+//! # Platform support
+//!
+//! | Platform | Display | Window |
+//! |----------|---------|--------|
+//! | X11 (Xlib/XCB) | `EGL_PLATFORM_X11_EXT` | Native visual ID matching |
+//! | Wayland | `EGL_PLATFORM_WAYLAND_EXT` | `wl_surface` |
+//! | Win32 | Default EGL display | `HWND` |
+//!
+//! Unsupported platforms fall back to the default EGL display and will
+//! return an error if surface creation fails.
+
 use khronos_egl as egl;
 use optic_core::{OpticError, OpticErrorKind, OpticResult, Size2D};
 use raw_window_handle::RawWindowHandle;
@@ -166,6 +192,15 @@ impl RenderContext {
     ///
     /// This is useful for off-screen rendering or when no window is available.
     /// Loads OpenGL function pointers via EGL and queries driver info.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticError`](optic_core::OpticError) with kind
+    /// [`OpenGL`](optic_core::OpticErrorKind::OpenGL) if:
+    /// - No EGL display is available.
+    /// - EGL initialisation, config selection, or context creation fails.
+    /// - The 1×1 pbuffer surface cannot be created.
+    /// - `eglMakeCurrent` fails to bind the pbuffer.
     pub fn new_headless() -> OpticResult<Self> {
         let (egl_instance, display, context, config) = create_display_and_context()?;
 
@@ -375,6 +410,13 @@ impl RenderContext {
     }
 
     /// Makes the given surface current and sets the viewport.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticError`](optic_core::OpticError) with kind
+    /// [`OpenGL`](optic_core::OpticErrorKind::OpenGL) if:
+    /// - `index` does not correspond to a valid surface.
+    /// - `eglMakeCurrent` fails (e.g. the surface was destroyed).
     pub fn make_current(&self, index: usize) -> OpticResult<()> {
         let egl_instance = egl::Instance::new(egl::Static);
         let ws = self.surfaces.get(index).ok_or_else(|| {
@@ -389,6 +431,13 @@ impl RenderContext {
     }
 
     /// Swaps front and back buffers for the given surface (double-buffering).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticError`](optic_core::OpticError) with kind
+    /// [`OpenGL`](optic_core::OpticErrorKind::OpenGL) if:
+    /// - `index` does not correspond to a valid surface.
+    /// - `eglSwapBuffers` fails (e.g. the surface is no longer valid).
     pub fn swap_buffers(&self, index: usize) -> OpticResult<()> {
         let egl_instance = egl::Instance::new(egl::Static);
         let ws = self.surfaces.get(index).ok_or_else(|| {

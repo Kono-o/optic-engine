@@ -40,6 +40,11 @@ impl SoundFile {
     ///
     /// Debug builds decode the source and overwrite the cache. Release builds
     /// load the cache directly.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the source file cannot be decoded
+    /// or read from disk.
     #[cfg(debug_assertions)]
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         let sound = StaticSoundData::from_file(path).map_err(|e| {
@@ -75,6 +80,11 @@ impl SoundFile {
     }
 
     /// Loads a sound file from the binary cache (release only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Asset`] if the cache file is missing,
+    /// corrupt, or uses an unsupported version.
     #[cfg(not(debug_assertions))]
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         let cache = optic_file::cached_path(path, "omusic");
@@ -82,6 +92,12 @@ impl SoundFile {
     }
 
     /// Loads from a `.omusic` binary cache file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Asset`] if the cache file is too short,
+    /// has an invalid magic header, uses an unsupported version, or has a
+    /// size mismatch with the declared sample count.
     pub fn from_cached(path: &str) -> OpticResult<Self> {
         let data = optic_file::read_bytes(path)?;
         if data.len() < 19 {
@@ -139,6 +155,11 @@ impl SoundFile {
     }
 
     /// Saves this sound to a `.omusic` binary cache file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the parent directory cannot be
+    /// created or the file cannot be written.
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
         let sample_count = self.samples.len() as u64;
         let mut data = Vec::with_capacity(23 + self.samples.len() * 4);

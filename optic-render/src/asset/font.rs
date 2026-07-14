@@ -111,6 +111,10 @@ impl FontFamilyFile {
     ///
     /// `codepoint_range` is `(start, end)` exclusive — e.g. `(32, 127)` for ASCII.
     /// `atlas_resolution` is the atlas texture size in pixels (e.g. 1024).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the TTF data cannot be parsed.
     pub fn from_ttf_file(regular_bytes: &[u8], codepoint_range: (u32, u32), atlas_resolution: u32) -> OpticResult<Self> {
         let face = ttf_parser::Face::parse(regular_bytes, 0)
             .map_err(|_| OpticError::new(OpticErrorKind::Custom, "failed to parse TTF font"))?;
@@ -197,6 +201,10 @@ impl FontFamilyFile {
     }
 
     /// Adds a bold variant from TTF bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the TTF data cannot be parsed.
     pub fn with_bold(mut self, bytes: &[u8]) -> OpticResult<Self> {
         let baked = bake_font_variant(bytes, &self.regular.glyphs, ATLAS_SIZE)?;
         self.bold = Some(baked);
@@ -204,6 +212,10 @@ impl FontFamilyFile {
     }
 
     /// Adds an italic variant from TTF bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the TTF data cannot be parsed.
     pub fn with_italic(mut self, bytes: &[u8]) -> OpticResult<Self> {
         let baked = bake_font_variant(bytes, &self.regular.glyphs, ATLAS_SIZE)?;
         self.italic = Some(baked);
@@ -211,6 +223,10 @@ impl FontFamilyFile {
     }
 
     /// Adds a bold-italic variant from TTF bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the TTF data cannot be parsed.
     pub fn with_bold_italic(mut self, bytes: &[u8]) -> OpticResult<Self> {
         let baked = bake_font_variant(bytes, &self.regular.glyphs, ATLAS_SIZE)?;
         self.bold_italic = Some(baked);
@@ -220,6 +236,11 @@ impl FontFamilyFile {
     /// Constructs a font family from a bitmap font layout.
     ///
     /// Generates an SDF atlas from the source bitmap tiles.
+    ///
+    /// # Errors
+    ///
+    /// This function currently always succeeds, but returns `OpticResult` for
+    /// forward compatibility with future validation.
     pub fn from_bitmap_layout(layout: BitmapFontLayout) -> OpticResult<Self> {
         let tile_w = layout.glyph_size.w as f32;
         let tile_h = layout.glyph_size.h as f32;
@@ -311,6 +332,15 @@ impl FontFamilyFile {
     /// If `path` ends with `.ofont`, loads from cache directly.
     /// Otherwise checks for an existing cache, bakes from TTF if missing,
     /// and writes the cache for next time.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the source or cache file cannot be
+    /// read.
+    /// Returns [`OpticErrorKind::Custom`] if the TTF data cannot be parsed or
+    /// the cache is corrupted / has an unsupported version.
+    /// Returns [`OpticErrorKind::File`] if the cache directory or file cannot
+    /// be created.
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         if path.ends_with(OFONT) {
             return Self::from_cached(path);
@@ -329,6 +359,10 @@ impl FontFamilyFile {
     }
 
     /// Saves the font family to a binary `.ofont` cache file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be written.
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
         let mut data = Vec::new();
         data.extend_from_slice(&OPTIC_MAGIC);
@@ -362,6 +396,12 @@ impl FontFamilyFile {
     }
 
     /// Loads a font family from a binary `.ofont` cache file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be read.
+    /// Returns [`OpticErrorKind::Custom`] if the cache is truncated, has
+    /// invalid magic, an unsupported version, or malformed glyph data.
     pub fn from_cached(path: &str) -> OpticResult<Self> {
         let data = optic_file::read_bytes(path)?;
         let header = 8 + 2 + 12 + 2;
@@ -417,6 +457,11 @@ impl FontFamilyFile {
     }
 
     /// Returns the built-in 8×8 bitmap fallback font (ASCII 32..126).
+    ///
+    /// # Errors
+    ///
+    /// This function currently always succeeds, but returns `OpticResult` for
+    /// consistency with the other font-loading constructors.
     pub fn fallback() -> OpticResult<Self> {
         fallback_font_family()
     }

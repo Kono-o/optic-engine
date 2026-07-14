@@ -308,6 +308,12 @@ impl Shader {
 ///
 /// `shader_type` should be one of `gl::VERTEX_SHADER`, `gl::FRAGMENT_SHADER`,
 /// or `gl::COMPUTE_SHADER`. Returns the shader object ID on success.
+///
+/// # Errors
+///
+/// Returns [`OpticErrorKind::Shader`] if the source contains a null byte or
+/// the driver reports a compilation error (the driver log is included in the
+/// message).
 pub fn compile_shader(src: &str, shader_type: gl::types::GLenum) -> OpticResult<u32> {
     let c_src = CString::new(src)
         .map_err(|e| OpticError::new(OpticErrorKind::Shader, &format!("null byte in shader source: {e}")))?;
@@ -338,6 +344,11 @@ pub fn compile_shader(src: &str, shader_type: gl::types::GLenum) -> OpticResult<
 /// Links a vertex + fragment shader pair into a GL program.
 ///
 /// Both shader stages are compiled and linked. Returns the program ID on success.
+///
+/// # Errors
+///
+/// Returns [`OpticErrorKind::Shader`] if either shader fails to compile or
+/// the program fails to link (the driver log is included in the message).
 pub fn link_program(vert: &str, frag: &str) -> OpticResult<u32> {
     let v_id = compile_shader(vert, gl::VERTEX_SHADER)?;
     let f_id = compile_shader(frag, gl::FRAGMENT_SHADER)?;
@@ -372,6 +383,11 @@ pub fn link_program(vert: &str, frag: &str) -> OpticResult<u32> {
 /// Links a compute shader source into a GL program.
 ///
 /// Returns the program ID on success.
+///
+/// # Errors
+///
+/// Returns [`OpticErrorKind::Shader`] if the compute shader fails to compile
+/// or the program fails to link (the driver log is included in the message).
 pub fn link_compute_program(src: &str) -> OpticResult<u32> {
     let c_id = compile_shader(src, gl::COMPUTE_SHADER)?;
 

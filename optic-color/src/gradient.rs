@@ -1,3 +1,22 @@
+//! Color gradient evaluation system.
+//!
+//! A [`Gradient`] maps a normalized position `t` in 0..1 to an [`RGBA`]
+//! color by interpolating between a sorted list of control points
+//! ([`GradientStop`]s). Configuration options include:
+//!
+//! - **Interpolation** — [`Linear`](GradientInterp::Linear),
+//!   [`Step`](GradientInterp::Step), or
+//!   [`SmoothStep`](GradientInterp::SmoothStep).
+//! - **Color space** — [`Rgb`](GradientColorSpace::Rgb) (fast) or
+//!   [`Hsv`](GradientColorSpace::Hsv) (hue-aware rainbow transitions).
+//! - **Wrap mode** — [`Clamp`](GradientWrap::Clamp),
+//!   [`Repeat`](GradientWrap::Repeat), or
+//!   [`PingPong`](GradientWrap::PingPong).
+//!
+//! Several built-in presets are available:
+//! [`rainbow`](Gradient::rainbow), [`fire`](Gradient::fire), and
+//! [`grayscale`](Gradient::grayscale).
+
 use crate::convert::{hsv_to_rgba, rgba_to_hsv};
 use crate::{channel_lerp, HSV, RGBA, ToRgba};
 

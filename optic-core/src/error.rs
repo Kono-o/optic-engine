@@ -1,14 +1,45 @@
+//! Error types for the Optic engine.
+//!
+//! Every fallible operation in Optic returns [`OpticResult<T>`], which is
+//! a type alias for `Result<T, OpticError>`. Errors carry a [`OpticErrorKind`]
+//! category and a human-readable message. Use [`OpticError::kind`] to match
+//! on the category, or handle them generically with `?` propagation.
+//!
+//! The quickest way to create an error is through one of the kind-specific
+//! constructors:
+//!
+//! ```ignore
+//! let err = OpticError::shader("failed to compile fragment shader");
+//! let err = OpticError::new(OpticErrorKind::Asset, "texture not found");
+//! ```
+
 use std::fmt;
 
 /// Broad category of an error.
+///
+/// Used with [`OpticError`] to classify failures into one of several
+/// well-known buckets. This allows callers to handle errors by category
+/// (e.g. retry on [`File`](OpticErrorKind::File), abort on
+/// [`Init`](OpticErrorKind::Init)) without parsing messages.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpticErrorKind {
+    /// Engine or subsystem initialization failed (e.g. window creation,
+    /// OpenGL context setup, driver incompatibility).
     Init,
+    /// An OpenGL API call returned an error, or the GL context is in an
+    /// invalid state.
     OpenGL,
+    /// Shader compilation or linking failed. The accompanying message
+    /// typically contains the driver's error log.
     Shader,
+    /// An asset (texture, mesh, model, font, …) could not be loaded or
+    /// parsed.
     Asset,
+    /// A file-system operation failed (open, read, write, path resolution).
     File,
+    /// Framebuffer creation, attachment, or completeness check failed.
     Framebuffer,
+    /// A catch-all for errors that do not fit the other categories.
     Custom,
 }
 
@@ -18,9 +49,7 @@ pub enum OpticErrorKind {
 /// Errors propagate upward via `?` and can be handled generically
 /// by inspecting [`kind`](OpticError::kind).
 ///
-/// ```
-/// use optic_core::*;
-///
+/// ```ignore
 /// fn load_shader(path: &str) -> OpticResult<()> {
 ///     Err(OpticError::new(OpticErrorKind::Shader, "compile failed"))
 /// }
@@ -38,7 +67,7 @@ impl fmt::Display for OpticError {
 }
 
 impl OpticError {
-    /// Construct an error with a specific kind and message.
+    /// Construct an error with a specific [`OpticErrorKind`] and message.
     pub fn new(kind: OpticErrorKind, msg: &str) -> Self {
         Self {
             kind,

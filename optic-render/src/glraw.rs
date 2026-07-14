@@ -1,3 +1,16 @@
+//! Stateless, one-to-one wrappers around raw OpenGL 4.6 calls.
+//!
+//! [`GL`] provides thin convenience methods (`clear`, `resize`, `bind_vao`, …)
+//! that map directly to a single `gl::*` invocation with no error checking or
+//! state tracking. For a stateful, high-level rendering interface, see
+//! [`GPU`](crate::GPU).
+//!
+//! # When to use `GL` directly
+//!
+//! * Initialisation helpers (enable depth, alpha, MSAA).
+//! * Low-level test scaffolding where `GPU` overhead is undesirable.
+//! * Custom render passes that bypass the `GPU` pipeline entirely.
+
 use optic_core::{CullFace, PolygonMode, RGBA, Size2D};
 
 /// Low-level, stateless OpenGL 4.6 wrappers.

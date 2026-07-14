@@ -1,9 +1,64 @@
+//! High-level GPU renderer and pipeline state management.
+//!
+//! [`GPU`] is the primary entry point for all rendering operations. It owns an
+//! EGL-backed [`RenderContext`], pre-loaded fallback assets (shaders, textures,
+//! fonts), and the global rasterization pipeline state (polygon mode, culling,
+//! MSAA, clear colour).
+//!
+//! # Architecture
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────┐
+//! │  GPU                                            │
+//! │  ┌───────────────┐  ┌────────────────────────┐  │
+//! │  │ RenderContext  │  │  Fallback assets       │  │
+//! │  │ (EGL display,  │  │  • 2D / 3D shaders     │  │
+//! │  │  surfaces,     │  │  • checkerboard tex    │  │
+//! │  │  vsync)        │  │  • built-in font       │  │
+//! │  └───────────────┘  └────────────────────────┘  │
+//! │  ┌─────────────────────────────────────────────┐ │
+//! │  │  Pipeline state                             │ │
+//! │  │  polygon mode · culling · MSAA · clear colour│ │
+//! │  └─────────────────────────────────────────────┘ │
+//! └─────────────────────────────────────────────────┘
+//! ```
+//!
+//! # Draw calls
+//!
+//! | Method | Geometry | Projection |
+//! |--------|----------|------------|
+//! | [`render3d`](GPU::render3d) | [`Mesh3D`] | Camera perspective/ortho |
+//! | [`render2d`](GPU::render2d) | [`Mesh2D`] | Canvas orthographic |
+//! | [`render_text2d`](GPU::render_text2d) | [`Text2D`] | Canvas orthographic |
+//! | [`render_text3d`](GPU::render_text3d) | [`Text3D`] | Camera perspective/ortho |
+//!
+//! # Thread safety
+//!
+//! `GPU` is **not** `Send` — OpenGL contexts are bound to a single OS thread.
+//! All rendering must happen on the thread that created the context.
+
 use optic_core::{log_info, ColorInfo, CullFace, Gradient, OpticResult, PolygonMode, RGBA, Size2D};
 
 use crate::context::RenderContext;
 use crate::glraw::GL;
 use crate::handles::{Canvas, FontFamily, Mesh2D, Mesh3D, RenderTarget, Shader, Text2D, Text3D, Texture2D};
 use crate::{asset, Camera};
+
+/// A rectangular sub-region of the OpenGL viewport.
+///
+/// Used by [`GPU::viewport`] and [`GPU::set_viewport`] to query or set the
+/// window-area that GL renders into, measured in pixels from the
+/// lower-left corner.
+pub struct Viewport {
+    /// Horizontal offset from the left edge of the window, in pixels.
+    pub x: i32,
+    /// Vertical offset from the bottom edge of the window, in pixels.
+    pub y: i32,
+    /// Width of the viewport rectangle, in pixels.
+    pub width: i32,
+    /// Height of the viewport rectangle, in pixels.
+    pub height: i32,
+}
 
 /// The primary renderer — owns the GL context, fallback assets, and global
 /// pipeline state.
@@ -46,13 +101,6 @@ use crate::{asset, Camera};
 /// gpu.log_backend_info();
 /// // → "BACKEND: 4.6.0 NVIDIA ... (GLSL 4.60)"
 /// ```
-pub struct Viewport {
-    pub x: i32,
-    pub y: i32,
-    pub width: i32,
-    pub height: i32,
-}
-
 pub struct GPU {
     pub(crate) ctx: RenderContext,
     poly_mode: PolygonMode,
@@ -494,10 +542,16 @@ impl GPU {
         mesh
     }
 
-    /// Uploads a [`FontFamilyFile`] to the GPU and returns a [`FontFamily`].
+    /// Uploads a [`FontFamilyFile`](asset::FontFamilyFile) to the GPU and
+    /// returns a [`FontFamily`].
     ///
     /// This uploads the MSDF atlas textures for each populated style variant,
     /// making the font ready for use with [`Text2D`] or [`Text3D`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticError`](optic_core::OpticError) if the atlas texture
+    /// upload fails (e.g. the GPU rejects the image dimensions or format).
     pub fn upload_font_family(&self, file: &asset::FontFamilyFile) -> OpticResult<FontFamily> {
         FontFamily::new(file)
     }
@@ -525,6 +579,12 @@ impl GPU {
     /// Returns `Err` if compilation or linking fails (errors are logged
     /// internally by the GLSL compiler). A returned shader is ready to bind
     /// uniforms and attach textures.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`OpticError`](optic_core::OpticError) with kind
+    /// [`Shader`](optic_core::OpticErrorKind::Shader) if GLSL compilation or
+    /// program linking fails. The error message contains the driver's info log.
     pub fn upload_shader(&self, asset: &asset::ShaderFile) -> optic_core::OpticResult<Shader> {
         asset.compile()
     }
@@ -635,6 +695,12 @@ impl GPU {
     /// gpu.set_render_target(&RenderTarget::Screen)?;
     /// canvas.blit_to_screen(window_size);
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Currently always returns `Ok(())`. This method returns
+    /// [`OpticResult`] to preserve a uniform interface for future error
+    /// conditions (e.g. invalid FBO state).
     pub fn set_render_target(&mut self, target: &RenderTarget) -> optic_core::OpticResult<()> {
         match target {
             RenderTarget::Screen => {

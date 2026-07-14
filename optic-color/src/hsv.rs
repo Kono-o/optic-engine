@@ -1,3 +1,10 @@
+//! HSV (Hue, Saturation, Value) color representation.
+//!
+//! [`HSV`] is an alternative to [`RGBA`](crate::RGBA) that represents colors
+//! in a perceptually intuitive way: a hue angle (0..360), saturation, and
+//! brightness (value). It is well-suited for color manipulation such as
+//! generating lighter, darker, or more/less saturated variants.
+
 use crate::{RGBA, ToRgba};
 
 /// HSV color.

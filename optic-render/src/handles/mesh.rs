@@ -146,6 +146,12 @@ impl MeshHandle {
     /// Updates a single vertex attribute value on the GPU.
     ///
     /// The type `D` must match the attribute's declared type at creation time.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if `index` exceeds the vertex count,
+    /// `attr_index` exceeds the layout count, or `D` does not match the
+    /// attribute's declared format and element count.
     pub fn update_vertex<D: DataType>(&self, index: u32, attr_index: usize, value: D) -> OpticResult<()> {
         if index >= self.vertex_count {
             return Err(OpticError::new(
@@ -180,6 +186,12 @@ impl MeshHandle {
     }
 
     /// Reads a single vertex attribute value from the GPU.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if `index` exceeds the vertex count,
+    /// `attr_index` exceeds the layout count, or `D` does not match the
+    /// attribute's declared format and element count.
     pub fn vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D> {
         if index >= self.vertex_count {
             return Err(OpticError::new(
@@ -257,6 +269,11 @@ impl MeshHandle {
     /// Writes raw vertex data starting at `start_vertex`.
     ///
     /// `data` length must be a multiple of the vertex stride.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if `data` length is not a multiple
+    /// of the vertex stride or if the write extends past the vertex count.
     pub fn write_range(&self, start_vertex: u32, data: &[u8]) -> OpticResult<()> {
         let stride = self.vertex_stride as usize;
         if data.len() % stride != 0 {

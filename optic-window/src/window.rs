@@ -1,3 +1,14 @@
+//! Window management, sizing, positioning, and cursor control.
+//!
+//! This module provides [`Window`], a wrapper around a winit window handle that
+//! adds frame-based cursor tracking (delta, loopback wrapping) and cached
+//! window state. All queries against the OS are live unless noted otherwise,
+//! while frame-dependent values (deltas, previous positions) are computed by
+//! [`Window::update_frame`] once per frame.
+//!
+//! Cursor behaviour is divided into three modes — grab, confine, and
+//! loopback — documented on the individual setter methods.
+
 use optic_core::{Coord2D, CoordOffset, Size2D};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::window::{CursorGrabMode, CursorIcon, Fullscreen, Window as WinitWindow};
@@ -461,8 +472,16 @@ impl Window {
         self.cursor_grabbed
     }
 
-    /// Lock or release the cursor (grab mode). Returns `Err(())` if the platform
-    /// does not support cursor locking.
+    /// Lock or release the cursor (grab mode).
+    ///
+    /// When enabled the cursor is hidden and reports infinite movement,
+    /// suitable for first-person camera input.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(())` if the platform does not support
+    /// [`CursorGrabMode::Locked`] or the window handle has been closed.
+    /// The cached grab state is only updated on success.
     pub fn set_cursor_grab(&mut self, grab: bool) -> Result<(), ()> {
         let result = match self.inner.as_ref() {
             Some(w) => w.set_cursor_grab(if grab { CursorGrabMode::Locked } else { CursorGrabMode::None })
@@ -485,7 +504,16 @@ impl Window {
         self.cursor_confined
     }
 
-    /// Confine or release the cursor. Returns `Err(())` if unsupported.
+    /// Confine or release the cursor.
+    ///
+    /// When enabled the cursor is clamped to the window area but remains
+    /// visible, unlike grab mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(())` if the platform does not support
+    /// [`CursorGrabMode::Confined`] or the window handle has been closed.
+    /// The cached confine state is only updated on success.
     pub fn set_cursor_confine(&mut self, confine: bool) -> Result<(), ()> {
         let result = match self.inner.as_ref() {
             Some(w) => w.set_cursor_grab(if confine { CursorGrabMode::Confined } else { CursorGrabMode::None })

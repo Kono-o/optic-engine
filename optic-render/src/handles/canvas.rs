@@ -70,6 +70,14 @@ impl Canvas {
     /// - At least one colour format or depth must be specified
     /// - Stencil requires depth
     /// - `depth_compare` requires `depth_as_texture`
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the descriptor violates validation
+    /// constraints (empty formats with no depth, stencil without depth, or
+    /// `depth_compare` without `depth_as_texture`).
+    /// Returns [`OpticErrorKind::Framebuffer`] if the resulting framebuffer is
+    /// incomplete after creation.
     pub fn new(desc: &CanvasDesc) -> OpticResult<Self> {
         if desc.color_formats.is_empty() && !desc.depth {
             return Err(OpticError::new(
@@ -277,6 +285,11 @@ impl Canvas {
     }
 
     /// Returns a reference to the colour texture at the given attachment index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if `index` exceeds the number of
+    /// colour attachments.
     pub fn color_tex(&self, index: usize) -> OpticResult<&Texture2D> {
         self.color_texs.get(index).ok_or_else(|| {
             OpticError::new(
@@ -292,6 +305,11 @@ impl Canvas {
     }
 
     /// Resizes the canvas by recreating the framebuffer with a new size.
+    ///
+    /// # Errors
+    ///
+    /// Propagates errors from [`Canvas::new`] if the recreated framebuffer
+    /// fails validation or is incomplete.
     pub fn set_size(&mut self, new_size: Size2D) -> OpticResult<()> {
         let mut new_desc = self.desc.clone();
         new_desc.size = new_size;
@@ -350,6 +368,11 @@ impl Canvas {
     /// Sets the viewport scissor within this canvas.
     ///
     /// The rectangle must be within the canvas bounds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the rectangle has non-positive
+    /// dimensions or extends beyond the canvas bounds.
     pub fn set_renderable_area(&self, x: i32, y: i32, size: Size2D) -> OpticResult<()> {
         if x < 0
             || y < 0
@@ -373,6 +396,11 @@ impl Canvas {
     }
 
     /// Reads pixel data from a colour attachment back to the CPU.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if `index` exceeds the number of
+    /// colour attachments.
     pub fn read_pixels(&self, index: usize) -> OpticResult<Vec<u8>> {
         self.resolve_if_needed();
         let tex = self.color_tex(index)?;
@@ -403,6 +431,12 @@ impl Canvas {
     ///
     /// Supported formats depend on the colour attachment format (8/16/32 bpc,
     /// 1–4 channels).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if `index` exceeds the number of
+    /// colour attachments or the attachment format is unsupported for saving.
+    /// Returns [`OpticErrorKind::File`] if writing the image file fails.
     pub fn save_to_disk(&self, index: usize, path: &str) -> OpticResult<()> {
         let data = self.read_pixels(index)?;
         let tex = self.color_tex(index)?;

@@ -1,3 +1,14 @@
+//! Networking types for peer-to-peer and client-server communication.
+//!
+//! This module defines the data types used to configure and interact with
+//! Optic's networking subsystem. The actual network I/O lives in
+//! `optic-loop`; this crate provides the shared types:
+//!
+//! - [`PeerId`] — unique identifier for each connected peer.
+//! - [`NetworkMode`] — whether to act as host or client.
+//! - [`NetworkConfig`] — full configuration (mode + peer limits).
+//! - [`NetworkEvents`] — per-frame events (joins, leaves, packets).
+
 /// Unique identifier for a connected peer.
 ///
 /// Peer IDs are assigned by the host during connection. The host itself

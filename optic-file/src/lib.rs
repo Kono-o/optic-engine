@@ -124,6 +124,11 @@ pub fn write_bytes(path: &str, data: &[u8]) -> OpticResult<()> {
 /// Write a UTF-8 string to a file, creating parent directories if needed.
 ///
 /// Equivalent to [`write_bytes`] with `data.as_bytes()`.
+///
+/// # Errors
+///
+/// Returns [`OpticErrorKind::File`] if the parent directory cannot be created
+/// or the file cannot be written.
 pub fn write_string(path: &str, data: &str) -> OpticResult<()> {
     write_bytes(path, data.as_bytes())
 }
@@ -155,6 +160,11 @@ pub fn cached_path(source: &str, ext: &str) -> String {
 }
 
 /// Create a directory and all parent directories (like `mkdir -p`).
+///
+/// # Errors
+///
+/// Returns [`OpticErrorKind::File`] if the directory (or any parent) cannot
+/// be created due to permissions or an invalid path.
 pub fn create_dir(path: &str) -> OpticResult<()> {
     fs::create_dir_all(path).map_err(|e| {
         OpticError::new(

@@ -10,14 +10,24 @@
 //! [`Game::run`]:
 //!
 //! ```ignore
-//! use optic_loop::{Game, Runtime};
+//! use optic_loop::{Game, Runtime, FpsLimit};
 //!
 //! struct App;
 //! impl Runtime for App {
-//!     fn start(&mut self, _game: &mut Game) {}
+//!     fn start(&mut self, game: &mut Game) {
+//!         game.time.set_target_physics_rate(120.0);
+//!         game.time.set_target_tps(Some(20.0));
+//!         game.time.set_fps_limit(FpsLimit::Uncapped);
+//!     }
+//!     fn physics(&mut self, game: &mut Game) {
+//!         // fixed-timestep simulation
+//!     }
 //!     fn update(&mut self, game: &mut Game) {
+//!         // input, AI, gameplay
+//!     }
+//!     fn render(&mut self, game: &mut Game) {
 //!         game.renderer.clear();
-//!         // render things...
+//!         // draw calls
 //!     }
 //!     fn end(&mut self, _game: &mut Game) {}
 //! }
@@ -39,10 +49,17 @@
 //! });
 //! ```
 //!
-//! # Frame timing
+//! # Execution model
 //!
-//! Both APIs update [`Time`] automatically each frame. Access delta time and
-//! FPS through the [`FrameState`] (low-level) or `game.time` (high-level).
+//! Each frame executes in three independent phases:
+//!
+//! 1. **Physics** — fixed-timestep simulation (default 60 Hz)
+//! 2. **Update** — gameplay logic (default: once per frame)
+//! 3. **Render** — draw calls, presented once per frame
+//!
+//! Each phase runs at its own independently configurable rate via
+//! [`Time::set_target_physics_rate`], [`Time::set_target_tps`], and
+//! [`Time::set_fps_limit`].
 
 mod game;
 mod runtime;
@@ -66,12 +83,6 @@ use winit::window::WindowId;
 /// Used by [`GameLoop`] to manage multiple windows. Each `WindowState`
 /// owns a [`Window`], an [`Events`] collector, and the index of its
 /// surface within the GPU's context.
-///
-/// # Example
-///
-/// ```ignore
-/// let ws = WindowState::new(&event_loop, "My Window", (800, 600).into());
-/// ```
 pub struct WindowState {
     pub window: Window,
     pub events: Events,
@@ -124,22 +135,6 @@ pub struct FrameState<'a> {
 /// This is the lower-level alternative to [`Game`] + [`Runtime`]. Use it
 /// when you want more control over the setup process or need multiple
 /// windows.
-///
-/// # Example
-///
-/// ```ignore
-/// use optic_loop::{GameLoop, WindowState};
-///
-/// let el = EventLoop::new().unwrap();
-/// let ws = WindowState::new(&el, "App", (800, 600).into());
-/// let gpu = GPU::new_headless()?;
-/// let camera = Camera::new((800, 600).into(), CamProj::Persp);
-///
-/// let game = GameLoop::new(el, gpu, camera, vec![ws], |frame| {
-///     frame.gpu.clear();
-/// })?;
-/// game.run();
-/// ```
 pub struct GameLoop<F: FnMut(&mut FrameState)> {
     event_loop: Option<EventLoop<()>>,
     windows: Vec<WindowState>,
@@ -152,14 +147,6 @@ pub struct GameLoop<F: FnMut(&mut FrameState)> {
 
 impl<F: FnMut(&mut FrameState)> GameLoop<F> {
     /// Constructs a new game loop.
-    ///
-    /// Attaches each window's raw handle to the GPU context and initialises
-    /// gamepad support via `gilrs`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if window attachment to the GPU surface or gamepad
-    /// initialisation fails.
     pub fn new(
         el: EventLoop<()>,
         mut gpu: GPU,
@@ -191,9 +178,6 @@ impl<F: FnMut(&mut FrameState)> GameLoop<F> {
     }
 
     /// Starts the event loop, consuming `self`.
-    ///
-    /// This call blocks until all windows are closed or the application
-    /// exits.
     pub fn run(mut self) {
         let el = self.event_loop.take().unwrap();
         let _ = el.run_app(&mut self);
@@ -256,6 +240,9 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
             return;
         }
 
+        // Record frame start for FPS limiting
+        self.time.begin_frame();
+
         while let Some(gilrs_event) = self.gilrs.next_event() {
             for ws in &mut self.windows {
                 ws.events.process_gilrs_event(&gilrs_event);
@@ -281,23 +268,24 @@ impl<F: FnMut(&mut FrameState)> ApplicationHandler for GameLoop<F> {
         for ws in &mut self.windows {
             ws.window.request_redraw();
         }
+
+        // FPS limiter
+        match self.time.fps_limit() {
+            FpsLimit::Uncapped => {}
+            FpsLimit::VSync => {}
+            FpsLimit::Limited(target_fps) => {
+                if let Some(target_frame_time) = FpsLimit::Limited(*target_fps).target_frame_time() {
+                    let elapsed = self.time.frame_elapsed();
+                    if elapsed < target_frame_time {
+                        self.time.sleep(target_frame_time - elapsed);
+                    }
+                }
+            }
+        }
     }
 }
 
 /// Runs a single-window application with a per-frame closure.
-///
-/// This is the simplest way to get a window on screen. On error, the
-/// error is logged and the process exits with `ERROR`.
-///
-/// # Example
-///
-/// ```ignore
-/// use optic_loop::run;
-///
-/// run("Hello", (800, 600).into(), |frame| {
-///     frame.gpu.clear();
-/// });
-/// ```
 pub fn run<F>(title: &str, size: Size2D, frame_fn: F)
 where
     F: FnMut(&mut FrameState) + 'static,

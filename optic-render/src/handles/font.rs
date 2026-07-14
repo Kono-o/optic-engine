@@ -123,6 +123,11 @@ impl FontFamily {
     }
 
     /// Creates a fallback 8×8 bitmap font covering ASCII 32..126.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Asset`] if the built-in fallback font data
+    /// cannot be parsed, or an OpenGL upload error occurs.
     pub fn fallback_bitmap() -> OpticResult<Self> {
         Self::new(&FontFamilyFile::fallback()?)
     }

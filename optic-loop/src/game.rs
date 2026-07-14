@@ -1,63 +1,3 @@
-/// The high-level [`Game`] — owns all engine subsystems and drives a
-/// [`Runtime`] implementation through the winit event loop.
-///
-/// # Architecture
-///
-/// `Game` aggregates every subsystem the engine provides:
-///
-/// | Field | Type | Purpose |
-/// |---|---|---|
-/// | `renderer` | [`GPU`] | GL context, pipeline state, fallback assets |
-/// | `camera` | [`Camera`] | Active view/projection |
-/// | `events` | [`Events`] | Per-frame input collection |
-/// | `time` | [`Time`] | Delta time, FPS, elapsed |
-/// | `window` | [`Window`] | Application window |
-/// | `audio` | [`AudioEngine`](optic_sound::AudioEngine) | Kira-backed audio manager |
-///
-/// # Lifecycle
-///
-/// ```text
-/// Game::new(runtime) ──► Game::run(runtime)
-///                            │
-///                            ▼
-///                     ┌─► Runtime::start  (once)
-///                     │        │
-///                     │        ▼
-///                     │   Runtime::update  (every frame)
-///                     │        │
-///                     └────────┘
-///                            │
-///                            ▼
-///                     Runtime::end  (on shutdown)
-/// ```
-///
-/// # Example
-///
-/// ```ignore
-/// use optic_loop::{Game, Runtime};
-///
-/// struct App;
-///
-/// impl Runtime for App {
-///     fn start(&mut self, game: &mut Game) {
-///         // Load assets, set up scene
-///         game.renderer.set_bg_color((0.1, 0.2, 0.3, 1.0).into());
-///     }
-///
-///     fn update(&mut self, game: &mut Game) {
-///         // Per-frame logic
-///         game.renderer.clear();
-///         // ... draw calls ...
-///     }
-///
-///     fn end(&mut self, _game: &mut Game) {
-///         // Save state, disconnect
-///     }
-/// }
-///
-/// Game::run(App);
-/// ```
-
 use gilrs::Gilrs;
 use optic_core::{log_error, CamProj, Coord2D, OpticResult, Size2D, CRIMSON};
 use optic_core::{end, end_success, ERROR, SUCCESS};
@@ -72,13 +12,25 @@ use winit::window::WindowId;
 #[cfg(feature = "online")]
 use optic_online::NetworkHandle;
 
-use crate::{Runtime, Time};
+use crate::{FpsLimit, Runtime, Time};
 
 /// The primary game object — aggregates the renderer, camera, window, events,
 /// timing, gamepad, audio, and user-provided [`Runtime`].
 ///
 /// Create via [`Game::new`] and start via [`Game::run`]. All fields are public
 /// so that [`Runtime`] methods can access them directly.
+///
+/// # Execution model
+///
+/// Each frame executes in three independent phases:
+///
+/// 1. **Physics** — fixed-timestep simulation (default 60 Hz)
+/// 2. **Update** — gameplay logic (default: once per frame)
+/// 3. **Render** — draw calls, presented once per frame
+///
+/// Each phase runs at its own independently configurable rate via
+/// [`Time::set_target_physics_rate`], [`Time::set_target_tps`], and
+/// [`Time::set_fps_limit`].
 pub struct Game {
     pub renderer: GPU,
     pub camera: Camera,
@@ -101,23 +53,7 @@ pub struct Game {
 }
 
 impl Game {
-    /// Creates a new game with a 500×500 window and a crimson background.
-    ///
-    /// Initialises:
-    ///
-    /// - A [`GPU`] with VSync enabled and the given background colour
-    /// - A perspective [`Camera`]
-    /// - Gamepad input via `gilrs`
-    /// - The user's [`Runtime`] implementation
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the window, EGL/GLX surface, or gamepad cannot
-    /// be initialised.
-    ///
-    /// ```ignore
-    /// let game = Game::new(MyRuntime)?;
-    /// ```
+    /// Creates a new game with a 500x500 window and a crimson background.
     pub fn new<R: Runtime + 'static>(runtime: R) -> OpticResult<Game> {
         let size = Size2D::new(500,500);
         let bg_color = CRIMSON;
@@ -162,15 +98,6 @@ impl Game {
     }
 
     /// Convenience entry point: creates a [`Game`] and runs the event loop.
-    ///
-    /// On success exits with `SUCCESS`; on failure logs and exits with
-    /// `ERROR`.
-    ///
-    /// This is the simplest way to start an Optic application:
-    ///
-    /// ```ignore
-    /// Game::run(MyRuntime);
-    /// ```
     pub fn run<R: Runtime + 'static>(runtime: R) {
         match Game::new(runtime) {
             Ok(game) => {
@@ -190,42 +117,20 @@ impl Game {
     }
 
     /// Signals the game loop to exit gracefully on the next frame.
-    ///
-    /// After calling this, [`Runtime::end`] will be invoked and the process
-    /// will exit with `SUCCESS`.
-    ///
-    /// ```ignore
-    /// // In your runtime:
-    /// fn update(&mut self, game: &mut Game) {
-    ///     if game.events.key_down(VirtualKeyCode::Escape) {
-    ///         game.exit();
-    ///     }
-    /// }
-    /// ```
     pub fn exit(&mut self) {
         self.running = false;
     }
 
-    /// Returns a reference to the [`NetworkHandle`] if networking is enabled.
     #[cfg(feature = "online")]
     pub fn network(&self) -> Option<&NetworkHandle> {
         self.network.as_ref()
     }
 
-    /// Returns a mutable reference to the [`NetworkHandle`] if networking is enabled.
     #[cfg(feature = "online")]
     pub fn network_mut(&mut self) -> Option<&mut NetworkHandle> {
         self.network.as_mut()
     }
 
-    /// Enables networking with the given configuration.
-    ///
-    /// Spawns a background network thread. Call early in [`Runtime::start`]
-    /// before any network-dependent logic runs.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the connection cannot be established.
     #[cfg(feature = "online")]
     pub fn enable_networking(&mut self, config: optic_core::NetworkConfig) -> OpticResult<()> {
         let handle = NetworkHandle::new(config)?;
@@ -233,6 +138,35 @@ impl Game {
         Ok(())
     }
 
+    /// Execute the three-phase frame: physics, update, render.
+    fn run_frame(&mut self, frame_delta: f64) {
+        // ----------------------------------------------------------------
+        // Physics
+        // ----------------------------------------------------------------
+        let physics_steps = self.time.advance_physics(frame_delta);
+        for _ in 0..physics_steps {
+            let mut runtime = self.runtime.take().unwrap();
+            runtime.physics(self);
+            self.runtime = Some(runtime);
+        }
+
+        // ----------------------------------------------------------------
+        // Update
+        // ----------------------------------------------------------------
+        let update_steps = self.time.advance_update(frame_delta);
+        for _ in 0..update_steps {
+            let mut runtime = self.runtime.take().unwrap();
+            runtime.update(self);
+            self.runtime = Some(runtime);
+        }
+
+        // ----------------------------------------------------------------
+        // Render
+        // ----------------------------------------------------------------
+        let mut runtime = self.runtime.take().unwrap();
+        runtime.render(self);
+        self.runtime = Some(runtime);
+    }
 }
 
 impl ApplicationHandler for Game {
@@ -293,6 +227,9 @@ impl ApplicationHandler for Game {
             return;
         }
 
+        // Record frame start for FPS limiting
+        self.time.begin_frame();
+
         while let Some(gilrs_event) = self.gilrs.next_event() {
             self.events.process_gilrs_event(&gilrs_event);
         }
@@ -310,18 +247,40 @@ impl ApplicationHandler for Game {
 
         self.camera.pre_update();
 
-        let mut runtime = self.runtime.take().unwrap();
+        // First frame: run start() and show window
         if !self.started {
+            let mut runtime = self.runtime.take().unwrap();
             runtime.start(self);
+            self.runtime = Some(runtime);
             self.started = true;
             self.window.set_visible(true);
             self.window.center_on_screen();
         }
-        runtime.update(self);
-        self.runtime = Some(runtime);
 
+        let frame_delta = self.time.delta();
+
+        // Three-phase frame: physics → update → render
+        self.run_frame(frame_delta);
+
+        // Present
         let _ = self.renderer.ctx().swap_buffers(self.surface_index);
         self.events.end_frame();
         self.window.request_redraw();
+
+        // FPS limiter
+        match self.time.fps_limit() {
+            FpsLimit::Uncapped => {}
+            FpsLimit::VSync => {
+                // swap interval already performed pacing
+            }
+            FpsLimit::Limited(target_fps) => {
+                if let Some(target_frame_time) = FpsLimit::Limited(*target_fps).target_frame_time() {
+                    let elapsed = self.time.frame_elapsed();
+                    if elapsed < target_frame_time {
+                        self.time.sleep(target_frame_time - elapsed);
+                    }
+                }
+            }
+        }
     }
 }

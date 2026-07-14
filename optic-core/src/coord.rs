@@ -1,3 +1,16 @@
+//! 2D coordinate types with point vs. vector semantics.
+//!
+//! Optic distinguishes between **points** ([`Coord2D`]) and **vectors**
+//! ([`CoordOffset`]) to prevent accidental misuse:
+//!
+//! - [`Coord2D`] — an absolute position in 2D space. Subtracting two
+//!   points produces a [`CoordOffset`].
+//! - [`CoordOffset`] — a displacement or direction. Adding a vector to a
+//!   point produces a new point.
+//!
+//! Both types implement [`Components<f64, 2>`] and support conversion to
+//! and from `[f64; 2]` arrays.
+
 use std::ops::{Add, Mul, Neg, Sub};
 
 use crate::{componentwise_min, componentwise_max, Components, Size2D};

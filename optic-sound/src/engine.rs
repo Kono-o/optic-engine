@@ -47,6 +47,11 @@ impl AudioEngine {
     ///
     /// Spawns the audio render thread. The engine is ready for `ship_sound*`
     /// calls immediately after construction.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Asset`] if the audio backend fails to
+    /// initialise or the listener cannot be created.
     pub fn new() -> OpticResult<Self> {
         let mut manager = AudioManager::<DefaultBackend>::new(AudioManagerSettings::default())
             .map_err(|e| {
@@ -85,6 +90,11 @@ impl AudioEngine {
     ///
     /// The sound is loaded into the audio backend but does not start playing
     /// until [`Sound2D::play`] is called.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Asset`] if the sound cannot be played
+    /// through the audio backend.
     pub fn upload_sound2d(&mut self, file: &SoundFile) -> OpticResult<Sound2D> {
         let handle = self.manager.play(file.to_static_sound_data()).map_err(|e| {
             OpticError::new(
@@ -100,6 +110,11 @@ impl AudioEngine {
     /// The sound plays through a spatial sub-track linked to the engine's
     /// listener. Call [`Sound3D::update`] each frame to keep the emitter
     /// position in sync.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Asset`] if the spatial track cannot be
+    /// created or the sound cannot be played through the audio backend.
     pub fn upload_sound3d(&mut self, file: &SoundFile) -> OpticResult<Sound3D> {
         let mut spatial_track = self.manager.add_spatial_sub_track(
             &self.listener,

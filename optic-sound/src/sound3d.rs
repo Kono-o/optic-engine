@@ -141,6 +141,11 @@ impl Sound3D {
     }
 
     /// Seeks to a position in seconds.
+    ///
+    /// # Errors
+    ///
+    /// Currently always succeeds, but returns [`OpticResult`] for forward
+    /// compatibility with backend implementations that may fail.
     pub fn seek(&mut self, secs: f32) -> optic_core::OpticResult<()> {
         if let Some(ref mut h) = self.handle {
             h.seek_to(secs as f64);

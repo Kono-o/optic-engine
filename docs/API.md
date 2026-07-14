@@ -81,11 +81,13 @@
    - [Layout Types](#layout-types)
    - [Text2D](#text2d)
    - [Text3D](#text3d)
-7. [Game Loop (`optic_loop`)](#7-game-loop-optic_loop)
+7. [Game Loop (`optic_loop`)](#7-game-loop-optic_loop) -- three-phase execution
    - [Runtime Trait](#runtime-trait)
+   - [FpsLimit](#fpslimit)
    - [Game](#game)
    - [Time](#time)
    - [Timer](#timer)
+   - [Timers](#timers)
    - [FrameState](#framestate)
    - [WindowState](#windowstate)
    - [GameLoop](#gameloop)
@@ -584,6 +586,8 @@ pub enum GradientColorSpace { Rgb, Hsv }
 #[derive(Copy, Clone, Debug)]
 pub enum GradientWrap { Clamp, Repeat, PingPong }
 
+```rust
+// No derives — contains gradient configuration.
 pub struct Gradient {
     stops: Vec<GradientStop>,
     interp: GradientInterp,
@@ -967,18 +971,26 @@ pub struct ScreenInfo {
 ### GPU
 
 ```rust
+// No derives — owns GL resources.
 pub struct GPU {
-    pub ctx: RenderContext,
-    pub poly_mode: PolygonMode,
-    pub cull_face: CullFace,
-    pub bg_color: RGBA,
-    pub msaa: bool,
-    pub msaa_samples: u32,
-    pub culling: bool,
-    pub fallback_shader2d: Shader,
-    pub fallback_shader3d: Shader,
-    pub fallback_texture: Texture2D,
-    pub canvas_size: Size2D,
+    pub(crate) ctx: RenderContext,
+    poly_mode: PolygonMode,
+    cull_face: CullFace,
+    bg_color: RGBA,
+    msaa: bool,
+    msaa_samples: u32,
+    culling: bool,
+    fallback_shader2d: Shader,
+    fallback_shader3d: Shader,
+    fallback_texture: Texture2D,
+    fallback_font: FontFamily,
+    canvas_size: Size2D,
+    pub(crate) current_target_size: Size2D,
+    pub(crate) max_color_attachments: i32,
+    pub(crate) max_draw_buffers: i32,
+    pub(crate) max_samples: i32,
+    fallback_shader_text2d: Shader,
+    fallback_shader_text3d: Shader,
 }
 ```
 
@@ -1056,14 +1068,16 @@ pub struct GPU {
 ### RenderContext
 
 ```rust
+// No derives — owns EGL resources.
 pub struct RenderContext {
-    pub display: egl::Display,
-    pub context: egl::Context,
-    pub surfaces: Vec<WindowSurface>,
-    pub active_index: Option<usize>,
-    pub gl_ver: String,
-    pub glsl_ver: String,
-    pub device: String,
+    pub(crate) display: egl::Display,
+    pub(crate) context: egl::Context,
+    config: egl::Config,
+    pub(crate) surfaces: Vec<WindowSurface>,
+    active_index: Option<usize>,
+    gl_ver: String,
+    glsl_ver: String,
+    device: String,
 }
 ```
 
@@ -1080,16 +1094,18 @@ pub struct RenderContext {
 | `pub fn set_clear_color(&self, color: RGBA)` | Set clear color |
 
 ```rust
+// No derives — owns EGL surface.
 pub struct WindowSurface {
-    pub surface: egl::Surface,
-    pub size: Size2D,
+    pub(crate) surface: egl::Surface,
+    size: Size2D,
 }
 ```
 
 ### GL Static Methods
 
 ```rust
-pub struct GL;  // unit struct, all methods are associated
+// No derives — unit struct, all methods are associated functions.
+pub struct GL;
 ```
 
 | Signature | Description |
@@ -1121,6 +1137,7 @@ pub struct GL;  // unit struct, all methods are associated
 ### Camera
 
 ```rust
+// No derives — owns transform state.
 pub struct Camera {
     pub transform: CamTransform,
 }
@@ -1261,6 +1278,7 @@ pub struct MeshHandle {
 ### InstanceDesc3D
 
 ```rust
+// No derives — describes GPU instance layout.
 pub struct InstanceDesc3D {
     pub pos_attr: Pos3DATTR,
     pub rot_attr: Rot3DATTR,
@@ -1281,6 +1299,7 @@ pub struct InstanceDesc3D {
 ### InstanceDesc2D
 
 ```rust
+// No derives — describes GPU instance layout.
 pub struct InstanceDesc2D {
     pub pos_attr: Pos2DATTR,
     pub rot_attr: Rot2DATTR,
@@ -1299,9 +1318,15 @@ pub struct InstanceDesc2D {
 ### InstanceBuffer
 
 ```rust
+// No derives — owns GPU buffer.
 pub struct InstanceBuffer {
-    pub stride: u32,
-    pub attr_info: Vec<ATTRInfo>,
+    pub(crate) buf_id: u32,
+    pub(crate) capacity: u32,
+    pub(crate) count: u32,
+    pub(crate) stride: u32,
+    pub layouts: Vec<(ATTRInfo, u32)>,
+    pub(crate) cpu_mirror: Vec<u8>,
+    pub(crate) kind: InstanceKind,
 }
 ```
 
@@ -1406,6 +1431,7 @@ pub struct Texture2D {
 ### StorageBuffer
 
 ```rust
+// No derives — owns GPU buffer.
 pub struct StorageBuffer {
     pub id: u32,
     pub size: usize,
@@ -1430,9 +1456,10 @@ pub struct Transform2D {
     rot: f32,
     scale: Vector2<f32>,
     layer: u8,
+    aspect: f32,
     matrix: Matrix4<f32>,
 }
-impl Default for Transform2D {}
+impl Default for Transform2D { /* identity transform */ }
 ```
 
 | Signature | Description |
@@ -1511,7 +1538,21 @@ impl Default for Transform3D {}
 ### Canvas
 
 ```rust
-pub struct Canvas { /* all fields pub(crate) */ }
+// No derives — owns GL framebuffer resources.
+pub struct Canvas {
+    fbo_id: u32,              // (pub(crate))
+    resolve_fbo_id: u32,      // (pub(crate))
+    msaa_rbos: Vec<u32>,      // (pub(crate))
+    depth_stencil_rbo: u32,   // (pub(crate))
+    color_texs: Vec<Texture2D>, // (pub(crate))
+    depth_tex: Option<Texture2D>, // (pub(crate))
+    size: Size2D,             // (pub(crate))
+    samples: u32,             // (pub(crate))
+    has_stencil: bool,        // (pub(crate))
+    has_depth: bool,          // (pub(crate))
+    depth_as_texture: bool,   // (pub(crate))
+    desc: CanvasDesc,         // (pub(crate))
+}
 ```
 
 | Signature | Description |
@@ -1550,6 +1591,7 @@ pub struct CanvasDesc {
 ### RenderTarget
 
 ```rust
+// No derives — borrows Canvas.
 pub enum RenderTarget<'a> {
     Screen,
     Canvas(&'a Canvas),
@@ -1625,6 +1667,7 @@ pub fn fill_index_buffer(id: u32, data: &[u32]);
 ### ShaderFile
 
 ```rust
+// No derives — contains shader source strings.
 pub struct ShaderFile {
     pub v_src: String,
     pub f_src: String,
@@ -1645,6 +1688,7 @@ pub struct ShaderFile {
 ### ShaderType
 
 ```rust
+// No derives — used as a parameter only.
 pub enum ShaderType {
     Pipeline,  // vertex + fragment
     Compute,
@@ -1658,6 +1702,7 @@ pub enum ShaderType {
 ### Mesh3DFile
 
 ```rust
+// No derives — contains raw mesh data.
 pub struct Mesh3DFile {
     pub pos_attr: Pos3DATTR,
     pub col_attr: ColorATTR,
@@ -1690,6 +1735,7 @@ pub struct Mesh3DFile {
 ### Mesh2DFile
 
 ```rust
+// No derives — contains raw mesh data.
 pub struct Mesh2DFile {
     pub pos_attr: Pos2DATTR,
     pub layer: u8,
@@ -1723,6 +1769,7 @@ pub struct Mesh2DFile {
 ### TextureFile
 
 ```rust
+// No derives — contains raw image data.
 pub struct TextureFile {
     pub bytes: Vec<u8>,
     pub size: Size2D,
@@ -1839,6 +1886,7 @@ Implemented for: `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `f32`, `f64` (scalar) a
 ### Center
 
 ```rust
+// No derives — pivot point for 2D mesh generation.
 pub enum Center {
     TopLeft, TopRight, BottomLeft, BottomRight,
     Middle, Custom(f32, f32),
@@ -1856,6 +1904,7 @@ Text rendering uses BBCode markup, MSDF atlas fonts, and instanced quad drawing.
 Asset-level font family — metrics, style variants, and optional TTF source bytes.
 
 ```rust
+// No derives — contains baked font data and optional TTF bytes.
 pub struct FontFamilyFile {
     pub line_height: f32,
     pub ascent: f32,
@@ -1887,6 +1936,7 @@ pub struct FontFamilyFile {
 Single baked font style — atlas texture + glyph metrics.
 
 ```rust
+// No derives — contains GPU-ready texture data.
 pub struct BakedFont {
     pub atlas: TextureFile,
     pub glyphs: HashMap<u32, GlyphMetrics>,
@@ -1899,6 +1949,7 @@ pub struct BakedFont {
 Per-glyph atlas lookup data.
 
 ```rust
+#[derive(Clone, Debug)]
 pub struct GlyphMetrics {
     pub uv_rect: (f32, f32, f32, f32),
     pub size: Size2D,
@@ -1919,6 +1970,7 @@ pub struct GlyphMetrics {
 Describes a bitmap font tile grid for `FontFamilyFile::from_bitmap_layout`.
 
 ```rust
+// No derives — contains texture data.
 pub struct BitmapFontLayout {
     pub texture: TextureFile,
     pub glyph_size: Size2D,
@@ -1933,7 +1985,26 @@ pub struct BitmapFontLayout {
 GPU-uploaded font family — one atlas per style variant.
 
 ```rust
-pub struct FontFamily { /* private fields */ }
+#[derive(Clone, Debug)]
+pub struct FontFamily {
+    line_height: f32,
+    ascent: f32,
+    descent: f32,
+    is_bitmap: bool,
+    ttf_source: Option<Vec<u8>>,
+    regular_atlas: Texture2D,
+    bold_atlas: Option<Texture2D>,
+    italic_atlas: Option<Texture2D>,
+    bold_italic_atlas: Option<Texture2D>,
+    regular_glyphs: HashMap<u32, GlyphMetrics>,
+    bold_glyphs: HashMap<u32, GlyphMetrics>,
+    italic_glyphs: HashMap<u32, GlyphMetrics>,
+    bold_italic_glyphs: HashMap<u32, GlyphMetrics>,
+    regular_softness: f32,
+    bold_softness: f32,
+    italic_softness: f32,
+    bold_italic_softness: f32,
+}
 ```
 
 | Signature | Description |
@@ -1956,7 +2027,13 @@ pub struct FontFamily { /* private fields */ }
 ### FontStyle
 
 ```rust
-pub enum FontStyle { Regular, Bold, Italic, BoldItalic }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FontStyle {
+    Regular,
+    Bold,
+    Italic,
+    BoldItalic,
+}
 ```
 
 | Signature | Description |
@@ -1972,15 +2049,66 @@ pub const FAUX_ITALIC: u32;   // 1 << 1
 pub const BORDER: u32;        // 1 << 2
 ```
 
-| Type | Description |
-|------|-------------|
-| `TextStyle` | Resolved style for a span (bold, italic, color, bgcolor, strikethrough, underline, size, border, kerning, offset, wave, shake, rainbow, pulse) |
-| `StyledSpan` | `{ text: String, style: TextStyle }` |
-| `ParsedText` | `{ spans: Vec<StyledSpan>, is_dynamic: bool }` |
-| `WaveEffect` | `{ amp, freq, speed }` — sine wave Y displacement |
-| `ShakeEffect` | `{ amp, speed }` — random XY shake |
-| `RainbowEffect` | `{ speed }` — HSV rainbow color cycle |
-| `PulseEffect` | `{ amp, speed }` — sine scale pulse |
+```rust
+#[derive(Clone, Debug, Default)]
+pub struct TextStyle {
+    pub bold: bool,
+    pub italic: bool,
+    pub color: Option<RGBA>,
+    pub bgcolor: Option<RGBA>,
+    pub strikethrough: bool,
+    pub underline: bool,
+    pub size: Option<f32>,
+    pub border_color: Option<RGBA>,
+    pub border_width: f32,
+    pub kerning: f32,
+    pub offset: [f32; 2],
+    pub wave: Option<WaveEffect>,
+    pub shake: Option<ShakeEffect>,
+    pub rainbow: Option<RainbowEffect>,
+    pub pulse: Option<PulseEffect>,
+}
+```
+
+```rust
+#[derive(Clone, Debug, PartialEq)]
+pub struct WaveEffect {
+    pub amp: f32,
+    pub freq: f32,
+    pub speed: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShakeEffect {
+    pub amp: f32,
+    pub speed: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RainbowEffect {
+    pub speed: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PulseEffect {
+    pub amp: f32,
+    pub speed: f32,
+}
+```
+
+```rust
+#[derive(Clone, Debug)]
+pub struct StyledSpan {
+    pub text: String,
+    pub style: TextStyle,
+}
+
+#[derive(Clone, Debug)]
+pub struct ParsedText {
+    pub spans: Vec<StyledSpan>,
+    pub is_dynamic: bool,
+}
+```
 
 | Function | Description |
 |----------|-------------|
@@ -1992,13 +2120,70 @@ pub const BORDER: u32;        // 1 << 2
 
 ### Layout Types
 
-| Type | Description |
-|------|-------------|
-| `ShapedGlyph` | `{ gid, cluster_start, x_offset, y_offset, x_advance }` |
-| `LayoutGlyph` | Positioned glyph with `{ gid, x, y, width, height, uv, color, style_flags, softness, span_index, char_index, style }` |
-| `LayoutDecoration` | Decoration quad with `{ x, y, width, height, color, span_index, char_index, style, kind }` |
-| `DecorationKind` | `Background \| Underline \| Strikethrough` |
-| `TextLayout` | Complete layout: `{ parsed, glyphs, decorations, width, height, is_dynamic }` |
+```rust
+#[derive(Clone, Debug)]
+pub struct ShapedGlyph {
+    pub gid: u32,
+    pub cluster_start: usize,
+    pub x_offset: f32,
+    pub y_offset: f32,
+    pub x_advance: f32,
+}
+```
+
+```rust
+#[derive(Clone, Debug)]
+pub struct LayoutGlyph {
+    pub gid: u32,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub uv: [f32; 4],
+    pub color: RGBA,
+    pub style_flags: u32,
+    pub softness: f32,
+    pub span_index: usize,
+    pub char_index: usize,
+    pub style: TextStyle,
+}
+```
+
+```rust
+#[derive(Clone, Debug)]
+pub struct LayoutDecoration {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub color: RGBA,
+    pub span_index: usize,
+    pub char_index: usize,
+    pub style: TextStyle,
+    pub kind: DecorationKind,
+}
+```
+
+```rust
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DecorationKind {
+    Background,
+    Underline,
+    Strikethrough,
+}
+```
+
+```rust
+#[derive(Clone, Debug)]
+pub struct TextLayout {
+    pub parsed: ParsedText,
+    pub glyphs: Vec<LayoutGlyph>,
+    pub decorations: Vec<LayoutDecoration>,
+    pub width: f32,
+    pub height: f32,
+    pub is_dynamic: bool,
+}
+```
 
 | Function | Description |
 |----------|-------------|
@@ -2014,7 +2199,22 @@ pub const BORDER: u32;        // 1 << 2
 Screen-space (HUD / UI) text rendered with instanced quads.
 
 ```rust
-pub struct Text2D { /* private fields */ }
+// No derives — owns GPU instance buffers and layout state.
+pub struct Text2D {
+    raw_text: String,
+    font: FontFamily,
+    shader: Option<Shader>,
+    base_size: f32,
+    wrap_width: f32,
+    transform: Transform2D,
+    quad_mesh: MeshHandle,
+    glyph_instances: Option<InstanceBuffer>,
+    decoration_instances: Option<InstanceBuffer>,
+    layout: Option<TextLayout>,
+    is_dynamic: bool,
+    time: f32,
+    visibility: bool,
+}
 ```
 
 | Signature | Description |
@@ -2042,7 +2242,22 @@ pub struct Text2D { /* private fields */ }
 World-space billboard text. Same API as Text2D, plus a 3D transform.
 
 ```rust
-pub struct Text3D { /* private fields */ }
+// No derives — owns GPU instance buffers and layout state.
+pub struct Text3D {
+    raw_text: String,
+    font: FontFamily,
+    shader: Option<Shader>,
+    base_size: f32,
+    wrap_width: f32,
+    transform: Transform3D,
+    quad_mesh: MeshHandle,
+    glyph_instances: Option<InstanceBuffer>,
+    decoration_instances: Option<InstanceBuffer>,
+    layout: Option<TextLayout>,
+    is_dynamic: bool,
+    time: f32,
+    visibility: bool,
+}
 ```
 
 | Signature | Description |
@@ -2069,21 +2284,73 @@ pub struct Text3D { /* private fields */ }
 
 ## 7. Game Loop (`optic_loop`)
 
+The engine runs a three-phase frame: **Physics → Update → Render**. Each phase runs at its own independently configurable rate.
+
+```
+┌─────────────────────────────────────────────┐
+│  Frame                                       │
+│                                              │
+│  Physics (fixed timestep, default 60 Hz)     │
+│    ├ physics()                               │
+│    ├ physics()     ← catch-up if slow frame  │
+│    └ physics()                               │
+│                                              │
+│  Update (optional fixed timestep)            │
+│    └ update()       ← once per frame default │
+│                                              │
+│  Render (presented once per frame)           │
+│    └ render()                                │
+│                                              │
+│  FPS limiter (VSync / Limited / Uncapped)    │
+└─────────────────────────────────────────────┘
+```
+
 ### Runtime Trait
 
 ```rust
 pub trait Runtime {
     fn start(&mut self, game: &mut Game);
+    fn physics(&mut self, game: &mut Game) {}
     fn update(&mut self, game: &mut Game);
+    fn render(&mut self, game: &mut Game) {}
     fn end(&mut self, game: &mut Game);
 }
 ```
 
-Implement this trait to define your application's lifecycle.
+| Method | Called | Purpose |
+|--------|--------|---------|
+| `start` | Once, before first frame | One-time setup, configure rates |
+| `physics` | 0+ times per frame | Fixed-timestep simulation (integration, collision) |
+| `update` | According to TPS | Input, AI, gameplay logic |
+| `render` | Exactly once per frame | Draw calls, use `physics_alpha()` for interpolation |
+| `end` | Once, on shutdown | Cleanup, save state |
+
+`physics()` and `render()` have default empty implementations. Existing code that only implements `start`, `update`, and `end` compiles unchanged (though draw calls in `update()` must be moved to `render()` for visibility).
+
+### FpsLimit
+
+Rendering frame-rate policy.
+
+```rust
+// No derives — defines frame-rate policy.
+pub enum FpsLimit {
+    Uncapped,
+    VSync,
+    Limited(f64),
+}
+impl Default for FpsLimit { /* VSync */ }
+```
+
+| Variant | Behaviour |
+|---------|-----------|
+| `Uncapped` | Render as fast as the platform allows |
+| `VSync` | Swap interval determines pacing |
+| `Limited(fps)` | Sleep to approximate the given frame rate |
 
 ### Game
 
 ```rust
+// No derives — owns engine subsystems.
 pub struct Game {
     pub renderer: GPU,
     pub camera: Camera,
@@ -2091,6 +2358,14 @@ pub struct Game {
     pub time: Time,
     pub window: Window,
     pub audio: AudioEngine,
+    event_loop: Option<EventLoop<()>>,
+    surface_index: usize,
+    gilrs: Gilrs,
+    runtime: Option<Box<dyn Runtime>>,
+    running: bool,
+    started: bool,
+    requested_size: Size2D,
+    resized_once: bool,
     #[cfg(feature = "online")]
     pub(crate) network: Option<NetworkHandle>,
 }
@@ -2099,15 +2374,14 @@ pub struct Game {
 | Signature | Description |
 |-----------|-------------|
 | `pub fn new<R: Runtime + 'static>(runtime: R) -> OpticResult<Game>` | Initialize everything |
-| `pub fn run(mut self)` | Start the main event loop (blocking) |
+| `pub fn run<R: Runtime + 'static>(runtime: R)` | Create and run (convenience) |
 | `pub fn exit(&mut self)` | Request exit on next frame |
-| `#[cfg(feature = "online")] pub fn network(&self) -> Option<&NetworkHandle>` | Get network handle (if enabled) |
-| `#[cfg(feature = "online")] pub fn network_mut(&mut self) -> Option<&mut NetworkHandle>` | Get mutable network handle |
-| `#[cfg(feature = "online")] pub fn enable_networking(&mut self, config: NetworkConfig) -> OpticResult<()>` | Start networking with the given config |
+| `#[cfg(feature = "online")] pub fn enable_networking(&mut self, config: NetworkConfig) -> OpticResult<()>` | Start networking |
 
 ### Time
 
 ```rust
+// No derives — owns timing state.
 pub struct Time {
     pub fps: f64,
     pub delta: f64,
@@ -2117,17 +2391,36 @@ pub struct Time {
     pub prev_time: Instant,
     pub prev_sec: Instant,
     pub local_tick: u32,
+    prev_deltas: VecDeque<f64>,
+    physics_stepper: FixedStepper,
+    update_stepper: FixedStepper,
+    fps_limit: FpsLimit,
+    physics_delta: f64,
+    physics_alpha: f32,
+    frame_start: Instant,
 }
 ```
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn new() -> Self` | Create timer |
-| `pub fn update(&mut self)` | Advance time (called automatically by Game) |
-| `pub fn fps(&self) -> f64` | Frames per second (smoothed) |
-| `pub fn delta(&self) -> f64` | Time since last frame (seconds) |
-| `pub fn elapsed(&self) -> f64` | Time since construction |
-| `pub fn now(&self) -> f64` | Seconds since start |
+| `pub fn new() -> Self` | Create (physics 60 Hz, update once/frame, VSync) |
+| `pub fn update(&mut self)` | Advance time (called automatically) |
+| **Physics rate** | |
+| `pub fn set_target_physics_rate(&mut self, hz: f64)` | Set physics Hz (default 60) |
+| `pub fn target_physics_rate(&self) -> f64` | Current physics Hz |
+| `pub fn physics_delta(&self) -> f64` | Fixed dt (`1/hz`), constant across all callbacks in a frame |
+| `pub fn physics_alpha(&self) -> f32` | Interpolation alpha `[0, 1)` for rendering |
+| **Update rate** | |
+| `pub fn set_target_tps(&mut self, hz: Option<f64>)` | `None` = once per frame (default), `Some(hz)` = fixed |
+| `pub fn target_tps(&self) -> Option<f64>` | Current target TPS |
+| **FPS limit** | |
+| `pub fn set_fps_limit(&mut self, limit: FpsLimit)` | Set rendering frame-rate policy |
+| `pub fn fps_limit(&self) -> &FpsLimit` | Current FPS limit |
+| **Timing** | |
+| `pub fn fps(&self) -> f64` | Smoothed FPS (32-frame average) |
+| `pub fn delta(&self) -> f64` | Seconds since last frame |
+| `pub fn elapsed(&self) -> f64` | Seconds since `Time::new` |
+| `pub fn now(&self) -> f64` | Re-query wall-clock seconds since start |
 | `pub fn now_ms(&self) -> u64` | Milliseconds since start |
 | `pub fn now_as_ms(&self) -> u64` | Alias for `now_ms` |
 | `pub fn now_as_ns(&self) -> u64` | Nanoseconds since start |
@@ -2135,11 +2428,18 @@ pub struct Time {
 | `pub fn sleep_ms(&self, millis: u64)` | Sleep for milliseconds |
 | `pub fn sleep_ns(&self, nanos: u64)` | Sleep for nanoseconds |
 
+**Interpolation:** When physics runs slower than rendering, use `physics_alpha()` to lerp between previous and current simulation state in `render()`. The engine performs no automatic interpolation.
+
+**Rate changes:** Taking effect immediately — the next scheduler invocation observes the new rate. Existing accumulator contents are preserved.
+
+**Spiral-of-death:** If a frame requires more than 240 physics/update steps, excess is discarded with phase preservation and a warning is logged.
+
 ### Timer
 
-A countdown timer polled explicitly each frame. No derives.
+A countdown timer polled explicitly each frame.
 
 ```rust
+// No derives — mutable countdown state.
 pub struct Timer {
     wait_time: f32,   // (private)
     time_left: f32,   // (private)
@@ -2156,6 +2456,11 @@ pub struct Timer {
 | `pub fn reduce(&mut self, amount: f32) -> bool` | Reduce remaining time; returns `true` if completed |
 | `pub fn reset(&mut self)` | Reset to initial state (re-activates) |
 | `pub fn tick_and_emit(&mut self, dt: f32, name: &str, events: &mut Events) -> bool` | Tick + emit a named signal on completion |
+| `pub fn is_active(&self) -> bool` | Currently running? |
+| `pub fn start(&mut self)` | Activate |
+| `pub fn stop(&mut self)` | Deactivate |
+| `pub fn wait_time(&self) -> f32` | Total wait time |
+| `pub fn set_wait_time(&mut self, wait_time: f32)` | Set new wait time and reset remaining |
 
 Repeating timers auto-reset on completion. Use `tick_and_emit` to bridge with the signal system.
 
@@ -2164,7 +2469,10 @@ Repeating timers auto-reset on completion. Use `tick_and_emit` to bridge with th
 A collection of timers managed as a group.
 
 ```rust
-pub struct Timers { /* private */ }
+// No derives — owns timer instances.
+pub struct Timers {
+    timers: Vec<Timer>,
+}
 ```
 
 | Signature | Description |
@@ -2185,6 +2493,7 @@ pub struct Timers { /* private */ }
 ### FrameState
 
 ```rust
+// No derives — temporary borrow bundle passed to closures.
 pub struct FrameState<'a> {
     pub time: &'a Time,
     pub windows: &'a mut [WindowState],
@@ -2196,9 +2505,11 @@ pub struct FrameState<'a> {
 ### WindowState
 
 ```rust
+// No derives — owns window and event state.
 pub struct WindowState {
     pub window: Window,
     pub events: Events,
+    pub surface_index: usize,
 }
 ```
 
@@ -2211,8 +2522,19 @@ pub struct WindowState {
 
 ### GameLoop
 
+Low-level game loop that drives a closure once per frame. FPS limiting applies via `time.fps_limit()`.
+
 ```rust
-pub struct GameLoop<F: FnMut(&mut FrameState)> { /* fields */ }
+// No derives — owns event loop and engine subsystems.
+pub struct GameLoop<F: FnMut(&mut FrameState)> {
+    event_loop: Option<EventLoop<()>>,
+    windows: Vec<WindowState>,
+    gpu: Option<GPU>,
+    camera: Camera,
+    time: Time,
+    gilrs: Gilrs,
+    frame_fn: F,
+}
 ```
 
 | Signature | Description |
@@ -2330,7 +2652,15 @@ to populate this struct — the game loop does this automatically when networkin
 ### NetworkHandle
 
 ```rust
-pub struct NetworkHandle { /* fields private */ }
+// No derives — owns network thread and channels.
+pub struct NetworkHandle {
+    thread: Option<JoinHandle<()>>,
+    inbound_data_rx: tokio_mpsc::UnboundedReceiver<(PeerId, Vec<u8>)>,
+    lifecycle_rx: tokio_mpsc::UnboundedReceiver<LifecycleEvent>,
+    outbound_tx: tokio_mpsc::UnboundedSender<TransportCommand>,
+    local_addr: Option<SocketAddr>,
+    shutdown_flag: Arc<AtomicBool>,
+}
 ```
 
 | Signature | Description |
@@ -2370,10 +2700,11 @@ field (no feature gate — always compiled).
 ### AudioEngine
 
 ```rust
+// No derives — owns Kira audio manager.
 pub struct AudioEngine {
-    manager: AudioManager<DefaultBackend>,  // (private)
-    listener: ListenerHandle,              // (private)
-    pub master_volume: f32,
+    manager: AudioManager<DefaultBackend>,
+    listener: ListenerHandle,
+    master_volume: f32,
 }
 ```
 
@@ -2388,9 +2719,10 @@ pub struct AudioEngine {
 
 ### SoundFile
 
-A decoded sound file loaded from disk or cache. No derives.
+A decoded sound file loaded from disk or cache.
 
 ```rust
+// No derives — contains decoded audio samples.
 pub struct SoundFile {
     pub samples: Vec<f32>,
     pub sample_rate: u32,
@@ -2407,15 +2739,17 @@ pub struct SoundFile {
 
 ### Sound2D
 
-A handle to a playing 2D sound. No derives.
+A handle to a playing 2D sound.
 
 ```rust
+// No derives — owns playback state.
 pub struct Sound2D {
-    handle: Option<StaticSoundHandle>,  // (private)
-    pub volume: f32,
-    pub pitch: f32,
-    pub looping: bool,
-    duration_secs: f32,                 // (private)
+    handle: Option<StaticSoundHandle>,
+    volume: f32,
+    pitch: f32,
+    looping: bool,
+    pan: f32,
+    duration_secs: f32,
 }
 ```
 
@@ -2430,6 +2764,7 @@ pub struct Sound2D {
 | `pub fn set_volume(&mut self, v: f32)` | Set volume (0.0..1.0) |
 | `pub fn set_pitch(&mut self, p: f32)` | Set pitch multiplier (1.0 = normal) |
 | `pub fn set_looping(&mut self, l: bool)` | Set looping |
+| `pub fn set_pan(&mut self, pan: f32)` | Set stereo pan (-1.0 left, 0.0 center, 1.0 right) |
 | `pub fn seek(&mut self, secs: f32) -> OpticResult<()>` | Seek to position (seconds) |
 | `pub fn position_secs(&self) -> f32` | Current playback position |
 | `pub fn duration_secs(&self) -> f32` | Total sound duration |
@@ -2437,19 +2772,20 @@ pub struct Sound2D {
 
 ### Sound3D
 
-A handle to a playing 3D sound with spatial audio. No derives.
+A handle to a playing 3D sound with spatial audio.
 
 ```rust
+// No derives — owns playback and spatial state.
 pub struct Sound3D {
-    handle: Option<StaticSoundHandle>,   // (private)
-    spatial_track: Option<SpatialTrackHandle>,  // (private)
-    pub volume: f32,
-    pub pitch: f32,
-    pub looping: bool,
-    pub transform: Transform3D,
-    pub min_distance: f32,
-    pub max_distance: f32,
-    duration_secs: f32,                 // (private)
+    handle: Option<StaticSoundHandle>,
+    spatial_track: Option<SpatialTrackHandle>,
+    volume: f32,
+    pitch: f32,
+    looping: bool,
+    transform: Transform3D,
+    min_distance: f32,
+    max_distance: f32,
+    duration_secs: f32,
 }
 ```
 
@@ -2485,7 +2821,12 @@ A dirty-flagged value wrapper that implements `DataType` for use as a custom ins
 ### Signal
 
 ```rust
-pub struct Signal<T> { /* private */ }
+// No derives — generic over T.
+pub struct Signal<T> {
+    value: T,
+    dirty: bool,
+}
+impl<T: DataType> DataType for Signal<T> {}
 ```
 
 | Signature | Description |

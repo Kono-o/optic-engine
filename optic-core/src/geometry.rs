@@ -1,3 +1,16 @@
+//! Geometric primitives for sizes, clip distances, and camera projections.
+//!
+//! This module provides the fundamental dimension types used throughout Optic:
+//!
+//! - [`Size2D`] / [`Size3D`] — integer pixel dimensions with saturating
+//!   arithmetic, aspect-ratio helpers, and fitting/scaling utilities.
+//! - [`ClipDist`] — near/far clip-plane distances for perspective and
+//!   orthographic cameras.
+//! - [`CamProj`] — camera projection mode (orthographic vs. perspective).
+//!
+//! All size types implement [`Components`] so they can be used with generic
+//! componentwise operations like [`componentwise_min`] and [`componentwise_max`].
+
 use std::ops::{Add, Mul, Sub};
 
 /// Trait for types whose components can be accessed as a fixed-size array.
@@ -190,6 +203,18 @@ impl Size2D {
 }
 
 /// A 3D size with non-negative integer dimensions.
+///
+/// Stores width, height, and depth as `u32` values. Useful for describing
+/// 3D textures, voxel grids, and volume render targets.
+///
+/// ```ignore
+/// let vol = Size3D::new(256, 256, 128);
+/// assert_eq!(vol.volume(), 256 * 256 * 128);
+/// ```
+///
+/// Supports [`Add`], [`Sub`] (saturating), and [`Mul<f32>`] componentwise,
+/// just like [`Size2D`]. Conversion from/to `[u32; 3]` and
+/// `(u32, u32, u32)` via [`Components`].
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Size3D {
     pub w: u32,
@@ -272,9 +297,20 @@ impl Size3D {
 }
 
 /// Near/far clip plane distances for a camera.
+///
+/// Defines the depth range that is visible to the camera. Objects closer
+/// than `near` or farther than `far` are clipped. The default range is
+/// 0.01 to 1000.0, which works well for most scene scales.
+///
+/// ```ignore
+/// let clips = ClipDist::new(0.1, 500.0);
+/// assert_eq!(clips.near, 0.1);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct ClipDist {
+    /// Distance from the camera to the near clip plane.
     pub near: f32,
+    /// Distance from the camera to the far clip plane.
     pub far: f32,
 }
 
@@ -285,14 +321,25 @@ impl Default for ClipDist {
 }
 
 impl ClipDist {
+    /// Construct a new clip range with the given near and far distances.
+    ///
+    /// `near` must be ≥ 0 and `far` must be greater than `near` for the
+    /// resulting projection matrix to be valid.
     pub fn new(near: f32, far: f32) -> ClipDist {
         ClipDist { near, far }
     }
 }
 
 /// Camera projection mode.
+///
+/// Determines how 3D world coordinates are mapped to 2D screen space.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CamProj {
+    /// Orthographic projection — parallel projection where objects maintain
+    /// their size regardless of distance from the camera. Ideal for 2D
+    /// games, UI rendering, and CAD previews.
     Ortho,
+    /// Perspective projection — objects farther from the camera appear
+    /// smaller, creating a sense of depth. Standard for 3D scenes.
     Persp,
 }

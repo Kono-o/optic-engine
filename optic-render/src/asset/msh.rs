@@ -377,6 +377,13 @@ impl Mesh3DFile {
     /// faster startup.
     ///
     /// Supported formats: `.obj`, `.stl`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the source file cannot be read.
+    /// Returns [`OpticErrorKind::Asset`] if the format is unsupported, the
+    /// mesh is not triangulated, or the binary STL data is truncated.
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be written.
     #[cfg(debug_assertions)]
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         let ext = optic_file::extension(path).unwrap_or_default();
@@ -396,6 +403,13 @@ impl Mesh3DFile {
         Ok(mesh)
     }
 
+    /// Loads a mesh from the binary cache (release only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be read.
+    /// Returns [`OpticErrorKind::Asset`] if the cache is corrupted, truncated,
+    /// or has an unsupported version.
     #[cfg(not(debug_assertions))]
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         let cache = optic_file::cached_path(path, "omesh");
@@ -403,6 +417,10 @@ impl Mesh3DFile {
     }
 
     /// Saves the mesh to a binary cache file (`.omesh` format).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be written.
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
         let has_normals = !self.nrm_attr.data.is_empty();
         let has_uvs = !self.uvm_attr.data.is_empty();

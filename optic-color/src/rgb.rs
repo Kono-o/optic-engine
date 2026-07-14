@@ -1,3 +1,9 @@
+//! RGB color representation (no alpha).
+//!
+//! [`RGB`] stores red, green, and blue channels as `f32` values in 0..1.
+//! It is useful when alpha is not needed; conversions to
+//! [`RGBA`](crate::RGBA) are lossless.
+
 use crate::RGBA;
 
 /// RGB color with three 0..1 float channels.

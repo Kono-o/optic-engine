@@ -1,3 +1,9 @@
+//! HSL (Hue, Saturation, Lightness) color representation.
+//!
+//! [`HSL`] is similar to [`HSV`](crate::HSV) but uses lightness instead of
+//! value. Lightness maps more directly to perceptual brightness, making HSL
+//! a natural choice when adjusting brightness is the primary goal.
+
 use crate::{RGBA, ToRgba};
 
 /// HSL color.

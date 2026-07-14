@@ -1,3 +1,15 @@
+//! RGBA color representation with alpha channel.
+//!
+//! [`RGBA`] is the central color type in the crate. All other color spaces
+//! ([`RGB`](crate::RGB), [`HSV`](crate::HSV), [`HSL`](crate::HSL)) convert
+//! through it, and most engine APIs accept or return `RGBA` directly.
+//!
+//! Channels are `f32` values in 0..1. Construction is available from:
+//! - Individual floats via [`RGBA::new`]
+//! - Hex strings via [`RGBA::from_hex`]
+//! - Packed u32 via [`RGBA::from_hex_u32`]
+//! - 8-bit bytes via [`RGBA::from_bytes`]
+
 use crate::{ColorInfo, FromRgba, HSV, RGB, ToRgba};
 
 /// RGBA color with four 0..1 float channels.
@@ -78,7 +90,10 @@ impl RGBA {
     /// | 6      | `#RRGGBB`  | `#ff8800`   |
     /// | 8      | `#RRGGBBAA`| `#ff880044` |
     ///
-    /// Returns an error if the string contains invalid hex digits.
+    /// # Errors
+    ///
+    /// Returns `Err` if the string contains non-hex characters or is not
+    /// one of the supported lengths (3, 4, 6, or 8 hex digits).
     pub fn from_hex(hex: &str) -> Result<Self, &'static str> {
         let hex = hex.strip_prefix('#').unwrap_or(hex);
         match hex.len() {

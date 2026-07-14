@@ -31,6 +31,12 @@ impl NetworkHandle {
     /// Blocks until the UDP socket is bound (host mode) or the thread is spawned
     /// (client mode). For `Host` mode, `local_addr()` returns the actual bound
     /// address (including OS-assigned port when port=0).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the tokio runtime cannot be built,
+    /// the network thread cannot be spawned, or the thread exits before
+    /// binding the socket.
     pub fn new(config: NetworkConfig) -> OpticResult<Self> {
         let (inbound_data_tx, inbound_data_rx) = inbound_data_channel();
         let (lifecycle_tx, lifecycle_rx) = lifecycle_channel();
@@ -109,6 +115,11 @@ impl NetworkHandle {
     ///
     /// Returns `OpticError` if the outbound channel is closed (network thread
     /// has exited). The packet is silently dropped in that case.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the outbound channel is closed
+    /// (the network thread has exited).
     pub fn send(&self, peer: PeerId, bytes: &[u8]) -> OpticResult<()> {
         self.outbound_tx
             .send(TransportCommand::SendTo(peer, bytes.to_vec()))
@@ -117,6 +128,11 @@ impl NetworkHandle {
     }
 
     /// Sends raw bytes to all connected peers.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the outbound channel is closed
+    /// (the network thread has exited).
     pub fn send_all(&self, bytes: &[u8]) -> OpticResult<()> {
         self.outbound_tx
             .send(TransportCommand::SendAll(bytes.to_vec()))
@@ -125,6 +141,11 @@ impl NetworkHandle {
     }
 
     /// Sends raw bytes to all connected peers except `exclude`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Custom`] if the outbound channel is closed
+    /// (the network thread has exited).
     pub fn send_all_except(&self, exclude: PeerId, bytes: &[u8]) -> OpticResult<()> {
         self.outbound_tx
             .send(TransportCommand::SendAllExcept(exclude, bytes.to_vec()))

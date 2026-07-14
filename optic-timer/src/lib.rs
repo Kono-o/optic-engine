@@ -1,3 +1,9 @@
+//! Countdown timers with optional repeat, polled explicitly each frame.
+//!
+//! This crate provides [`Timer`] (single timer) and [`Timers`] (a managed
+//! collection). Both are designed for frame-driven games where you call
+//! [`tick`](Timer::tick) with the per-frame delta time.
+
 /// A countdown timer with optional repeat, polled explicitly each frame.
 ///
 /// Created via [`Timer::new`] (one-shot) or [`Timer::new_repeating`].

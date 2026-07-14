@@ -109,6 +109,11 @@ pub struct ShaderFile {
 
 impl ShaderFile {
     /// Creates a `ShaderFile` by parsing a combined GLSL source string.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::Shader`] if the source is a pipeline shader
+    /// and is missing the vertex (`// V`) or fragment (`// F`) section marker.
     pub fn from_src(src: &str, typ: ShaderType) -> OpticResult<Self> {
         match GLSL::parse(src, &typ) {
             GLSL::ParsedCompute(src) => Ok(Self {
@@ -141,6 +146,11 @@ impl ShaderFile {
     }
 
     /// Compiles this shader and returns a [`Shader`](crate::handles::Shader) handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::OpenGL`] if shader compilation or linking
+    /// fails (e.g. invalid GLSL, no active GL context).
     pub fn compile(&self) -> OpticResult<Shader> {
         if self.is_compute {
             let id = link_compute_program(&self.v_src)?;
@@ -156,6 +166,15 @@ impl ShaderFile {
 #[cfg(debug_assertions)]
 impl ShaderFile {
     /// Loads a shader from disk, caching it for release builds.
+    ///
+    /// In debug builds the source `.glsl` file is parsed directly and the
+    /// binary cache is overwritten.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the source file cannot be read.
+    /// Returns [`OpticErrorKind::Shader`] if the GLSL source is malformed.
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be written.
     pub fn from_disk(path: &str, typ: ShaderType) -> OpticResult<Self> {
         let src = optic_file::read_string(path)?;
         let shader = Self::from_src(&src, typ)?;
@@ -168,6 +187,12 @@ impl ShaderFile {
 #[cfg(not(debug_assertions))]
 impl ShaderFile {
     /// Loads a shader from the binary cache (release only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be read.
+    /// Returns [`OpticErrorKind::Asset`] if the cache is corrupted, truncated,
+    /// or has an unsupported version.
     pub fn from_disk(path: &str, _typ: ShaderType) -> OpticResult<Self> {
         let cache = optic_file::cached_path(path, "oshdr");
         Self::from_cached(&cache)
@@ -177,6 +202,10 @@ impl ShaderFile {
 // --- binary cache read/write (internal) ---
 impl ShaderFile {
     /// Saves this shader to a binary cache file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be written.
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
         let typ_byte = if self.is_compute { SHADER_COMPUTE } else { SHADER_PIPELINE };
         let v_bytes = self.v_src.as_bytes();
@@ -241,11 +270,23 @@ impl ShaderFile {
 
 impl ShaderFile {
     /// Loads the default 3D pipeline shader from `optic/assets/shdr/fallback3d.glsl`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the fallback shader file cannot be
+    /// read from disk. Returns [`OpticErrorKind::Shader`] if the GLSL source
+    /// is malformed.
     pub fn default_3d() -> OpticResult<Self> {
         Self::from_disk("optic/assets/shdr/fallback3d.glsl", ShaderType::Pipeline)
     }
 
     /// Loads the default 2D pipeline shader from `optic/assets/shdr/fallback2d.glsl`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the fallback shader file cannot be
+    /// read from disk. Returns [`OpticErrorKind::Shader`] if the GLSL source
+    /// is malformed.
     pub fn default_2d() -> OpticResult<Self> {
         Self::from_disk("optic/assets/shdr/fallback2d.glsl", ShaderType::Pipeline)
     }

@@ -1,3 +1,15 @@
+//! Input handling and event processing.
+//!
+//! This module provides [`Events`], a frame-based input snapshot that collects
+//! keyboard, mouse, gamepad, window, and custom signal events. Feed it raw
+//! [`winit::event::WindowEvent`]s and [`gilrs::Event`]s each frame, then query
+//! the snapshot with frame-aware predicates ([`Is::Pressed`], [`Is::Released`],
+//! [`Is::Held`]).
+//!
+//! The frame counter advances when [`Events::end_frame`] is called at the end of
+//! each frame, which also resets transient state (scroll deltas, resize events,
+//! signals).
+
 use optic_core::{NetworkEvents, Size2D};
 use std::collections::HashMap;
 
@@ -38,13 +50,31 @@ pub enum Is {
 }
 
 /// Mouse button identifier.
+///
+/// Used with [`Events::mouse`] to query button state. The standard five
+/// buttons (left, right, middle, back, forward) are named variants; any
+/// additional buttons are represented by [`Mouse::Other`] with the
+/// platform-specific button index.
+///
+/// # Examples
+///
+/// ```ignore
+/// if events.mouse(Mouse::Left, Is::Pressed) { /* click */ }
+/// if events.mouse(Mouse::Other(5), Is::Held) { /* extra side button */ }
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub enum Mouse {
+    /// Primary (left) mouse button.
     Left,
+    /// Secondary (right) mouse button.
     Right,
+    /// Middle / tertiary mouse button.
     Middle,
+    /// Back side button (thumb).
     Back,
+    /// Forward side button (thumb).
     Forward,
+    /// Additional mouse button identified by a platform-specific index.
     Other(u16),
 }
 
@@ -126,22 +156,86 @@ fn check_state(s: &ButtonState, action: Is, frame: u64) -> bool {
 pub const MAX_GAMEPADS: usize = 4;
 
 /// Gamepad button identifier.
+///
+/// Follows the Xbox / Standard Gamepad layout. Used with
+/// [`Events::gamepad_button`] to query per-gamepad button state.
+/// Unknown or unmapped buttons are captured as [`GamepadButton::Other`].
+///
+/// # Examples
+///
+/// ```ignore
+/// if events.gamepad_button(0, GamepadButton::A, Is::Pressed) { /* jump */ }
+/// if events.gamepad_button(0, GamepadButton::LB, Is::Held) { /* aim */ }
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GamepadButton {
-    A, B, X, Y,
-    LB, RB, LT, RT,
-    Back, Start, Guide,
-    LeftStick, RightStick,
-    DPadUp, DPadDown, DPadLeft, DPadRight,
+    /// Face south (A on Xbox, × on PlayStation).
+    A,
+    /// Face east (B on Xbox, ○ on PlayStation).
+    B,
+    /// Face west (X on Xbox, □ on PlayStation).
+    X,
+    /// Face north (Y on Xbox, △ on PlayStation).
+    Y,
+    /// Left bumper / shoulder.
+    LB,
+    /// Right bumper / shoulder.
+    RB,
+    /// Left trigger (analog digital press).
+    LT,
+    /// Right trigger (analog digital press).
+    RT,
+    /// Back / Select / View button.
+    Back,
+    /// Start / Menu button.
+    Start,
+    /// Guide / Home / PS button.
+    Guide,
+    /// Left stick click.
+    LeftStick,
+    /// Right stick click.
+    RightStick,
+    /// D-pad up.
+    DPadUp,
+    /// D-pad down.
+    DPadDown,
+    /// D-pad left.
+    DPadLeft,
+    /// D-pad right.
+    DPadRight,
+    /// Unrecognized or vendor-specific button.
     Other(u8),
 }
 
 /// Gamepad analog axis identifier.
+///
+/// Each axis reports a continuous `f32` value in the range `-1.0..=1.0`
+/// (sticks) or `0.0..=1.0` (triggers). Query with
+/// [`Events::gamepad_axis`] which applies a default deadzone, or
+/// [`Events::gamepad_axis_raw`] / [`Events::gamepad_axis_deadzoned`] for
+/// custom thresholds.
+///
+/// # Examples
+///
+/// ```ignore
+/// let horizontal = events.gamepad_axis(0, GamepadAxis::LeftX);
+/// if horizontal > 0.5 { /* move right */ }
+/// let trigger = events.gamepad_axis(0, GamepadAxis::RightTrigger);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GamepadAxis {
-    LeftX, LeftY,
-    RightX, RightY,
-    LeftTrigger, RightTrigger,
+    /// Left stick horizontal (left = -1.0, right = 1.0).
+    LeftX,
+    /// Left stick vertical (up = -1.0, down = 1.0, winit convention).
+    LeftY,
+    /// Right stick horizontal (left = -1.0, right = 1.0).
+    RightX,
+    /// Right stick vertical (up = -1.0, down = 1.0, winit convention).
+    RightY,
+    /// Left analog trigger (0.0 = released, 1.0 = fully pressed).
+    LeftTrigger,
+    /// Right analog trigger (0.0 = released, 1.0 = fully pressed).
+    RightTrigger,
 }
 
 fn gamepad_button_index(b: &GamepadButton) -> usize {

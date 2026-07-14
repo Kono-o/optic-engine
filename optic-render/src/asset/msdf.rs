@@ -1,5 +1,33 @@
+//! Multi-channel Signed Distance Field (MSDF) font atlas generation.
+//!
+//! MSDF is a technique for encoding font outlines into a three-channel texture
+//! that preserves sharp corners at any resolution. Each pixel stores a signed
+//! distance in the R, G, and B channels, classified by the nearest edge's
+//! normal direction. This allows the shader to reconstruct crisp edges without
+//! relying on bilinear filtering alone.
+//!
+//! # Pipeline
+//!
+//! 1. [`extract_glyph_edges`] converts a TrueType glyph outline into a list of
+//!    [`Contour`]s made of [`EdgeSegment`]s.
+//! 2. [`bake_msdf`] rasterises the edge data into an MSDF texture atlas.
+//! 3. [`bake_sdf_from_bitmap`] converts a bitmap glyph into a single-channel
+//!    SDF as a fallback when vector outlines are unavailable.
+//! 4. [`trace_bitmap_to_contour`] traces a binary bitmap into [`Contour`]s for
+//!    round-tripping bitmap fonts through the SDF pipeline.
+//!
+//! # References
+//!
+//! - Viktor Chlumský, *Multi-channel signed distance field generation* (2015)
+//! - <https://github.com/Chlumsky/msdfgen>
+
 use ttf_parser::Face;
 
+/// A single edge segment within a glyph contour.
+///
+/// Edges are the building blocks of MSDF generation. Each variant stores the
+/// control points needed to evaluate the exact signed distance from any point
+/// to the curve.
 #[derive(Clone, Debug)]
 pub enum EdgeSegment {
     Line { from: (f32, f32), to: (f32, f32) },
@@ -7,17 +35,34 @@ pub enum EdgeSegment {
     Cubic { from: (f32, f32), ctrl1: (f32, f32), ctrl2: (f32, f32), to: (f32, f32) },
 }
 
+/// A closed contour (outline) composed of consecutive edge segments.
+///
+/// A glyph outline is typically made of one or more contours. Each contour's
+/// edges form a closed loop — the last edge's endpoint connects back to the
+/// first edge's start point.
 #[derive(Clone, Debug)]
 pub struct Contour {
+    /// The ordered edge segments forming this contour.
     pub edges: Vec<EdgeSegment>,
 }
 
+/// Full outline data for a single glyph, extracted from a TrueType face.
+///
+/// Contains the contours (closed outlines) as well as the horizontal advance
+/// and bearing measurements needed for typesetting. All coordinates are in
+/// normalised font units (divided by `units_per_em`).
 pub struct GlyphEdges {
+    /// Closed contours making up the glyph outline.
     pub contours: Vec<Contour>,
+    /// Horizontal advance in normalised font units.
     pub advance: f32,
+    /// Left bearing (distance from the origin to the leftmost edge) in normalised font units.
     pub bearing_x: f32,
+    /// Top bearing (distance from the baseline to the topmost edge) in normalised font units.
     pub bearing_y: f32,
+    /// Bounding-box width in normalised font units.
     pub width: f32,
+    /// Bounding-box height in normalised font units.
     pub height: f32,
 }
 
@@ -251,6 +296,14 @@ fn edge_midpoint_normal(edge: &EdgeSegment) -> (f32, f32) {
     }
 }
 
+/// Extracts the outline edges and metrics for a single glyph from a TrueType
+/// face.
+///
+/// The returned [`GlyphEdges`] contains closed contours in normalised font
+/// units, ready for rasterisation with [`bake_msdf`].
+///
+/// Returns `None` if the glyph has no outline (e.g. a space character) or if
+/// the glyph ID is outside the face's glyph range.
 pub fn extract_glyph_edges(face: &Face, glyph_id: u16) -> Option<GlyphEdges> {
     struct OutlineCollector {
         contours: Vec<Contour>,
@@ -360,6 +413,18 @@ pub fn extract_glyph_edges(face: &Face, glyph_id: u16) -> Option<GlyphEdges> {
     })
 }
 
+/// Rasterises a glyph's edge data into a three-channel MSDF texture.
+///
+/// The output is an `atlas_size × atlas_size` RGB8 buffer where each pixel's
+/// R, G, and B channels store signed distances to the nearest edge, classified
+/// by the edge's normal direction.
+///
+/// # Parameters
+///
+/// * `edges` — glyph outline data from [`extract_glyph_edges`].
+/// * `atlas_size` — width and height of the output texture in pixels.
+/// * `px_range` — the maximum signed-distance range in pixels; controls the
+///   anti-aliasing falloff at the glyph boundary.
 pub fn bake_msdf(
     edges: &GlyphEdges,
     atlas_size: u32,
@@ -427,6 +492,18 @@ pub fn bake_msdf(
     data
 }
 
+/// Converts a single-channel bitmap glyph into a three-channel SDF texture.
+///
+/// Each pixel is assigned the same signed distance value across all three
+/// channels, producing a uniform single-channel SDF stored as RGB. Useful for
+/// bitmap fonts where no vector outline is available.
+///
+/// # Parameters
+///
+/// * `bitmap` — source grayscale pixel data (`u8` per pixel, row-major).
+/// * `bmp_width`, `bmp_height` — dimensions of the source bitmap.
+/// * `atlas_size` — width and height of the output texture in pixels.
+/// * `px_range` — the signed-distance range in pixels.
 pub fn bake_sdf_from_bitmap(
     bitmap: &[u8],
     bmp_width: u32,
@@ -499,6 +576,18 @@ fn find_closest_transition(
     min_dist / width as f32
 }
 
+/// Traces a binary bitmap into a set of closed [`Contour`]s.
+///
+/// Performs a flood-fill walk on pixels with value > 128, then sorts the
+/// perimeter pixels angularly around their centroid to produce a closed polygon
+/// of [`EdgeSegment::Line`]s.
+///
+/// Contours with fewer than 3 pixels are discarded.
+///
+/// # Parameters
+///
+/// * `bitmap` — source grayscale pixel data (row-major, `u8` per pixel).
+/// * `width`, `height` — dimensions of the bitmap.
 pub fn trace_bitmap_to_contour(
     bitmap: &[u8],
     width: u32,

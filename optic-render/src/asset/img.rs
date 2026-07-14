@@ -45,6 +45,11 @@ impl TextureFile {
     }
 
     /// Loads the fallback texture from `optic/assets/txtr/fallback.png`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the fallback image cannot be read.
+    /// Returns [`OpticErrorKind::Asset`] if the image format is unsupported.
     pub fn fallback() -> OpticResult<Self> {
         Self::from_disk("optic/assets/txtr/fallback.png")
     }
@@ -54,6 +59,13 @@ impl TextureFile {
 #[cfg(debug_assertions)]
 impl TextureFile {
     /// Loads a texture from disk, caching it for release builds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the image file cannot be read.
+    /// Returns [`OpticErrorKind::Asset`] if the image format is unsupported
+    /// or decoding fails.
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be written.
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         let img = image::open(path)
             .map_err(|e| OpticError::new(OpticErrorKind::File, &format!("failed to load image {path}: {e}")))?;
@@ -93,6 +105,13 @@ impl TextureFile {
 #[cfg(not(debug_assertions))]
 impl TextureFile {
     /// Loads a texture from the binary cache (release only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be read.
+    /// Returns [`OpticErrorKind::Asset`] if the cache is corrupted, truncated,
+    /// has an unsupported version, or the pixel data length doesn't match the
+    /// declared dimensions.
     pub fn from_disk(path: &str) -> OpticResult<Self> {
         let cache = optic_file::cached_path(path, "otxtr");
         Self::from_cached(&cache)
@@ -102,6 +121,10 @@ impl TextureFile {
 // --- binary cache read/write (internal) ---
 impl TextureFile {
     /// Saves this texture to a binary cache file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpticErrorKind::File`] if the cache file cannot be written.
     pub fn save_cached(&self, path: &str) -> OpticResult<()> {
         let mut data = Vec::with_capacity(22 + self.bytes.len());
         data.extend_from_slice(&OPTIC_MAGIC);

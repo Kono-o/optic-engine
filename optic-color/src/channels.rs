@@ -1,3 +1,15 @@
+//! Channel-wise operations and the [`ChannelArray`] trait.
+//!
+//! This module provides the [`ChannelArray`] trait and a set of free
+//! functions for performing element-wise arithmetic on color channels:
+//!
+//! - [`channel_lerp`] — linear interpolation
+//! - [`channel_add`], [`channel_sub`], [`channel_mul`] — component-wise math
+//! - [`channel_mul_scalar`], [`channel_div_scalar`] — scalar operations
+//!
+//! [`RGBA`] and [`RGB`] both implement [`ChannelArray`] and gain
+//! `Add`, `Sub`, `Mul`, and `Div` operators via a macro.
+
 use crate::{RGB, RGBA};
 
 /// Trait for types whose channels can be accessed as a fixed-size float array.
