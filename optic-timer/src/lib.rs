@@ -4,6 +4,8 @@
 //! collection). Both are designed for frame-driven games where you call
 //! [`tick`](Timer::tick) with the per-frame delta time.
 
+use optic_core::{OpticError, OpticErrorKind, OpticResult};
+
 /// A countdown timer with optional repeat, polled explicitly each frame.
 ///
 /// Created via [`Timer::new`] (one-shot) or [`Timer::new_repeating`].
@@ -163,11 +165,16 @@ impl Timers {
 
     /// Removes the timer at the given index.
     ///
-    /// # Panics
-    ///
-    /// Panics if `index` is out of bounds.
-    pub fn remove(&mut self, index: usize) {
+    /// Returns [`Err`] if `index` is out of bounds.
+    pub fn remove(&mut self, index: usize) -> OpticResult<()> {
+        if index >= self.timers.len() {
+            return Err(OpticError::new(
+                OpticErrorKind::Custom,
+                &format!("index {index} out of bounds (count: {})", self.timers.len()),
+            ));
+        }
         self.timers.remove(index);
+        Ok(())
     }
 
     /// Removes all timers.
