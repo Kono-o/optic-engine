@@ -1444,6 +1444,27 @@ canvas.blit_to_screen(window_size);  // present to screen
 | Polygon mode | Filled | `gpu.set_poly_mode()` |
 | Clear colour | Grey (0.5) | `gpu.set_bg_color()` |
 
+### Viewport
+
+Derives:
+- None
+
+Implements:
+- None
+
+A rectangular region of the render target, measured in pixels from the lower-left
+corner. Used by [`GPU::viewport`] / [`GPU::set_viewport`] and by canvases for
+split-screen or picture-in-picture effects.
+
+```rust
+pub struct Viewport {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+```
+
 ### GPU
 
 Derives:
@@ -1512,8 +1533,8 @@ pub struct GPU {
 | `pub fn set_wire_width(&mut self, width: f32)` | Wireframe line width |
 | `pub fn set_point_size(&self, size: f32)` | Point size |
 | `pub fn reset_state(&mut self)` | Reset all GPU state to defaults |
-| `pub fn viewport(&self) -> (i32, i32, i32, i32)` | Get the current viewport rect |
-| `pub fn set_viewport(&self, x: i32, y: i32, w: i32, h: i32)` | Set the viewport rect |
+| `pub fn viewport(&self) -> Viewport` | Get the current viewport rect |
+| `pub fn set_viewport(&self, vp: Viewport)` | Set the viewport rect |
 | `pub fn flush(&self)` | Flush OpenGL commands (non-blocking) |
 | `pub fn finish(&self)` | Block until all OpenGL commands complete |
 
