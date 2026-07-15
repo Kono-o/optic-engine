@@ -2846,7 +2846,7 @@ Text rendering uses BBCode markup, MSDF atlas fonts, and instanced quad drawing.
 
 ### FontFamilyFile
 
-Asset-level font family — metrics, style variants, and optional TTF source bytes.
+Asset-level font family — metrics, style variants, and optional TTF shaping subset.
 
 Derives:
 - None
@@ -2991,7 +2991,7 @@ pub struct FontFamily {
 | `pub fn descent(&self) -> f32` | Descent below baseline (negative) |
 | `pub fn is_bitmap(&self) -> bool` | Bitmap font? |
 | `pub fn units_per_em(&self) -> f32` | `line_height` (bitmap) or `1.0` (TTF) |
-| `pub fn face_data(&self) -> Option<&[u8]>` | Raw TTF bytes for rustybuzz |
+| `pub fn face_data(&self) -> Option<&[u8]>` | Shaping-relevant TTF subset (head/cmap/glyf/loc GPOS/GSUB etc.) |
 | `pub fn atlas(&self, style: FontStyle) -> &Texture2D` | Atlas for given style |
 | `pub fn primary_atlas(&self) -> &Texture2D` | Regular atlas |
 | `pub fn edge_softness(&self, style: FontStyle) -> f32` | MSDF edge softness |

@@ -73,8 +73,11 @@ pub struct FontFamily {
 }
 
 impl FontFamily {
-    /// Uploads a [`FontFamilyFile`] to the GPU.
-    pub(crate) fn new(file: &FontFamilyFile) -> OpticResult<Self> {
+    /// Uploads a [`FontFamilyFile`] to the GPU, consuming it.
+    ///
+    /// The TTF source bytes are transferred (not cloned) from the file to the
+    /// GPU handle, eliminating the duplicate in-memory copy.
+    pub(crate) fn new(file: FontFamilyFile) -> OpticResult<Self> {
         let regular_atlas = file.regular.atlas.upload()?;
         let bold_atlas = file.bold.as_ref().map(|b| b.atlas.upload()).transpose()?;
         let italic_atlas = file.italic.as_ref().map(|i| i.atlas.upload()).transpose()?;
@@ -85,7 +88,7 @@ impl FontFamily {
             ascent: file.ascent,
             descent: file.descent,
             is_bitmap: file.is_bitmap,
-            ttf_source: file.ttf_source.clone(),
+            ttf_source: file.ttf_source,
             regular_atlas,
             bold_atlas,
             italic_atlas,
@@ -133,7 +136,7 @@ impl FontFamily {
     /// Returns [`OpticErrorKind::Asset`] if the built-in fallback font data
     /// cannot be parsed, or an OpenGL upload error occurs.
     pub fn fallback_bitmap() -> OpticResult<Self> {
-        Self::new(&FontFamilyFile::fallback()?)
+        Self::new(FontFamilyFile::fallback()?)
     }
 
     #[cfg(test)]

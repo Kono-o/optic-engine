@@ -186,6 +186,8 @@ impl FontFamilyFile {
             wrap: optic_core::ImgWrap::Clip,
         };
 
+        let ttf_source = Some(extract_shaping_subset(regular_bytes)?);
+
         Ok(FontFamilyFile {
             line_height,
             ascent,
@@ -194,7 +196,7 @@ impl FontFamilyFile {
             bold: None,
             italic: None,
             bold_italic: None,
-            ttf_source: Some(regular_bytes.to_vec()),
+            ttf_source,
             is_bitmap: false,
         })
     }
@@ -595,6 +597,87 @@ fn decode_texture(data: &[u8], path: &str) -> OpticResult<(TextureFile, usize)> 
     ))
 }
 
+/// Tables required by rustybuzz/ttf-parser for text shaping.
+const SHAPING_TABLES: &[&[u8; 4]] = &[
+    b"head", b"cmap", b"glyf", b"loca", b"maxp", b"hhea", b"hmtx",
+    b"fpgm", b"prep", b"OS/2", b"GPOS", b"GSUB",
+];
+
+/// Extracts a minimal TTF containing only the tables needed for text shaping.
+///
+/// Copies `head`, `cmap`, `glyf`, `loca`, `maxp`, `hhea`, `hmtx`, `fpgm`,
+/// `prep`, `OS/2`, `GPOS`, and `GSUB` — everything rustybuzz needs to parse
+/// glyph mappings, outlines, metrics, kerning, and ligatures. All other tables
+/// (name, post, DSIG, embedded bitmaps, etc.) are dropped.
+///
+/// The result is a valid TTF file that can be passed directly to
+/// `rustybuzz::Face::from_slice`. Table data is copied byte-for-byte; only the
+/// offset table and table directory are reconstructed.
+fn extract_shaping_subset(font_bytes: &[u8]) -> OpticResult<Vec<u8>> {
+    if font_bytes.len() < 12 {
+        return Err(OpticError::new(OpticErrorKind::Custom, "font too short for offset table"));
+    }
+    let num_tables = u16::from_be_bytes([font_bytes[4], font_bytes[5]]) as usize;
+    let dir_end = 12 + num_tables * 16;
+    if font_bytes.len() < dir_end {
+        return Err(OpticError::new(OpticErrorKind::Custom, "font truncated in table directory"));
+    }
+
+    let mut kept: Vec<([u8; 4], u32, u32)> = Vec::new();
+    for i in 0..num_tables {
+        let base = 12 + i * 16;
+        let tag: [u8; 4] = font_bytes[base..base + 4].try_into().unwrap();
+        let offset = u32::from_be_bytes(font_bytes[base + 8..base + 12].try_into().unwrap());
+        let length = u32::from_be_bytes(font_bytes[base + 12..base + 16].try_into().unwrap());
+        if SHAPING_TABLES.iter().any(|t| **t == tag) {
+            let end = offset as usize + length as usize;
+            if end > font_bytes.len() {
+                return Err(OpticError::new(OpticErrorKind::Custom,
+                    &format!("table {} extends past end of font",
+                        std::str::from_utf8(&tag).unwrap_or("????"))));
+            }
+            kept.push((tag, offset, length));
+        }
+    }
+
+    let num_kept = kept.len() as u16;
+    let total_bytes = (num_kept as u32) * 16;
+    let entry_selector = if num_kept > 0 { (num_kept as f32).log2() as u16 } else { 0 };
+    let search_range = ((1u32 << entry_selector) * 16) as u16;
+    let range_shift = total_bytes as u16 - search_range;
+
+    let header_size = 12u32;
+    let dir_size = (kept.len() * 16) as u32;
+    let data_start = header_size + dir_size;
+
+    let mut out = Vec::with_capacity(data_start as usize + font_bytes.len() / 2);
+
+    out.extend_from_slice(&0x00010000u32.to_be_bytes());
+    out.extend_from_slice(&num_kept.to_be_bytes());
+    out.extend_from_slice(&search_range.to_be_bytes());
+    out.extend_from_slice(&entry_selector.to_be_bytes());
+    out.extend_from_slice(&range_shift.to_be_bytes());
+
+    let mut data_offset = data_start;
+    for (tag, _src_off, src_len) in &kept {
+        out.extend_from_slice(tag);
+        out.extend_from_slice(&0u32.to_be_bytes());
+        out.extend_from_slice(&data_offset.to_be_bytes());
+        out.extend_from_slice(&src_len.to_be_bytes());
+        data_offset += src_len;
+    }
+
+    for &(_, src_off, src_len) in &kept {
+        let start = src_off as usize;
+        let end = start + src_len as usize;
+        out.extend_from_slice(&font_bytes[start..end]);
+        let pad = (4 - (src_len % 4)) % 4;
+        out.resize(out.len() + pad as usize, 0);
+    }
+
+    Ok(out)
+}
+
 fn write_baked_font(buf: &mut Vec<u8>, baked: &BakedFont) -> OpticResult<()> {
     buf.extend_from_slice(&encode_texture(&baked.atlas));
     buf.extend_from_slice(&baked.edge_softness.to_le_bytes());
@@ -710,5 +793,108 @@ fn fallback_glyph_pattern(cp: u32) -> [u8; 8] {
         65..=90 => [0x18, 0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x00],
         97..=122 => [0x00, 0x00, 0x3C, 0x06, 0x3E, 0x66, 0x3E, 0x00],
         _ => [0x7E, 0x81, 0xA5, 0x81, 0xBD, 0x99, 0x81, 0x7E],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn minimal_ttf() -> Vec<u8> {
+        let tag_list: [[u8; 4]; 3] = [*b"head", *b"cmap", *b"maxp"];
+        let sizes: [u32; 3] = [64, 64, 64];
+
+        let num = tag_list.len() as u16;
+        let data_start = 12u32 + num as u32 * 16;
+        let mut out = Vec::new();
+        out.extend_from_slice(&0x00010000u32.to_be_bytes());
+        out.extend_from_slice(&num.to_be_bytes());
+        out.extend_from_slice(&0u16.to_be_bytes());
+        out.extend_from_slice(&0u16.to_be_bytes());
+        out.extend_from_slice(&0u16.to_be_bytes());
+
+        let mut offset = data_start;
+        for (tag, size) in tag_list.iter().zip(sizes.iter()) {
+            out.extend_from_slice(tag);
+            out.extend_from_slice(&0u32.to_be_bytes());
+            out.extend_from_slice(&offset.to_be_bytes());
+            out.extend_from_slice(&size.to_be_bytes());
+            offset += size;
+        }
+        for &size in &sizes {
+            out.resize(out.len() + size as usize, 0x42);
+        }
+        out
+    }
+
+    fn read_tags(font: &[u8]) -> Vec<[u8; 4]> {
+        let num = u16::from_be_bytes([font[4], font[5]]) as usize;
+        (0..num).map(|i| {
+            let base = 12 + i * 16;
+            [font[base], font[base+1], font[base+2], font[base+3]]
+        }).collect()
+    }
+
+    #[test]
+    fn subset_extracts_only_shaping_tables() {
+        let font = minimal_ttf();
+        let subset = extract_shaping_subset(&font).unwrap();
+        let tags = read_tags(&subset);
+        eprintln!("subset len={}, tags={:?}", subset.len(), tags);
+        assert!(!tags.is_empty(), "subset should have tables");
+        assert!(tags.contains(b"head"), "missing head, got {:?}", tags);
+        assert!(tags.contains(b"cmap"), "missing cmap");
+        assert!(tags.contains(b"maxp"), "missing maxp");
+    }
+
+    #[test]
+    fn subset_drops_non_shaping_tables() {
+        let mut font = minimal_ttf();
+        let num_orig = u16::from_be_bytes([font[4], font[5]]);
+        let data_end = 12u32 + num_orig as u32 * 16 + 64 * 3;
+
+        let extra_tag = *b"name";
+        let extra_size = 64u32;
+        let extra_data = vec![0x42u8; extra_size as usize];
+
+        let new_num = (num_orig + 1).to_be_bytes();
+        font[4..6].copy_from_slice(&new_num);
+
+        let dir_base = 12 + num_orig as usize * 16;
+        let mut new_dir_entry = Vec::with_capacity(16);
+        new_dir_entry.extend_from_slice(&extra_tag);
+        new_dir_entry.extend_from_slice(&0u32.to_be_bytes());
+        new_dir_entry.extend_from_slice(&data_end.to_be_bytes());
+        new_dir_entry.extend_from_slice(&extra_size.to_be_bytes());
+        font.extend_from_slice(&new_dir_entry);
+        font.extend_from_slice(&extra_data);
+
+        let subset = extract_shaping_subset(&font).unwrap();
+        let tags = read_tags(&subset);
+        assert!(tags.contains(b"head"));
+        assert!(tags.contains(b"cmap"));
+        assert!(tags.contains(b"maxp"));
+        assert!(!tags.contains(b"name"));
+        assert_eq!(tags.len(), 3);
+    }
+
+    #[test]
+    fn subset_is_smaller_than_original() {
+        let mut font = minimal_ttf();
+        let extra_tag = *b"name";
+        let extra_size = 64u32;
+        let data_end = 12u32 + 3 * 16 + 64 * 3;
+
+        font[4..6].copy_from_slice(&4u16.to_be_bytes());
+        let mut new_dir = Vec::new();
+        new_dir.extend_from_slice(&extra_tag);
+        new_dir.extend_from_slice(&0u32.to_be_bytes());
+        new_dir.extend_from_slice(&data_end.to_be_bytes());
+        new_dir.extend_from_slice(&extra_size.to_be_bytes());
+        font.extend_from_slice(&new_dir);
+        font.extend_from_slice(&vec![0x42u8; extra_size as usize]);
+
+        let subset = extract_shaping_subset(&font).unwrap();
+        assert!(subset.len() < font.len());
     }
 }

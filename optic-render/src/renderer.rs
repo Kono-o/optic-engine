@@ -553,9 +553,16 @@ impl GPU {
     ///
     /// # Errors
     ///
+    /// Uploads a [`FontFamilyFile`](asset::FontFamilyFile) to the GPU, consuming it.
+    ///
+    /// The TTF source bytes are transferred (not cloned) from the file to the
+    /// GPU handle, eliminating the duplicate in-memory copy.
+    ///
+    /// # Errors
+    ///
     /// Returns [`OpticError`](optic_core::OpticError) if the atlas texture
     /// upload fails (e.g. the GPU rejects the image dimensions or format).
-    pub fn upload_font_family(&self, file: &asset::FontFamilyFile) -> OpticResult<FontFamily> {
+    pub fn upload_font_family(&self, file: asset::FontFamilyFile) -> OpticResult<FontFamily> {
         FontFamily::new(file)
     }
 
