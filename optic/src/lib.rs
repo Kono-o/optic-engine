@@ -20,7 +20,7 @@
 //! | `render` | [`optic_render`] | OpenGL rendering pipeline |
 //! | `window` | [`optic_window`] | Windowing, input, events |
 //! | `minimal` | [`optic_loop`] | Game loop and runtime |
-//! | `online` | `optic_online` | Networking |
+//! | `online` | [`optic_online`] | Networking |
 //!
 //! # Architecture
 //!
@@ -29,16 +29,16 @@
 //! convenience, or depend on individual sub-crates for finer control.
 //!
 //! ```text
-//!             ┌──────────┐
-//!             │  optic   │  facade (re-exports)
-//!             ├──────────┤
+//!             ┌───────────────┐
+//!             │  optic        │  facade (re-exports)
+//!             ├───────────────┤
 //!             │  optic_core   │  math, colour, enums, logging
 //!             │  optic_file   │  asset I/O
 //!             │  optic_render │  GPU / GL rendering
 //!             │  optic_window │  winit, input
 //!             │  optic_loop   │  game loop
 //!             │  optic_online │  networking
-//!             └──────────┘
+//!             └───────────────┘
 //! ```
 
 #[cfg(feature = "core")]

@@ -246,19 +246,19 @@ pub enum CamProj {
 | `pub fn new(w: u32, h: u32) -> Self` | New from dimensions |
 | `pub fn from(arr: [u32; 2]) -> Self` | From array (via `From` trait) |
 | `pub fn from(tup: (u32, u32)) -> Self` | From tuple |
-| `pub fn shave(&self, n: u32) -> Size2D` | Subtract n from each side (saturating) |
-| `pub fn aspect_ratio(&self) -> f32` | `w as f32 / h as f32` (clamped to 0.001) |
-| `pub fn is_empty(&self) -> bool` | True if w==0 || h==0 |
+| `pub fn shave(&self, n: u32) -> Size2D` | Subtract `n` from each side (saturating) |
+| `pub fn aspect_ratio(&self) -> f32` | `w as f32 / h as f32` (clamped to `0.001`) |
+| `pub fn is_empty(&self) -> bool` | True if `w == 0` or `h == 0` |
 | `pub fn area(&self) -> u64` | `w * h` |
-| `pub fn min(&self, other) -> Size2D` | Componentwise min |
-| `pub fn max(&self, other) -> Size2D` | Componentwise max |
-| `pub fn fit_within(&self, max: Size2D) -> Size2D` | Scale down to fit max (preserve aspect) |
-| `pub fn scaled_to_width(&self, w: u32) -> Size2D` | Scale to target width (preserve aspect) |
-| `pub fn scaled_to_height(&self, h: u32) -> Size2D` | Scale to target height (preserve aspect) |
-| `pub fn to_size3d(&self, depth: u32) -> Size3D` | Promote to 3D with given depth |
+| `pub fn min(&self, other) -> Size2D` | Component-wise minimum |
+| `pub fn max(&self, other) -> Size2D` | Component-wise maximum |
+| `pub fn fit_within(&self, max: Size2D) -> Size2D` | Scale down to fit within `max` while preserving aspect ratio |
+| `pub fn scaled_to_width(&self, w: u32) -> Size2D` | Scale to target width while preserving aspect ratio |
+| `pub fn scaled_to_height(&self, h: u32) -> Size2D` | Scale to target height while preserving aspect ratio |
+| `pub fn to_size3d(&self, depth: u32) -> Size3D` | Promote to 3D with the given depth |
 | `a + b` → `Size2D` | Saturating addition |
 | `a - b` → `Size2D` | Saturating subtraction |
-| `s * f32` → `Size2D` | Scalar multiplication (rounded, clamped ≥0) |
+| `s * f32` → `Size2D` | Scalar multiplication (rounded, clamped to ≥ 0) |
 
 #### Size3D
 
@@ -3026,7 +3026,7 @@ pub struct WaveEffect {
     pub amp: f32,
     pub freq: f32,
     pub speed: f32,
-}
+}```
 
 ShakeEffect:
 
@@ -3043,7 +3043,7 @@ Implements:
 pub struct ShakeEffect {
     pub amp: f32,
     pub speed: f32,
-}
+}```
 
 RainbowEffect:
 
@@ -3059,7 +3059,7 @@ Implements:
 #[derive(Clone, Debug, PartialEq)]
 pub struct RainbowEffect {
     pub speed: f32,
-}
+}```
 
 PulseEffect:
 
@@ -3093,7 +3093,7 @@ Implements:
 pub struct StyledSpan {
     pub text: String,
     pub style: TextStyle,
-}
+}```
 
 ParsedText:
 
@@ -3104,6 +3104,7 @@ Derives:
 Implements:
 - None
 
+```rust
 #[derive(Clone, Debug)]
 pub struct ParsedText {
     pub spans: Vec<StyledSpan>,
@@ -3259,7 +3260,7 @@ pub struct Text2D {
     font: FontFamily,
     shader: Option<Shader>,
     base_size: f32,
-    wrap_width: f32,
+    wrap_width: Option<f32>,
     transform: Transform2D,
     quad_mesh: MeshHandle,
     glyph_instances: Option<InstanceBuffer>,
@@ -3281,7 +3282,7 @@ pub struct Text2D {
 | `pub fn remove_shader(&mut self)` | Remove shader |
 | `pub fn shader(&self) -> Option<&Shader>` | Current shader |
 | `pub fn set_base_size(&mut self, size: f32) -> OpticResult<()>` | Set base font size |
-| `pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()>` | Set wrap width (0 = no wrap) |
+| `pub fn set_wrap_width(&mut self, width: Option<f32>) -> OpticResult<()>` | Set wrap width (`None` = no wrap) |
 | `pub fn transform(&self) -> &Transform2D` | 2D transform |
 | `pub fn transform_mut(&mut self) -> &mut Transform2D` | Mutable 2D transform |
 | `pub fn update(&mut self, time: f32) -> OpticResult<()>` | Update dynamic effects |
@@ -3308,7 +3309,7 @@ pub struct Text3D {
     font: FontFamily,
     shader: Option<Shader>,
     base_size: f32,
-    wrap_width: f32,
+    wrap_width: Option<f32>,
     transform: Transform3D,
     quad_mesh: MeshHandle,
     glyph_instances: Option<InstanceBuffer>,
@@ -3330,7 +3331,7 @@ pub struct Text3D {
 | `pub fn remove_shader(&mut self)` | Remove shader |
 | `pub fn shader(&self) -> Option<&Shader>` | Current shader |
 | `pub fn set_base_size(&mut self, size: f32) -> OpticResult<()>` | Set base font size |
-| `pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()>` | Set wrap width |
+| `pub fn set_wrap_width(&mut self, width: Option<f32>) -> OpticResult<()>` | Set wrap width (`None` = no wrap) |
 | `pub fn transform(&self) -> &Transform3D` | 3D transform |
 | `pub fn transform_mut(&mut self) -> &mut Transform3D` | Mutable 3D transform |
 | `pub fn update(&mut self, time: f32) -> OpticResult<()>` | Update dynamic effects |

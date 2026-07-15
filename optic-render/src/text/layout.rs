@@ -128,12 +128,12 @@ pub struct TextLayout {
 /// * `raw` — BBCode-formatted text.
 /// * `font` — The font family to measure and look up glyphs from.
 /// * `base_size` — Base font size in pixels (scaled by per-span `[size]` tags).
-/// * `wrap_width` — Maximum line width in pixels. `0` disables wrapping.
+/// * `wrap_width` — Maximum line width in pixels. `None` disables wrapping.
 pub fn layout_text(
     raw: &str,
     font: &FontFamily,
     base_size: f32,
-    wrap_width: f32,
+    wrap_width: Option<f32>,
 ) -> OpticResult<TextLayout> {
     let parsed = parse(raw)?;
     let scale = base_size / font.units_per_em().max(1.0);
@@ -168,7 +168,7 @@ pub fn layout_text(
             let gh = size[1] * span_scale;
             let advance_px = sg.x_advance * span_scale + span.style.kerning * span_scale;
 
-            if wrap_width > 0.0 && run_x > 0.0 && run_x + advance_px > wrap_width {
+            if wrap_width.is_some_and(|ww| run_x > 0.0 && run_x + advance_px > ww) {
                 max_width = max_width.max(line_width);
                 cursor_y += line_height;
                 run_x = 0.0;
@@ -236,7 +236,7 @@ pub fn layout_text(
         parsed,
         glyphs,
         decorations,
-        width: if wrap_width > 0.0 { wrap_width.min(max_width) } else { max_width },
+        width: wrap_width.map_or(max_width, |ww| ww.min(max_width)),
         height,
     })
 }
@@ -537,7 +537,7 @@ mod tests {
     #[test]
     fn faux_bold_when_no_bold_atlas() {
         let font = test_font();
-        let layout = layout_text("[b]X[/b]", &font, 16.0, 0.0).unwrap();
+        let layout = layout_text("[b]X[/b]", &font, 16.0, None).unwrap();
         assert_eq!(layout.glyphs.len(), 1);
         assert_ne!(layout.glyphs[0].style_flags & FAUX_BOLD, 0);
     }
@@ -556,7 +556,7 @@ mod tests {
             "[rainbow speed=1]A[/rainbow]",
             &font,
             16.0,
-            0.0,
+            None,
         )
         .unwrap();
         assert!(layout.is_dynamic);
@@ -576,7 +576,7 @@ mod tests {
     #[test]
     fn wave_effect_offsets_y() {
         let font = test_font();
-        let layout = layout_text("[wave]A[/wave]", &font, 16.0, 0.0).unwrap();
+        let layout = layout_text("[wave]A[/wave]", &font, 16.0, None).unwrap();
         assert!(layout.is_dynamic);
         let static_y = layout.glyphs[0].y;
         let desc = build_glyph_desc_2d(&layout, 1.5);

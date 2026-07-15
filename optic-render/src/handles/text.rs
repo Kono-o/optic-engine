@@ -54,7 +54,7 @@ pub struct Text2D {
     font: FontFamily,
     shader: Option<Shader>,
     base_size: f32,
-    wrap_width: f32,
+    wrap_width: Option<f32>,
     transform: Transform2D,
     quad_mesh: crate::handles::MeshHandle,
     glyph_instances: Option<InstanceBuffer>,
@@ -75,7 +75,7 @@ impl Text2D {
             font,
             shader: None,
             base_size: 16.0,
-            wrap_width: 0.0,
+            wrap_width: None,
             transform: Transform2D::default(),
             quad_mesh: quad,
             glyph_instances: None,
@@ -140,13 +140,13 @@ impl Text2D {
         self.rebuild_layout()
     }
 
-    /// Sets the word-wrap width in pixels. `0` disables wrapping.
+    /// Sets the word-wrap width in pixels. `None` disables wrapping.
     ///
     /// # Errors
     ///
     /// Returns an error if the BBCode is malformed or GPU instance buffers
     /// fail to upload.
-    pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()> {
+    pub fn set_wrap_width(&mut self, width: Option<f32>) -> OpticResult<()> {
         self.wrap_width = width;
         self.rebuild_layout()
     }
@@ -284,7 +284,7 @@ pub struct Text3D {
     font: FontFamily,
     shader: Option<Shader>,
     base_size: f32,
-    wrap_width: f32,
+    wrap_width: Option<f32>,
     transform: Transform3D,
     quad_mesh: crate::handles::MeshHandle,
     glyph_instances: Option<InstanceBuffer>,
@@ -305,7 +305,7 @@ impl Text3D {
             font,
             shader: None,
             base_size: 16.0,
-            wrap_width: 0.0,
+            wrap_width: None,
             transform: Transform3D::default(),
             quad_mesh: quad,
             glyph_instances: None,
@@ -370,13 +370,13 @@ impl Text3D {
         self.rebuild_layout()
     }
 
-    /// Sets the word-wrap width in pixels. `0` disables wrapping.
+    /// Sets the word-wrap width in pixels. `None` disables wrapping.
     ///
     /// # Errors
     ///
     /// Returns an error if the BBCode is malformed or GPU instance buffers
     /// fail to upload.
-    pub fn set_wrap_width(&mut self, width: f32) -> OpticResult<()> {
+    pub fn set_wrap_width(&mut self, width: Option<f32>) -> OpticResult<()> {
         self.wrap_width = width;
         self.rebuild_layout()
     }
