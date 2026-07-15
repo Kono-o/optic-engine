@@ -1,16 +1,17 @@
 //! Input handling and event processing.
 //!
 //! This module provides [`Events`], a frame-based input snapshot that collects
-//! keyboard, mouse, gamepad, window, and custom signal events. Feed it raw
+//! keyboard, mouse, gamepad, window, and custom events. Feed it raw
 //! [`winit::event::WindowEvent`]s and [`gilrs::Event`]s each frame, then query
 //! the snapshot with frame-aware predicates ([`Is::Pressed`], [`Is::Released`],
 //! [`Is::Held`]).
 //!
 //! The frame counter advances when [`Events::end_frame`] is called at the end of
 //! each frame, which also resets transient state (scroll deltas, resize events,
-//! signals).
+//! custom events).
 
-use optic_core::{NetworkEvents, Size2D};
+use optic_core::{NetworkEvents, OpticError, OpticResult, Size2D};
+use optic_render::asset::attr::DataType;
 use std::collections::HashMap;
 
 use crate::window::Window;
@@ -310,15 +311,15 @@ fn gamepad_axis_from_gilrs(a: gilrs::Axis) -> GamepadAxis {
     }
 }
 
-/// A signal payload — either empty or containing raw byte data.
+/// A custom event payload — either empty or containing typed byte data.
 ///
-/// Use [`emit`](Events::emit) for empty signals and
-/// [`emit_with`](Events::emit_with) to attach a payload.
+/// Use [`emit_event`](Events::emit_event) for empty events and
+/// [`emit_event_with`](Events::emit_event_with) to attach a typed payload.
 #[derive(Debug, Clone)]
-pub enum SignalPayload {
-    /// Signal emitted with no data.
+pub enum EventPayload {
+    /// Event emitted with no data.
     None,
-    /// Signal emitted with raw byte payload.
+    /// Event emitted with typed byte payload.
     Bytes(Vec<u8>),
 }
 
@@ -380,7 +381,7 @@ pub struct Events {
     pub focused: bool,
     pub frame: u64,
     pub network: NetworkEvents,
-    pub signals: HashMap<String, Vec<SignalPayload>>,
+    custom_events: HashMap<String, Vec<EventPayload>>,
 }
 
 fn empty_buttons<const N: usize>() -> [ButtonState; N] {
@@ -404,7 +405,7 @@ impl Events {
             focused: true,
             frame: 1,
             network: NetworkEvents::default(),
-            signals: HashMap::new(),
+            custom_events: HashMap::new(),
         }
     }
 
@@ -421,7 +422,7 @@ impl Events {
         self.focused = true;
         self.frame = 1;
         self.network = NetworkEvents::default();
-        self.signals = HashMap::new();
+        self.custom_events.clear();
     }
 
     // ── Event processing ──────────────────────────────────────────────────
@@ -560,17 +561,19 @@ impl Events {
     /// Advance the frame counter and clear per-frame transient state.
     ///
     /// Must be called at the end of every frame. Resets scroll deltas,
-    /// resize events, and network events. The `close_requested` flag
-    /// persists across frames (the user must manually clear it).
+    /// resize events, network events, custom events, and `close_requested`.
     pub fn end_frame(&mut self) {
         self.frame += 1;
         self.mouse_scroll_line = None;
         self.mouse_scroll_pixel = None;
         self.resize_event = None;
+        self.close_requested = false;
         self.network.packets.clear();
         self.network.peers_connected.clear();
         self.network.peers_disconnected.clear();
-        self.signals.clear();
+        for v in self.custom_events.values_mut() {
+            v.clear();
+        }
     }
 
     // ── Keyboard queries ──────────────────────────────────────────────────
@@ -682,56 +685,81 @@ impl Events {
         if v.abs() < deadzone { 0.0 } else { v }
     }
 
-    // ── Custom signals ────────────────────────────────────────────────────
+    // ── Custom events ─────────────────────────────────────────────────────
 
-    /// Emit a named signal (no payload).
+    /// Emit a named custom event (no payload).
     ///
-    /// The signal is available for the remainder of the frame and cleared
+    /// The event is available for the remainder of the frame and cleared
     /// at [`end_frame`](Self::end_frame).
     ///
     /// ```ignore
-    /// game.events.emit("boss_defeated");
+    /// game.events.emit_event("boss_defeated");
     /// ```
-    pub fn emit(&mut self, name: &str) {
-        self.signals
-            .entry(name.to_string())
-            .or_default()
-            .push(SignalPayload::None);
+    pub fn emit_event(&mut self, name: &str) {
+        self.push_event(name, EventPayload::None);
     }
 
-    /// Emit a named signal with a byte payload.
+    /// Emit a named custom event with a typed payload via [`DataType`].
     ///
     /// ```ignore
-    /// game.events.emit_with("score", 100u32.to_ne_bytes().to_vec());
+    /// game.events.emit_event_with("score", 100u32);
     /// ```
-    pub fn emit_with(&mut self, name: &str, payload: Vec<u8>) {
-        self.signals
-            .entry(name.to_string())
-            .or_default()
-            .push(SignalPayload::Bytes(payload));
+    pub fn emit_event_with<D: DataType>(&mut self, name: &str, value: D) {
+        self.push_event(name, EventPayload::Bytes(value.u8ify()));
     }
 
-    /// Returns `true` if the named signal was emitted this frame.
-    pub fn was_emitted(&self, name: &str) -> bool {
-        self.signals.get(name).map_or(false, |v| !v.is_empty())
+    /// Returns `true` if the named custom event was emitted this frame.
+    pub fn was_event_emitted(&self, name: &str) -> bool {
+        self.custom_events.get(name).map_or(false, |v| !v.is_empty())
     }
 
-    /// Returns how many times the named signal was emitted this frame.
-    pub fn emitted_count(&self, name: &str) -> u32 {
-        self.signals.get(name).map_or(0, |v| v.len() as u32)
+    /// Returns how many times the named custom event was emitted this frame.
+    pub fn event_emitted_count(&self, name: &str) -> u32 {
+        self.custom_events.get(name).map_or(0, |v| v.len() as u32)
     }
 
-    /// Returns the first payload for the named signal, if any.
+    /// Decodes the first payload emitted for `name` this frame as `D`.
     ///
-    /// Returns `None` if the signal wasn't emitted or carries no payload.
-    pub fn payload(&self, name: &str) -> Option<&SignalPayload> {
-        self.signals.get(name)?.first()
+    /// Returns an error if the event wasn't emitted, carries no payload,
+    /// or the stored byte length doesn't match `D::BYTE_COUNT`.
+    pub fn event_payload<D: DataType>(&self, name: &str) -> OpticResult<D> {
+        match self.custom_events.get(name).and_then(|v| v.first()) {
+            Some(EventPayload::Bytes(bytes)) if bytes.len() == D::BYTE_COUNT => {
+                Ok(D::from_bytes(bytes))
+            }
+            Some(EventPayload::Bytes(bytes)) => Err(OpticError::custom(&format!(
+                "event '{name}' payload is {} bytes, expected {} for this type",
+                bytes.len(), D::BYTE_COUNT
+            ))),
+            Some(EventPayload::None) => Err(OpticError::custom(&format!(
+                "event '{name}' was emitted with no payload"
+            ))),
+            None => Err(OpticError::custom(&format!(
+                "event '{name}' was not emitted this frame"
+            ))),
+        }
     }
 
-    /// Returns all payloads for the named signal.
-    ///
-    /// Returns an empty slice if the signal wasn't emitted.
-    pub fn payloads(&self, name: &str) -> &[SignalPayload] {
-        self.signals.get(name).map_or(&[], |v| v.as_slice())
+    /// Decodes all payloads emitted for `name` this frame as `D`, in emission order.
+    pub fn event_payloads<D: DataType>(&self, name: &str) -> OpticResult<Vec<D>> {
+        self.custom_events.get(name).map_or(Ok(Vec::new()), |v| {
+            v.iter().map(|p| match p {
+                EventPayload::Bytes(bytes) if bytes.len() == D::BYTE_COUNT => Ok(D::from_bytes(bytes)),
+                EventPayload::Bytes(bytes) => Err(OpticError::custom(&format!(
+                    "event '{name}' payload is {} bytes, expected {}", bytes.len(), D::BYTE_COUNT
+                ))),
+                EventPayload::None => Err(OpticError::custom(&format!(
+                    "event '{name}' has a payload-less emission mixed in with typed ones"
+                ))),
+            }).collect()
+        })
+    }
+
+    fn push_event(&mut self, name: &str, payload: EventPayload) {
+        if let Some(v) = self.custom_events.get_mut(name) {
+            v.push(payload);
+        } else {
+            self.custom_events.insert(name.to_string(), vec![payload]);
+        }
     }
 }

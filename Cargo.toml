@@ -10,7 +10,6 @@ members = [
     "optic-online",
     "optic-sound",
     "optic-timer",
-    "optic-signals",
     "optic",
 ]
 

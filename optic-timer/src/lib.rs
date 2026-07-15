@@ -141,7 +141,7 @@ impl Timer {
     pub fn tick_and_emit(&mut self, dt: f64, name: &str, events: &mut optic_window::Events) -> bool {
         let finished = self.tick(dt);
         if finished {
-            events.emit(name);
+            events.emit_event(name);
         }
         finished
     }

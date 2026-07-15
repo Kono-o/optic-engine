@@ -38,7 +38,7 @@
 3. [Window (`optic_window`)](#3-window-optic_window)
    - [Window](#window)
    - [Events & Input](#events--input)
-     - [Signals](#signals)
+     - [Custom Events](#custom-events)
    - [ScreenInfo](#screeninfo)
    - [Re-exports](#re-exports-1)
 4. [Renderer (`optic_render`)](#4-renderer-optic_render)
@@ -69,6 +69,7 @@
    - [TextureFile](#texturefile)
    - [Attribute Types](#attribute-types)
    - [DataType Trait](#datatype-trait)
+   - [Dirty](#dirty)
    - [Center](#center)
 6. [Text Rendering (`optic_render::text`)](#6-text-rendering-optic_rendertext)
    - [FontFamilyFile](#fontfamilyfile)
@@ -104,8 +105,7 @@
    - [SoundFile](#soundfile)
    - [Sound2D](#sound2d)
    - [Sound3D](#sound3d)
-11. [Signals (`optic_signals`)](#11-signals-optic_signals)
-   - [Signal](#signal)
+11. [Removed: `optic_signals`](#11-removed-optic_signals)
 
 ---
 
@@ -1135,7 +1135,7 @@ pub struct Window {
 
 ### Events & Input
 
-#### SignalPayload
+#### EventPayload
 
 Derives:
 - Debug
@@ -1146,13 +1146,13 @@ Implements:
 
 ```rust
 #[derive(Debug, Clone)]
-pub enum SignalPayload {
+pub enum EventPayload {
     None,
     Bytes(Vec<u8>),
 }
 ```
 
-A value carried by a named custom signal — either empty (`None`) or raw bytes (`Bytes`).
+A value carried by a named custom event — either empty (`None`) or typed bytes (`Bytes`).
 
 #### Events
 
@@ -1178,7 +1178,7 @@ pub struct Events {
     pub focused: bool,
     pub frame: u64,
     pub network: NetworkEvents,
-    pub signals: HashMap<String, Vec<SignalPayload>>,
+    // custom_events: HashMap<String, Vec<EventPayload>>,  // (private)
 }
 ```
 
@@ -1273,7 +1273,7 @@ pub const GAMEPAD_AXIS_DEADZONE: f32 = 0.15;  // (associated const on Events)
 |-----------|-------------|
 | `pub fn new() -> Self` | Create new input state |
 | `pub fn clear(&mut self)` | Reset everything to defaults |
-| `pub fn end_frame(&mut self)` | Call at end of frame (increments `frame`, clears scroll/resize/network/`signals`) |
+| `pub fn end_frame(&mut self)` | Call at end of frame (increments `frame`, clears scroll/resize/network/`close_requested`/custom events) |
 | `pub fn process_window_event(&mut self, event: &WindowEvent, _window: &Window)` | Process a winit event |
 | `pub fn process_gilrs_event(&mut self, event: &gilrs::Event)` | Process a gilrs gamepad event |
 | `pub fn key(&self, kc: KeyCode, action: Is) -> bool` | Check key state |
@@ -1291,18 +1291,21 @@ pub const GAMEPAD_AXIS_DEADZONE: f32 = 0.15;  // (associated const on Events)
 | `pub fn gamepad_axis(&self, id: usize, axis: GamepadAxis) -> f32` | Axis value with default deadzone |
 | `pub fn gamepad_axis_deadzoned(&self, id: usize, axis: GamepadAxis, deadzone: f32) -> f32` | Axis value with custom deadzone |
 
-#### Signals
+#### Custom Events
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn emit(&mut self, name: &str)` | Emit a named signal (no payload) |
-| `pub fn emit_with(&mut self, name: &str, payload: Vec<u8>)` | Emit a named signal with byte payload |
-| `pub fn was_emitted(&self, name: &str) -> bool` | Check if a signal was emitted this frame |
-| `pub fn emitted_count(&self, name: &str) -> u32` | How many times emitted this frame |
-| `pub fn payload(&self, name: &str) -> Option<&SignalPayload>` | First payload, if any |
-| `pub fn payloads(&self, name: &str) -> &[SignalPayload]` | All payloads this frame |
+| `pub fn emit_event(&mut self, name: &str)` | Emit a named custom event (no payload) |
+| `pub fn emit_event_with<D: DataType>(&mut self, name: &str, value: D)` | Emit a named custom event with typed payload |
+| `pub fn was_event_emitted(&self, name: &str) -> bool` | Check if a custom event was emitted this frame |
+| `pub fn event_emitted_count(&self, name: &str) -> u32` | How many times emitted this frame |
+| `pub fn event_payload<D: DataType>(&self, name: &str) -> OpticResult<D>` | Decode first payload as `D` (errors on mismatch) |
+| `pub fn event_payloads<D: DataType>(&self, name: &str) -> OpticResult<Vec<D>>` | Decode all payloads as `D` in emission order |
 
-Signals persist for the current frame and are cleared at `end_frame`. Use them for custom events, interaction callbacks, or timer completion.
+Custom events persist for the current frame and are cleared at `end_frame`. Use them
+for interaction callbacks, timer completions, or any named one-shot communication. The
+`_event`/`event_` naming is deliberately explicit to avoid confusion with keyboard,
+mouse, or gamepad input events.
 
 **Note:** `KeyCode` is re-exported from `winit::keyboard::KeyCode`.
 
@@ -2781,10 +2784,44 @@ pub trait DataType {
     const BYTE_COUNT: usize;
     const ELEM_COUNT: usize;
     fn u8ify(&self) -> Vec<u8>;
+    fn from_bytes(bytes: &[u8]) -> Self;
 }
 ```
 
-Implemented for: `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `f32`, `f64` (scalar) and `[T; 2]`, `[T; 3]`, `[T; 4]` for each.
+`from_bytes` reconstitutes a value from a raw byte slice — the inverse of `u8ify`.
+Implemented for: `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `f32`, `f64` (scalar) and
+`[T; 2]`, `[T; 3]`, `[T; 4]` for each.
+
+### Dirty
+
+Derives:
+- None
+
+Implements:
+- DataType
+
+```rust
+// No derives — generic over T.
+pub struct Dirty<T> {
+    value: T,
+    dirty: bool,
+}
+impl<T: DataType> DataType for Dirty<T> {}
+```
+
+| Signature | Description |
+|-----------|-------------|
+| `pub fn new(value: T) -> Self` | Create with initial value (dirty) |
+| `pub fn value(&self) -> &T` | Get reference to value |
+| `pub fn set(&mut self, value: T)` | Set value and mark dirty |
+| `pub fn is_dirty(&self) -> bool` | Has been set since last `clear_dirty`? |
+| `pub fn clear_dirty(&mut self)` | Clear dirty flag |
+
+`Dirty<T: DataType>` implements `DataType`, so it can be stored directly in
+`CustomATTR` and uploaded as a per-instance buffer attribute. The `dirty` flag
+enables incremental GPU updates — only re-upload attributes that have changed.
+
+Previously named `Signal<T>` in the now-removed `optic_signals` crate.
 
 ### Center
 
@@ -3564,7 +3601,7 @@ pub struct Timer {
 | `pub fn reduce(&mut self, amount: f64) -> bool` | Reduce remaining time; returns `true` if completed |
 | `pub fn extend(&mut self, amount: f64)` | Add seconds to remaining time; re-activates if finished |
 | `pub fn reset(&mut self)` | Reset to initial state (full wait time, un-paused, active) |
-| `pub fn tick_and_emit(&mut self, dt: f64, name: &str, events: &mut Events) -> bool` | Tick + emit a named signal on completion |
+| `pub fn tick_and_emit(&mut self, dt: f64, name: &str, events: &mut Events) -> bool` | Tick + emit a named custom event on completion |
 | `pub fn pause(&mut self)` | Pause the timer (retains remaining time) |
 | `pub fn resume(&mut self)` | Resume from a paused state |
 | `pub fn is_running(&self) -> bool` | `true` if actively counting down (not paused, not finished) |
@@ -3581,7 +3618,7 @@ pub struct Timer {
 | `pub fn set_wait_time(&mut self, wait_time: f64)` | Set new wait time and reset remaining |
 
 All time values are `f64` to match `Time::delta()`. Repeating timers auto-reset
-on completion. Use `tick_and_emit` to bridge with the signal system.
+on completion. Use `tick_and_emit` to bridge with the custom event system.
 
 ### Timers
 
@@ -4020,34 +4057,9 @@ pub struct Sound3D {
 
 ---
 
-## 11. Signals (`optic_signals`)
+## 11. Removed: `optic_signals`
 
-A dirty-flagged value wrapper that implements `DataType` for use as a custom instance attribute.
-
-### Signal
-
-Derives:
-- None
-
-Implements:
-- DataType
-
-```rust
-// No derives — generic over T.
-pub struct Signal<T> {
-    value: T,
-    dirty: bool,
-}
-impl<T: DataType> DataType for Signal<T> {}
-```
-
-| Signature | Description |
-|-----------|-------------|
-| `pub fn new(value: T) -> Self` | Create with initial value (dirty) |
-| `pub fn value(&self) -> &T` | Get reference to value |
-| `pub fn set(&mut self, value: T)` | Set value and mark dirty |
-| `pub fn is_dirty(&self) -> bool` | Has been set since last `clear_dirty`? |
-| `pub fn clear_dirty(&mut self)` | Clear dirty flag |
-
-`Signal<T: DataType>` implements `DataType`, so it can be stored directly in `CustomATTR` and uploaded as a per-instance buffer attribute. The `dirty` flag is useful for incremental GPU updates — only re-upload attributes that have changed.
+The `optic_signals` crate has been removed. Its sole type, `Signal<T>`, has been
+relocated and renamed to `Dirty<T>` in the `optic_render::asset::attr` module —
+see [Dirty](#dirty) in the Renderer section.
 

@@ -14,7 +14,9 @@
 //! * [`CustomATTR`] — user-defined arbitrary attribute data
 
 mod attr;
+pub mod dirty;
 mod typ;
 
 pub use attr::*;
+pub use dirty::*;
 pub use typ::*;

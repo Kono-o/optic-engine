@@ -9,6 +9,7 @@ description = "Windowing and input for Optic engine — winit wrapper with per-f
 
 [dependencies]
 optic-core = { path = "../optic-core", version = "0.0.3" }
+optic-render = { path = "../optic-render", version = "0.0.3" }
 winit.workspace = true
 raw-window-handle.workspace = true
 gilrs.workspace = true

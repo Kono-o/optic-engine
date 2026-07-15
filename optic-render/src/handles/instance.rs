@@ -770,7 +770,7 @@ impl InstanceBuffer {
         let size = slot_info.elem_count * slot_info.byte_count;
         let raw = &self.cpu_mirror[off..off + size];
 
-        let d = deserialize::<D>(raw);
+        let d = D::from_bytes(raw);
         Ok(d)
     }
 
@@ -832,7 +832,7 @@ impl InstanceBuffer {
 
         let off = index as usize * self.stride as usize + slot.byte_offset;
         let raw = &self.cpu_mirror[off..off + slot.byte_size];
-        Ok(deserialize::<D>(raw))
+        Ok(D::from_bytes(raw))
     }
 
     /// Sets the position of a single instance in world space.
@@ -1465,13 +1465,6 @@ pub fn decoration_instance_desc_3d() -> InstanceDesc3D {
 }
 
 // ── Deserialize helper ─────────────────────────────────────────────────────
-
-fn deserialize<D: DataType>(bytes: &[u8]) -> D {
-    unsafe {
-        let ptr = bytes.as_ptr() as *const D;
-        std::ptr::read_unaligned(ptr)
-    }
-}
 
 // ── Raw byte access for typed attrs ────────────────────────────────────────
 

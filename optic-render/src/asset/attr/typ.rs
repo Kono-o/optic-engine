@@ -5,11 +5,12 @@ use optic_core::ATTRType;
 /// Implemented for i8/u8/i16/u16/i32/u32/f32/f64 and their fixed-size arrays [T;2], [T;3], [T;4].
 /// Each implementation provides the GL attribute format, byte size, element count, and serialisation
 /// to raw bytes for GPU upload. The engine requires this trait on all vertex and instance attribute types.
-pub trait DataType {
+pub trait DataType: Sized {
     const ATTR_FORMAT: ATTRType;
     const BYTE_COUNT: usize;
     const ELEM_COUNT: usize;
     fn u8ify(&self) -> Vec<u8>;
+    fn from_bytes(bytes: &[u8]) -> Self;
 }
 
 macro_rules! u8ify_impl {
@@ -21,10 +22,21 @@ macro_rules! u8ify_impl {
             }
             vec
         }
+        fn from_bytes(bytes: &[u8]) -> Self {
+            let mut arr = [<$t>::default(); $s];
+            for (i, elem) in arr.iter_mut().enumerate() {
+                let off = i * std::mem::size_of::<$t>();
+                *elem = <$t>::from_ne_bytes(bytes[off..off + std::mem::size_of::<$t>()].try_into().unwrap());
+            }
+            arr
+        }
     };
     ($t:ty) => {
         fn u8ify(&self) -> Vec<u8> {
             self.to_ne_bytes().to_vec()
+        }
+        fn from_bytes(bytes: &[u8]) -> Self {
+            <$t>::from_ne_bytes(bytes.try_into().unwrap())
         }
     };
 }
