@@ -2271,24 +2271,17 @@ Implements:
 ```rust
 #[derive(Clone, Debug)]
 pub struct Workers {
-    pub group_x: u32,
-    pub group_y: u32,
-    pub group_z: u32,
+    // All fields are private.
+    // Use groups()/set_groups() for access.
 }
 ```
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn empty() -> Self` | All zero |
-| `pub fn one() -> Self` | All one |
-| `pub fn set_groups(&mut self, x: u32, y: u32, z: u32)` | Set all groups |
-| `pub fn groups(&self) -> (u32, u32, u32)` | Get all groups |
-| `pub fn group_x(&self) -> u32` | Get X |
-| `pub fn group_y(&self) -> u32` | Get Y |
-| `pub fn group_z(&self) -> u32` | Get Z |
-| `pub fn set_group_x(&mut self, x: u32)` | Set X |
-| `pub fn set_group_y(&mut self, y: u32)` | Set Y |
-| `pub fn set_group_z(&mut self, z: u32)` | Set Z |
+| `pub fn empty() -> Self` | All groups zero (no dispatch) |
+| `pub fn one() -> Self` | All groups one |
+| `pub fn set_groups(&mut self, x: u32, y: u32, z: u32)` | Set all three dimensions |
+| `pub fn groups(&self) -> (u32, u32, u32)` | Get all three as `(x, y, z)` |
 
 ### Free Functions
 
@@ -2921,7 +2914,7 @@ Implements:
 ```rust
 #[derive(Clone, Debug)]
 pub struct GlyphMetrics {
-    pub uv_rect: (f32, f32, f32, f32),
+    pub uv_rect: (f32, f32, f32, f32),  // [u0, v0, u1, v1]
     pub size: Size2D,
     pub bearing: (f32, f32),
     pub advance: f32,
@@ -2931,7 +2924,6 @@ pub struct GlyphMetrics {
 | Signature | Description |
 |-----------|-------------|
 | `pub fn zero() -> Self` | Zero-initialized |
-| `pub fn uv(&self) -> [f32; 4]` | UV rect as array |
 | `pub fn size_arr(&self) -> [f32; 2]` | Size as `[w, h]` |
 | `pub fn bearing_arr(&self) -> [f32; 2]` | Bearing as `[x, y]` |
 

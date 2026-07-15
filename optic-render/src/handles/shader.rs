@@ -52,22 +52,10 @@ impl Workers {
     pub fn one() -> Self { Self { group_x: 1, group_y: 1, group_z: 1 } }
     /// Sets all three work-group dimensions at once.
     pub fn set_groups(&mut self, x: u32, y: u32, z: u32) {
-        self.set_group_x(x); self.set_group_y(y); self.set_group_z(z);
+        self.group_x = x; self.group_y = y; self.group_z = z;
     }
     /// Returns the work-group dimensions as a tuple `(x, y, z)`.
     pub fn groups(&self) -> (u32, u32, u32) { (self.group_x, self.group_y, self.group_z) }
-    /// Returns the X work-group size.
-    pub fn group_x(&self) -> u32 { self.group_x }
-    /// Returns the Y work-group size.
-    pub fn group_y(&self) -> u32 { self.group_y }
-    /// Returns the Z work-group size.
-    pub fn group_z(&self) -> u32 { self.group_z }
-    /// Sets the X work-group size.
-    pub fn set_group_x(&mut self, x: u32) { self.group_x = x; }
-    /// Sets the Y work-group size.
-    pub fn set_group_y(&mut self, y: u32) { self.group_y = y; }
-    /// Sets the Z work-group size.
-    pub fn set_group_z(&mut self, z: u32) { self.group_z = z; }
 }
 
 /// GPU handle to a compiled shader program, supporting uniform setting, texture binding, and compute dispatch.
@@ -451,16 +439,7 @@ mod tests {
     #[test]
     fn workers_set_groups() {
         let mut w = Workers::empty();
-        w.set_groups(10, 1, 1);
-        assert_eq!(w.groups(), (10, 1, 1));
-    }
-
-    #[test]
-    fn workers_set_individual() {
-        let mut w = Workers::empty();
-        w.set_group_x(8);
-        w.set_group_y(4);
-        w.set_group_z(2);
+        w.set_groups(8, 4, 2);
         assert_eq!(w.groups(), (8, 4, 2));
     }
 

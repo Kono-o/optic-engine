@@ -160,7 +160,10 @@ pub fn layout_text(
             let metrics = font.glyph(font_style, gid).or_else(|| font.glyph(FontStyle::Regular, gid));
 
             let (_advance, bearing, size, uv) = match metrics {
-                Some(m) => (m.advance, m.bearing_arr(), m.size_arr(), m.uv()),
+                Some(m) => {
+                    let r = m.uv_rect;
+                    (m.advance, m.bearing_arr(), m.size_arr(), [r.0, r.1, r.2, r.3])
+                }
                 None => continue,
             };
 

@@ -32,11 +32,6 @@ impl GlyphMetrics {
         }
     }
 
-    /// UV rect as `[u0, v0, u1, v1]`.
-    pub fn uv(&self) -> [f32; 4] {
-        [self.uv_rect.0, self.uv_rect.1, self.uv_rect.2, self.uv_rect.3]
-    }
-
     /// Size as `[w, h]` in pixels.
     pub fn size_arr(&self) -> [f32; 2] {
         [self.size.w as f32, self.size.h as f32]
