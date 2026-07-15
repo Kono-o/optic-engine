@@ -14,6 +14,123 @@
 
 ---
 
+## Source Tree
+
+```
+optic/
+└── src/
+    └── lib.rs                          Re-exports all sub-crates
+
+optic-core/
+└── src/
+    ├── lib.rs                          Re-exports, macros
+    ├── ansi.rs                         ANSI color constants
+    ├── color.rs                        RGBA, RGB, HSV, HSL, Gradient, channel lerp
+    ├── consts.rs                       Engine-wide constants (magic bytes, versions)
+    ├── coord.rs                        Coord2D, Size2D
+    ├── enums.rs                        DrawMode, ImgFormat, ImgFilter, ImgWrap, CullFace, PolygonMode
+    ├── error.rs                        OpticError, OpticErrorKind, OpticResult
+    ├── geometry.rs                     AABB, plane, ray intersection
+    ├── log.rs                          log_info!, log_warn!, log_error! macros
+    ├── network.rs                      NetworkConfig, NetworkEvents
+    └── proc.rs                         Process spawning helpers
+
+optic-file/
+└── src/
+    └── lib.rs                          Disk I/O, binary caching, path helpers
+
+optic-color/
+└── src/
+    ├── lib.rs                          Re-exports
+    ├── channels.rs                     Channel type trait
+    ├── constants.rs                    Named color constants (148 colours)
+    ├── convert.rs                      Color space conversions
+    ├── gradient.rs                     Gradient stops, sampling
+    ├── hsl.rs                          HSL type
+    ├── hsv.rs                          HSV type
+    ├── rgba.rs                         RGBA type
+    └── rgb.rs                          RGB type
+
+optic-render/
+└── src/
+    ├── lib.rs                          Crate root, module docs
+    ├── renderer.rs                     GPU struct, uniform setters, draw calls
+    ├── context.rs                      GL context creation (glutin)
+    ├── glraw.rs                        Raw GL type helpers
+    ├── asset/
+    │   ├── mod.rs                      Asset pipeline docs
+    │   ├── font.rs                     FontFamilyFile, BakedFont, GlyphMetrics, .ofont format
+    │   ├── img.rs                      TextureFile, .otxtr format
+    │   ├── msh.rs                      Mesh3DFile, Mesh2DFile, .omesh format
+    │   ├── msdf.rs                     MSDF/SDF atlas baking
+    │   ├── shdr.rs                     ShaderFile, .oshdr format
+    │   └── attr/
+    │       ├── mod.rs                  Attribute re-exports
+    │       ├── attr.rs                 ATTRInfo, ATTRName, CustomATTR, layout builders
+    │       ├── dirty.rs                Dirty<T> (dirty-flagged value wrapper)
+    │       └── typ.rs                  DataType trait, scalar/array impls
+    ├── camera/
+    │   ├── mod.rs                      Camera re-exports
+    │   └── camera.rs                   Camera2D, Camera3D
+    ├── handles/
+    │   ├── mod.rs                      Handle re-exports
+    │   ├── canvas.rs                   Canvas, CanvasDesc (offscreen FBO)
+    │   ├── font.rs                     FontFamily, FontStyle (GPU font handle)
+    │   ├── instance.rs                 InstanceDesc2D/3D, InstanceBuffer
+    │   ├── mesh.rs                     MeshHandle, Mesh3D, Mesh2D, StorageBuffer
+    │   ├── shader.rs                   Shader, Workers, Slot
+    │   ├── text.rs                     Text2D, Text3D (BBCode instanced text)
+    │   └── texture.rs                  Texture2D (GPU texture handle)
+    ├── text/
+    │   ├── mod.rs                      Text rendering docs
+    │   ├── bbcode.rs                   BBCode parser
+    │   └── layout.rs                   Text layout, glyph shaping, decoration
+    └── util/
+        ├── mod.rs                      Utility re-exports
+        └── transform/
+            ├── mod.rs                  Transform re-exports
+            ├── trans2d.rs             Transform2D
+            ├── trans3d.rs             Transform3D
+            └── transcam.rs            TransformCamera
+
+optic-loop/
+└── src/
+    ├── lib.rs                          GameLoop, Game trait, Runtime, FixedStepper, FpsLimit
+    ├── game.rs                         Game state management
+    ├── runtime.rs                      Runtime trait definition
+    └── time.rs                         Time (delta, elapsed, frame)
+
+optic-window/
+└── src/
+    ├── lib.rs                          Window creation, event loop
+    ├── events.rs                       Events, ButtonState, input helpers
+    ├── screen.rs                       ScreenInfo (monitor enumeration)
+    └── window.rs                       WindowConfig, window management
+
+optic-timer/
+└── src/
+    └── lib.rs                          Timer, AnimationPlayer, Easing functions
+
+optic-sound/
+└── src/
+    ├── lib.rs                          AudioEngine, re-exports
+    ├── engine.rs                       AudioEngine implementation
+    ├── file.rs                         AudioFile, .oaudio format
+    ├── sound2d.rs                      Sound2D handle
+    └── sound3d.rs                      Sound3D handle
+
+optic-online/
+└── src/
+    ├── lib.rs                          Networking re-exports
+    ├── config.rs                       NetworkConfig
+    ├── handle.rs                       NetworkHandle (tokio-backed)
+    ├── channels.rs                     Channel, message framing
+    ├── peer.rs                         PeerId, peer tracking
+    └── transport.rs                    QUIC/TCP transport layer
+```
+
+---
+
 ## Table of Contents
 
 1. [Core Types (`optic_core`)](#1-core-types-optic_core)
