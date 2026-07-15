@@ -3592,7 +3592,7 @@ pub struct Timers {
 |-----------|-------------|
 | `pub fn new() -> Self` | Empty collection |
 | `pub fn add(&mut self, timer: Timer)` | Add a timer |
-| `pub fn remove(&mut self, index: usize)` | Remove timer at index (panics if out of bounds) |
+| `pub fn remove(&mut self, index: usize) -> OpticResult<()>` | Remove timer at index |
 | `pub fn clear(&mut self)` | Remove all timers |
 | `pub fn len(&self) -> usize` | Number of timers |
 | `pub fn is_empty(&self) -> bool` | Empty? |
