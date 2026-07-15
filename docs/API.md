@@ -3548,28 +3548,40 @@ Implements:
 ```rust
 // No derives — mutable countdown state.
 pub struct Timer {
-    wait_time: f32,   // (private)
-    time_left: f32,   // (private)
-    repeating: bool,  // (private)
-    active: bool,     // (private)
+    wait_time: f64,    // (private)
+    time_left: f64,    // (private)
+    repeating: bool,   // (private)
+    active: bool,      // (private)
+    paused: bool,      // (private)
 }
 ```
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn new(wait_time: f32) -> Self` | One-shot timer that fires after `wait_time` seconds |
-| `pub fn new_repeating(wait_time: f32) -> Self` | Repeating timer that fires every `wait_time` seconds |
-| `pub fn tick(&mut self, dt: f32) -> bool` | Advance by `dt` seconds; returns `true` on completion |
-| `pub fn reduce(&mut self, amount: f32) -> bool` | Reduce remaining time; returns `true` if completed |
-| `pub fn reset(&mut self)` | Reset to initial state (re-activates) |
-| `pub fn tick_and_emit(&mut self, dt: f32, name: &str, events: &mut Events) -> bool` | Tick + emit a named signal on completion |
-| `pub fn is_active(&self) -> bool` | Currently running? |
-| `pub fn start(&mut self)` | Activate |
-| `pub fn stop(&mut self)` | Deactivate |
-| `pub fn wait_time(&self) -> f32` | Total wait time |
-| `pub fn set_wait_time(&mut self, wait_time: f32)` | Set new wait time and reset remaining |
+| `pub fn new(wait_time: f64) -> Self` | One-shot timer that fires after `wait_time` seconds |
+| `pub fn new_repeating(wait_time: f64) -> Self` | Repeating timer that fires every `wait_time` seconds |
+| `pub fn tick(&mut self, dt: f64) -> bool` | Advance by `dt` seconds; returns `true` on completion |
+| `pub fn reduce(&mut self, amount: f64) -> bool` | Reduce remaining time; returns `true` if completed |
+| `pub fn extend(&mut self, amount: f64)` | Add seconds to remaining time; re-activates if finished |
+| `pub fn reset(&mut self)` | Reset to initial state (full wait time, un-paused, active) |
+| `pub fn tick_and_emit(&mut self, dt: f64, name: &str, events: &mut Events) -> bool` | Tick + emit a named signal on completion |
+| `pub fn pause(&mut self)` | Pause the timer (retains remaining time) |
+| `pub fn resume(&mut self)` | Resume from a paused state |
+| `pub fn is_running(&self) -> bool` | `true` if actively counting down (not paused, not finished) |
+| `pub fn is_paused(&self) -> bool` | `true` if paused |
+| `pub fn is_active(&self) -> bool` | `true` if not yet finished (paused timers are still active) |
+| `pub fn start(&mut self)` | Un-pause and activate |
+| `pub fn stop(&mut self)` | Pause the timer |
+| `pub fn is_looping(&self) -> bool` | `true` if timer repeats after each completion |
+| `pub fn set_looping(&mut self, repeating: bool)` | Set whether the timer repeats |
+| `pub fn time_left(&self) -> f64` | Remaining time in seconds |
+| `pub fn elapsed(&self) -> f64` | Elapsed time (wait_time - time_left) in seconds |
+| `pub fn progress(&self) -> f64` | Completion progress as `0.0..=1.0` |
+| `pub fn wait_time(&self) -> f64` | Total wait time |
+| `pub fn set_wait_time(&mut self, wait_time: f64)` | Set new wait time and reset remaining |
 
-Repeating timers auto-reset on completion. Use `tick_and_emit` to bridge with the signal system.
+All time values are `f64` to match `Time::delta()`. Repeating timers auto-reset
+on completion. Use `tick_and_emit` to bridge with the signal system.
 
 ### Timers
 
@@ -3598,8 +3610,8 @@ pub struct Timers {
 | `pub fn is_empty(&self) -> bool` | Empty? |
 | `pub fn get(&self, index: usize) -> Option<&Timer>` | Get timer by index |
 | `pub fn get_mut(&mut self, index: usize) -> Option<&mut Timer>` | Get mutable timer by index |
-| `pub fn tick_all(&mut self, dt: f32) -> Vec<usize>` | Tick all active timers; returns indices that elapsed |
-| `pub fn tick_and_emit_all(&mut self, dt: f32, name: &str, events: &mut Events)` | Tick all and emit named events |
+| `pub fn tick_all(&mut self, dt: f64) -> Vec<usize>` | Tick all active timers; returns indices that elapsed |
+| `pub fn tick_and_emit_all(&mut self, dt: f64, name: &str, events: &mut Events)` | Tick all and emit named events |
 | `pub fn iter(&self) -> impl Iterator<Item = &Timer>` | Iterator over all timers |
 | `pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Timer>` | Mutable iterator over all timers |
 
