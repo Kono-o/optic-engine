@@ -31,7 +31,7 @@ fn build_quad_mesh() -> crate::handles::MeshHandle {
         ind_attr: IndicesATTR::from_array(&[0u32, 1, 2, 0, 2, 3]),
         custom_attrs: vec![],
     };
-    desc.upload()
+    desc.upload().expect("build_quad_mesh: hardcoded quad upload failed")
 }
 
 /// Screen-space text renderer using BBCode markup, MSDF atlas fonts, and instanced quad drawing.
@@ -161,16 +161,16 @@ impl Text2D {
         &mut self.transform
     }
 
-    /// Updates dynamic effects (wave, shake, rainbow, pulse) with the given time.
+    /// Advances dynamic effects (wave, shake, rainbow, pulse) by the given delta time.
     ///
-    /// Call this each frame with `game.time.elapsed()` to animate effects.
+    /// Call this each frame with `game.time.delta()` to animate effects.
     /// No-op for static text.
     ///
     /// # Errors
     ///
     /// Returns an error if GPU instance buffers fail to upload.
-    pub fn update(&mut self, time: f32) -> OpticResult<()> {
-        self.time = time;
+    pub fn update(&mut self, dt: f32) -> OpticResult<()> {
+        self.time += dt;
         if !self.is_dynamic {
             return Ok(());
         }
@@ -391,13 +391,13 @@ impl Text3D {
         &mut self.transform
     }
 
-    /// Updates dynamic effects with the given time value.
+    /// Advances dynamic effects by the given delta time.
     ///
     /// # Errors
     ///
     /// Returns an error if GPU instance buffers fail to upload.
-    pub fn update(&mut self, time: f32) -> OpticResult<()> {
-        self.time = time;
+    pub fn update(&mut self, dt: f32) -> OpticResult<()> {
+        self.time += dt;
         if !self.is_dynamic {
             return Ok(());
         }

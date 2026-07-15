@@ -21,6 +21,11 @@ pub struct CanvasDesc {
     pub wrap: ImgWrap,
 }
 
+impl CanvasDesc {
+    /// Creates a `CanvasDesc` with sensible defaults (512×512, RGBA8, depth, linear filter).
+    pub fn new() -> Self { Self::default() }
+}
+
 impl Default for CanvasDesc {
     fn default() -> Self {
         Self {

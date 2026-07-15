@@ -28,9 +28,9 @@ impl TextureFile {
     pub fn set_filter(&mut self, filter: ImgFilter) { self.filter = filter; }
 
     /// Uploads this texture to the GPU and returns a [`Texture2D`] handle.
-    pub fn upload(&self) -> Texture2D {
+    pub fn upload(&self) -> OpticResult<Texture2D> {
         let id = create_texture(&self.bytes, self.size, &self.fmt, &self.filter, &self.wrap);
-        Texture2D::new(id, self.size, self.fmt, self.filter, self.wrap)
+        Ok(Texture2D::new(id, self.size, self.fmt, self.filter, self.wrap))
     }
 
     /// Loads the fallback texture from `optic/assets/txtr/fallback.png`.

@@ -944,8 +944,8 @@ impl Mesh3DFile {
     ///
     /// Returns a [`MeshHandle`] ready for instanced or direct drawing.
     /// This is the final step of the asset-to-GPU pipeline for 3D meshes.
-    pub fn upload(&self) -> MeshHandle {
-        create_mesh3d_handle(self)
+    pub fn upload(&self) -> OpticResult<MeshHandle> {
+        Ok(create_mesh3d_handle(self))
     }
 }
 
@@ -1186,8 +1186,8 @@ impl Mesh2DFile {
     }
 
     /// Interleaves vertex attributes and uploads to the GPU.
-    pub fn upload(&self) -> MeshHandle {
-        create_mesh2d_handle(self)
+    pub fn upload(&self) -> OpticResult<MeshHandle> {
+        Ok(create_mesh2d_handle(self))
     }
 }
 

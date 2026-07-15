@@ -75,10 +75,10 @@ pub struct FontFamily {
 impl FontFamily {
     /// Uploads a [`FontFamilyFile`] to the GPU.
     pub(crate) fn new(file: &FontFamilyFile) -> OpticResult<Self> {
-        let regular_atlas = file.regular.atlas.upload();
-        let bold_atlas = file.bold.as_ref().map(|b| b.atlas.upload());
-        let italic_atlas = file.italic.as_ref().map(|i| i.atlas.upload());
-        let bold_italic_atlas = file.bold_italic.as_ref().map(|bi| bi.atlas.upload());
+        let regular_atlas = file.regular.atlas.upload()?;
+        let bold_atlas = file.bold.as_ref().map(|b| b.atlas.upload()).transpose()?;
+        let italic_atlas = file.italic.as_ref().map(|i| i.atlas.upload()).transpose()?;
+        let bold_italic_atlas = file.bold_italic.as_ref().map(|bi| bi.atlas.upload()).transpose()?;
 
         Ok(FontFamily {
             line_height: file.line_height,

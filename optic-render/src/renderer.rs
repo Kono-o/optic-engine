@@ -199,7 +199,9 @@ impl GPU {
         if let Ok(fallback_tex) = asset::TextureFile::fallback() {
             let mut tex = fallback_tex;
             tex.set_wrap(optic_core::ImgWrap::Repeat);
-            gpu.fallback_texture = gpu.upload_texture(&tex);
+            if let Ok(uploaded) = gpu.upload_texture(&tex) {
+                gpu.fallback_texture = uploaded;
+            }
         }
         if let Ok(shader_asset) = asset::ShaderFile::default_3d() {
             if let Ok(shader) = gpu.upload_shader(&shader_asset) {
@@ -529,18 +531,18 @@ impl GPU {
     /// let mesh = gpu.upload_mesh3d(&cube);
     /// gpu.render3d(&mesh, &camera);
     /// ```
-    pub fn upload_mesh3d(&self, file: &asset::Mesh3DFile) -> Mesh3D {
-        let mut mesh = Mesh3D::new(file.upload());
+    pub fn upload_mesh3d(&self, file: &asset::Mesh3DFile) -> OpticResult<Mesh3D> {
+        let mut mesh = Mesh3D::new(file.upload()?);
         mesh.set_shader(self.fallback_shader3d());
-        mesh
+        Ok(mesh)
     }
 
     /// Uploads a [`Mesh2DFile`](asset::Mesh2DFile) to the GPU and returns a
     /// [`Mesh2D`] with the fallback 2D shader attached.
-    pub fn upload_mesh2d(&self, file: &asset::Mesh2DFile) -> Mesh2D {
-        let mut mesh = Mesh2D::new(file.upload());
+    pub fn upload_mesh2d(&self, file: &asset::Mesh2DFile) -> OpticResult<Mesh2D> {
+        let mut mesh = Mesh2D::new(file.upload()?);
         mesh.set_shader(self.fallback_shader2d());
-        mesh
+        Ok(mesh)
     }
 
     /// Uploads a [`FontFamilyFile`](asset::FontFamilyFile) to the GPU and
@@ -596,7 +598,7 @@ impl GPU {
     /// let tex_file = TextureFile::from_disk("assets/grass.png")?;
     /// let tex: Texture2D = gpu.upload_texture(&tex_file);
     /// ```
-    pub fn upload_texture(&self, image: &asset::TextureFile) -> Texture2D {
+    pub fn upload_texture(&self, image: &asset::TextureFile) -> OpticResult<Texture2D> {
         image.upload()
     }
 

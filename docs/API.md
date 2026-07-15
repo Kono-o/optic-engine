@@ -1552,10 +1552,10 @@ pub struct GPU {
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn upload_mesh3d(&self, file: &Mesh3DFile) -> Mesh3D` | Upload 3D mesh to GPU |
-| `pub fn upload_mesh2d(&self, file: &Mesh2DFile) -> Mesh2D` | Upload 2D mesh to GPU |
+| `pub fn upload_mesh3d(&self, file: &Mesh3DFile) -> OpticResult<Mesh3D>` | Upload 3D mesh to GPU |
+| `pub fn upload_mesh2d(&self, file: &Mesh2DFile) -> OpticResult<Mesh2D>` | Upload 2D mesh to GPU |
 | `pub fn upload_shader(&self, asset: &ShaderFile) -> OpticResult<Shader>` | Compile and upload shader |
-| `pub fn upload_texture(&self, image: &TextureFile) -> Texture2D` | Upload texture to GPU |
+| `pub fn upload_texture(&self, image: &TextureFile) -> OpticResult<Texture2D>` | Upload texture to GPU |
 | `pub fn upload_gradient(&self, gradient: &Gradient, resolution: u32) -> Texture2D` | Bake gradient to 1D RGBA texture |
 | `pub fn upload_canvas(&mut self, desc: &CanvasDesc) -> OpticResult<Canvas>` | Create offscreen render target |
 
@@ -2219,7 +2219,8 @@ pub struct CanvasDesc {
 }
 ```
 
-- `impl Default` — size: 1×1, one RGBA8 color, depth: true, samples: 1, etc.
+- `impl Default` — size: 512×512, one RGBA8 color, depth: true, linear filter, etc.
+- `pub fn new() -> Self` — same as `Default::default()`
 
 ### RenderTarget
 
@@ -2509,7 +2510,7 @@ pub struct Mesh3DFile {
 | `pub fn add_custom_attr(&mut self, attr: CustomATTR)` | Add a custom vertex attribute |
 | `pub fn has_no_attr(&self) -> bool` | Check if mesh has no vertex data |
 | `pub fn starts_with_custom(&self) -> bool` | Does the first attribute layout start with a custom attribute? |
-| `pub fn upload(&self) -> MeshHandle` | Upload to GPU and get a handle |
+| `pub fn upload(&self) -> OpticResult<MeshHandle>` | Upload to GPU |
 
 ### Mesh2DFile
 
@@ -2549,7 +2550,7 @@ pub struct Mesh2DFile {
 | `pub fn rect(width: f32, height: f32) -> Self` | Generate a rectangle |
 | `pub fn add_custom_attr(&mut self, attr: CustomATTR)` | Add custom attribute |
 | `pub fn starts_with_custom(&self) -> bool` | Does the first layout start with a custom attribute? |
-| `pub fn upload(&self) -> MeshHandle` | Upload to GPU and get a handle |
+| `pub fn upload(&self) -> OpticResult<MeshHandle>` | Upload to GPU |
 
 ### TextureFile
 
@@ -2575,7 +2576,7 @@ pub struct TextureFile {
 | `pub fn pixel_count(&self) -> usize` | Total pixels |
 | `pub fn set_wrap(&mut self, wrap: ImgWrap)` | Set wrap mode |
 | `pub fn set_filter(&mut self, filter: ImgFilter)` | Set filter mode |
-| `pub fn upload(&self) -> Texture2D` | Upload to GPU |
+| `pub fn upload(&self) -> OpticResult<Texture2D>` | Upload to GPU |
 | `pub fn fallback() -> OpticResult<Self>` | Create checkerboard fallback texture |
 | `pub fn from_disk(path: &str) -> OpticResult<Self>` | Load from disk (debug: loads source + overwrites cache; release: loads cache only) |
 | `pub fn save_cached(&self, path: &str) -> OpticResult<()>` | Save to binary cache (`.otxtr`) |
@@ -2748,7 +2749,7 @@ pub struct ATTRInfo {
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn new() -> Self` | Zeroed info |
+| `pub fn zero() -> Self` | Zeroed info |
 | `pub fn fmt_as_string(&self) -> String` | Formatted as `"{name}:{typ}:{byte_count}:{elem_count}"` |
 
 #### ATTRName
@@ -3341,7 +3342,7 @@ pub struct Text2D {
 | `pub fn set_wrap_width(&mut self, width: Option<f32>) -> OpticResult<()>` | Set wrap width (`None` = no wrap) |
 | `pub fn transform(&self) -> &Transform2D` | 2D transform |
 | `pub fn transform_mut(&mut self) -> &mut Transform2D` | Mutable 2D transform |
-| `pub fn update(&mut self, time: f32) -> OpticResult<()>` | Update dynamic effects |
+| `pub fn update(&mut self, dt: f32) -> OpticResult<()>` | Advance dynamic effects by delta time |
 | `pub fn is_dynamic(&self) -> bool` | Has dynamic effects? |
 | `pub fn set_visibility(&mut self, visible: bool)` | Show/hide |
 | `pub fn is_visible(&self) -> bool` | Is visible? |
@@ -3390,7 +3391,7 @@ pub struct Text3D {
 | `pub fn set_wrap_width(&mut self, width: Option<f32>) -> OpticResult<()>` | Set wrap width (`None` = no wrap) |
 | `pub fn transform(&self) -> &Transform3D` | 3D transform |
 | `pub fn transform_mut(&mut self) -> &mut Transform3D` | Mutable 3D transform |
-| `pub fn update(&mut self, time: f32) -> OpticResult<()>` | Update dynamic effects |
+| `pub fn update(&mut self, dt: f32) -> OpticResult<()>` | Advance dynamic effects by delta time |
 | `pub fn is_dynamic(&self) -> bool` | Has dynamic effects? |
 | `pub fn set_visibility(&mut self, visible: bool)` | Show/hide |
 | `pub fn is_visible(&self) -> bool` | Is visible? |
@@ -3870,12 +3871,8 @@ Implements:
 ```rust
 // No derives — owns network thread and channels.
 pub struct NetworkHandle {
-    thread: Option<JoinHandle<()>>,
-    inbound_data_rx: tokio_mpsc::UnboundedReceiver<(PeerId, Vec<u8>)>,
-    lifecycle_rx: tokio_mpsc::UnboundedReceiver<LifecycleEvent>,
-    outbound_tx: tokio_mpsc::UnboundedSender<TransportCommand>,
-    local_addr: Option<SocketAddr>,
-    shutdown_flag: Arc<AtomicBool>,
+    // All fields are private.
+    // Use the methods below for interaction.
 }
 ```
 
