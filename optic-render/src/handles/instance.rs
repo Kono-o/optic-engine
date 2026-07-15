@@ -637,7 +637,7 @@ pub struct InstanceBuffer {
     pub(crate) capacity: u32,
     pub(crate) count: u32,
     pub(crate) stride: u32,
-    pub layouts: Vec<(ATTRInfo, u32)>,
+    pub(crate) layouts: Vec<(ATTRInfo, u32)>,
     pub(crate) cpu_mirror: Vec<u8>,
     pub(crate) kind: InstanceKind,
 }
@@ -659,6 +659,9 @@ impl InstanceBuffer {
 
     /// Returns the total capacity (allocated slots, may be larger than count).
     pub fn capacity(&self) -> u32 { self.capacity }
+
+    /// Returns the attribute layout descriptions for this buffer.
+    pub fn layouts(&self) -> &[(ATTRInfo, u32)] { &self.layouts }
 
     /// Updates a single attribute of one instance by attribute index.
     ///

@@ -1880,7 +1880,7 @@ pub struct InstanceBuffer {
     pub(crate) capacity: u32,
     pub(crate) count: u32,
     pub(crate) stride: u32,
-    pub layouts: Vec<(ATTRInfo, u32)>,
+    pub(crate) layouts: Vec<(ATTRInfo, u32)>,
     pub(crate) cpu_mirror: Vec<u8>,
     pub(crate) kind: InstanceKind,
 }
@@ -1893,6 +1893,7 @@ pub struct InstanceBuffer {
 | `pub fn is_empty(&self) -> bool` | True if no instances |
 | `pub fn clear(&mut self)` | Remove all instances (O1) |
 | `pub fn capacity(&self) -> u32` | Allocated capacity (instances) |
+| `pub fn layouts(&self) -> &[(ATTRInfo, u32)]` | Attribute layout descriptions |
 | `pub fn update_instance<D: DataType>(&mut self, index: u32, attr_index: usize, value: D) -> OpticResult<()>` | Update a single attribute on one instance |
 | `pub fn instance<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D>` | Read a single attribute from one instance |
 | `pub fn update_custom<D: DataType>(&mut self, index: u32, name: &str, value: D) -> OpticResult<()>` | Update a custom attribute by name |
