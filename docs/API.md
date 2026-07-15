@@ -1749,31 +1749,36 @@ Implements:
 ```rust
 #[derive(Clone, Debug)]
 pub struct Mesh3D {
-    pub visibility: bool,
-    pub handle: MeshHandle,
-    pub shader: Option<Shader>,
-    pub transform: Transform3D,
-    pub draw_mode: DrawMode,
+    hidden: bool,          // (private)
+    handle: MeshHandle,    // (private)
+    shader: Option<Shader>,// (private)
+    transform: Transform3D,// (private)
+    draw_mode: DrawMode,   // (private)
 }
 ```
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn set_shader(&mut self, shader: Shader)` | Assign a shader |
-| `pub fn remove_shader(&mut self)` | Remove shader |
-| `pub fn draw_mode(&self) -> DrawMode` | Get draw mode |
+| `pub fn new(handle: MeshHandle) -> Self` | Create from GPU handle with default settings |
+| `pub fn set_shader(&mut self, shader: Shader)` | Attach a shader |
+| `pub fn remove_shader(&mut self)` | Detach the current shader |
+| `pub fn shader(&self) -> Option<&Shader>` | Reference to the shader, if any |
+| `pub fn handle(&self) -> &MeshHandle` | Reference to the GPU handle |
+| `pub fn transform(&self) -> &Transform3D` | Reference to the transform |
+| `pub fn transform_mut(&mut self) -> &mut Transform3D` | Mutable reference to the transform |
+| `pub fn draw_mode(&self) -> DrawMode` | Current draw mode |
 | `pub fn set_draw_mode(&mut self, draw_mode: DrawMode)` | Set draw mode |
 | `pub fn index_count(&self) -> u32` | Number of indices |
 | `pub fn vertex_count(&self) -> u32` | Number of vertices |
 | `pub fn has_indices(&self) -> bool` | Has index buffer? |
 | `pub fn is_empty(&self) -> bool` | Zero vertices? |
-| `pub fn is_visible(&self) -> bool` | Visibility && non-empty |
-| `pub fn set_visibility(&mut self, enable: bool)` | Show/hide |
-| `pub fn toggle_visibility(&mut self)` | Toggle visibility |
+| `pub fn is_visible(&self) -> bool` | Not hidden and non-empty |
+| `pub fn set_visibility(&mut self, enable: bool)` | Show or hide |
+| `pub fn toggle_visibility(&mut self)` | Toggle hidden flag |
 | `pub fn update(&mut self)` | Recalculate transform matrix |
 | `pub fn delete(self)` | Delete GPU resources |
 | `pub fn log_info(&self)` | Print mesh info |
-| `pub fn render(&self, view: &Matrix4<f32>, proj: &Matrix4<f32>)` | Render with explicit view/proj matrices |
+| `pub fn render(&self, view: &Matrix4<f32>, proj: &Matrix4<f32>)` | Render with view and projection matrices |
 
 ### Mesh2D
 
@@ -1787,11 +1792,11 @@ Implements:
 ```rust
 #[derive(Clone, Debug)]
 pub struct Mesh2D {
-    pub visibility: bool,
-    pub handle: MeshHandle,
-    pub shader: Option<Shader>,
-    pub transform: Transform2D,
-    pub draw_mode: DrawMode,
+    hidden: bool,            // (private)
+    handle: MeshHandle,      // (private)
+    shader: Option<Shader>,  // (private)
+    transform: Transform2D,  // (private)
+    draw_mode: DrawMode,     // (private)
 }
 ```
 
@@ -1813,28 +1818,28 @@ Implements:
 ```rust
 #[derive(Clone, Debug)]
 pub struct MeshHandle {
-    pub layouts: Vec<(ATTRInfo, u32)>,
-    pub draw_mode: DrawMode,
-    pub has_indices: bool,
-    pub vertex_count: u32,
-    pub index_count: u32,
-    pub vao_id: u32,
-    pub vertex_buffer_id: u32,
-    pub index_buffer_id: u32,
-    pub vertex_stride: u32,
-    pub instance_buf_id: u32,
-    pub instance_count: u32,
+    // All fields are pub(crate).
+    // Use accessor methods below for read access.
 }
 ```
 
 | Signature | Description |
 |-----------|-------------|
-| `pub fn draw(&self)` | Issue the draw call (respects instancing when `instance_count > 0`) |
-| `pub fn draw_as(&self, mode: DrawMode)` | Draw with a specific draw mode (overrides the mesh's default) |
+| `pub fn draw_as(&self, mode: DrawMode)` | Draw with a specific draw mode |
+| `pub fn layouts(&self) -> &Vec<(ATTRInfo, u32)>` | Vertex layouts |
+| `pub fn has_indices(&self) -> bool` | Uses indexed drawing? |
+| `pub fn vertex_count(&self) -> u32` | Vertex count |
+| `pub fn index_count(&self) -> u32` | Index count |
+| `pub fn vao_id(&self) -> u32` | VAO ID |
+| `pub fn vertex_buffer_id(&self) -> u32` | Vertex buffer ID |
+| `pub fn index_buffer_id(&self) -> u32` | Index buffer ID |
+| `pub fn vertex_stride(&self) -> u32` | Vertex stride in bytes |
+| `pub fn instance_buf_id(&self) -> u32` | Instance buffer ID (0 if not instanced) |
+| `pub fn instance_count(&self) -> u32` | Instance count (0 if not instanced) |
 | `pub fn set_instances(&mut self, buffer: &InstanceBuffer)` | Bind an instance buffer for instanced rendering |
 | `pub fn update_vertex<D: DataType>(&self, index: u32, attr_index: usize, value: D) -> OpticResult<()>` | Update a single vertex attribute |
 | `pub fn vertex<D: DataType>(&self, index: u32, attr_index: usize) -> OpticResult<D>` | Read back a single vertex attribute |
-| `pub fn write_range(&self, start_vertex: u32, data: &[u8]) -> OpticResult<()>` | Write raw bytes starting at a vertex offset |
+| `pub fn write_range(&self, start_vertex: u32, data: &[u8]) -> OpticResult<()>` | Write raw bytes at a vertex offset |
 | `pub fn delete(self)` | Free GPU resources |
 
 ### InstanceDesc3D

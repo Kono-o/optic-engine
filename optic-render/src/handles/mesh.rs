@@ -332,7 +332,7 @@ macro_rules! mesh_struct {
         /// Cloning is cheap — the handle shares the same GPU buffers.
         #[derive(Clone, Debug)]
         pub struct $mesh {
-            visibility: bool,
+            hidden: bool,
             handle: MeshHandle,
             shader: Option<Shader>,
             transform: $transform,
@@ -343,7 +343,7 @@ macro_rules! mesh_struct {
             /// Creates a new mesh from a GPU handle with default settings.
             pub fn new(handle: MeshHandle) -> Self {
                 Self {
-                    visibility: true,
+                    hidden: false,
                     handle,
                     shader: None,
                     transform: <$transform>::default(),
@@ -372,14 +372,17 @@ macro_rules! mesh_struct {
             pub fn vertex_count(&self) -> u32 { self.handle.vertex_count }
             /// Returns `true` if this mesh uses indexed drawing.
             pub fn has_indices(&self) -> bool { self.handle.has_indices }
-            /// Returns `true` when the mesh has no vertices.
+            /// Returns `true` when this mesh has no vertices.
             pub fn is_empty(&self) -> bool { self.vertex_count() == 0 }
             /// Returns `true` when the mesh is both visible and non-empty.
-            pub fn is_visible(&self) -> bool { self.visibility && !self.is_empty() }
-            /// Shows or hides this mesh.
-            pub fn set_visibility(&mut self, enable: bool) { self.visibility = enable; }
+            ///
+            /// A mesh with zero vertices is never considered visible regardless
+            /// of the hidden flag, since there is nothing to draw.
+            pub fn is_visible(&self) -> bool { !self.hidden && !self.is_empty() }
+            /// Shows this mesh (clears the hidden flag).
+            pub fn set_visibility(&mut self, enable: bool) { self.hidden = !enable; }
             /// Toggles visibility.
-            pub fn toggle_visibility(&mut self) { self.visibility = !self.visibility; }
+            pub fn toggle_visibility(&mut self) { self.hidden = !self.hidden; }
             /// Recomputes the transformation matrix.
             pub fn update(&mut self) { self.transform.calc_matrix(); }
             /// Deletes the GPU resources for this mesh's handle.
@@ -399,8 +402,8 @@ impl Mesh3D {
         let shader_id = self.shader.as_ref().map(|s| s.id).unwrap_or(0);
         let mode = format!("{:?}", self.draw_mode());
         println!(
-            "[Mesh3D] vis={} verts={} inds={} has_idx={} shader={} mode={} vao={} buf={} ind={}",
-            self.visibility,
+            "[Mesh3D] visible={} verts={} inds={} has_idx={} shader={} mode={} vao={} buf={} ind={}",
+            self.is_visible(),
             self.vertex_count(),
             self.index_count(),
             self.has_indices(),
@@ -437,8 +440,8 @@ impl Mesh2D {
         let shader_id = self.shader.as_ref().map(|s| s.id).unwrap_or(0);
         let mode = format!("{:?}", self.draw_mode());
         println!(
-            "[Mesh2D] vis={} verts={} inds={} has_idx={} shader={} mode={} vao={} buf={} ind={}",
-            self.visibility,
+            "[Mesh2D] visible={} verts={} inds={} has_idx={} shader={} mode={} vao={} buf={} ind={}",
+            self.is_visible(),
             self.vertex_count(),
             self.index_count(),
             self.has_indices(),
@@ -735,7 +738,7 @@ mod tests {
             instance_count: 0,
         };
         let m3d = Mesh3D {
-            visibility: true,
+            hidden: false,
             handle: mh,
             shader: None,
             transform: crate::util::transform::Transform3D::default(),
@@ -765,7 +768,7 @@ mod tests {
             instance_count: 0,
         };
         let mut m3d = Mesh3D {
-            visibility: true,
+            hidden: false,
             handle: mh,
             shader: None,
             transform: crate::util::transform::Transform3D::default(),
@@ -793,7 +796,7 @@ mod tests {
             instance_count: 0,
         };
         let mut m3d = Mesh3D {
-            visibility: true,
+            hidden: false,
             handle: mh,
             shader: None,
             transform: crate::util::transform::Transform3D::default(),
@@ -818,7 +821,7 @@ mod tests {
             instance_count: 0,
         };
         let mut m3d = Mesh3D {
-            visibility: true,
+            hidden: false,
             handle: mh,
             shader: None,
             transform: crate::util::transform::Transform3D::default(),
@@ -848,7 +851,7 @@ mod tests {
             instance_count: 0,
         };
         let mut m3d = Mesh3D {
-            visibility: true,
+            hidden: false,
             handle: mh,
             shader: None,
             transform: crate::util::transform::Transform3D::default(),
@@ -876,7 +879,7 @@ mod tests {
             instance_count: 0,
         };
         let m3d = Mesh3D {
-            visibility: true,
+            hidden: false,
             handle: mh,
             shader: None,
             transform: crate::util::transform::Transform3D::default(),
@@ -901,7 +904,7 @@ mod tests {
             instance_count: 0,
         };
         let m2d = Mesh2D {
-            visibility: true,
+            hidden: false,
             handle: mh,
             shader: None,
             transform: crate::util::transform::Transform2D::default(),
